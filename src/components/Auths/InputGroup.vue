@@ -1,20 +1,49 @@
 <script setup lang="ts">
-const props = defineProps(['label', 'type', 'placeholder'])
+defineProps({
+  label: String,
+  type: String,
+  placeholder: String,
+  modelValue: String,
+  required: Boolean
+})
+
+defineEmits(['update:modelValue'])
 </script>
 
 <template>
-  <div class="mb-4">
-    <label class="mb-2.5 block font-medium text-black dark:text-white">{{ props.label }}</label>
+  <div class="form-group">
+    <label :for="label" class="form-label">{{ label }}</label>
     <div class="relative">
-      <input
-        :type="props.type"
-        :placeholder="props.placeholder"
-        class="w-full rounded-lg border border-stroke bg-transparent py-4 pl-6 pr-10 outline-none focus:border-primary focus-visible:shadow-none dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary text-black dark:text-white"
-      />
-
-      <span class="absolute right-4 top-4">
+      <span class="input-icon">
         <slot></slot>
       </span>
+      <input
+        :id="label"
+        :type="type"
+        :placeholder="placeholder"
+        :value="modelValue"
+        @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
+        :required="required"
+        class="form-input"
+      />
     </div>
   </div>
 </template>
+
+<style scoped>
+.form-group {
+  @apply mb-4;
+}
+
+.input-icon {
+  @apply absolute left-4 top-1/2 -translate-y-1/2 text-bodydark2;
+}
+
+.form-input {
+  @apply w-full rounded-lg border border-stroke bg-transparent py-4 pl-12 pr-4 outline-none focus:border-primary focus-visible:shadow-none dark:border-strokedark dark:bg-meta-4 dark:focus:border-primary;
+}
+
+.form-label {
+  @apply mb-2.5 block font-medium text-black dark:text-white;
+}
+</style>

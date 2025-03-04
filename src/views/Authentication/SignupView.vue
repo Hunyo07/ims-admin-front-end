@@ -151,7 +151,7 @@ const pageTitle = ref('Sign Up')
         <div class="mt-6 text-center">
           <p class="font-medium">
             Already have an account?
-            <router-link to="/auth/signin" class="text-primary">Sign in</router-link>
+            <router-link to="/" class="text-primary">Sign in</router-link>
           </p>
         </div>
       </form>
