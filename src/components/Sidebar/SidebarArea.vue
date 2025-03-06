@@ -58,7 +58,7 @@ const menuGroups = ref([
                 <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10z"/>
               </svg>`,
         label: 'Branch ',
-        route: '/profile'
+        route: '/branch'
       },
       // {
       //   icon: `<svg
@@ -86,7 +86,7 @@ const menuGroups = ref([
                 <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
               </svg>`,
         label: 'Supplier ',
-        route: '#'
+        route: '/supplier'
       },
       // {
       //   icon: `<svg
@@ -137,10 +137,10 @@ const menuGroups = ref([
                 <path d="M4 11h4V7H4v4zm0 6h4v-4H4v4zm6 0h4v-4h-4v4zm6 0h4v-4h-4v4zm-6-6h4V7h-4v4zm6-4v4h4V7h-4z"/>
               </svg>`,
         label: 'Category ',
-        route: '/tables',
+        route: '',
         children: [
-          { label: 'Main Category', route: '/pages/settings' },
-          { label: 'Sub Category', route: '/pages/settings' }
+          { label: 'Main Category', route: '/main-category' },
+          { label: 'Sub Category', route: '/sub-category' }
         ]
       },
       {
@@ -148,7 +148,7 @@ const menuGroups = ref([
                 <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/>
               </svg>`,
         label: 'Product ',
-        route: '/tables'
+        route: '/product'
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">

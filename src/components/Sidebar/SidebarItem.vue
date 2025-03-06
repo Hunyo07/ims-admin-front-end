@@ -19,7 +19,6 @@ const handleItemClick = (item) => {
   if (props.item.children) {
     return props.item.children.some((child: SidebarItem) => sidebarStore.selected === child.label)
   }
-  console.log(item)
 }
 </script>
 

@@ -13,6 +13,11 @@ import TablesView from '@/views/TablesView.vue'
 import AlertsView from '@/views/UiElements/AlertsView.vue'
 import ButtonsView from '@/views/UiElements/ButtonsView.vue'
 import UserManagementView from '@/views/User/UserManagementView.vue'
+import BranchManagementView from '@/views/Branch/BranchManagementView.vue'
+import SupplierManagementView from '@/views/Supplier/SupplierManagementView.vue'
+import MainCategoryView from '@/views/Category/MainCategoryView.vue'
+import SubCategoryView from '@/views/Category/SubCategoryView.vue'
+import ProductManagementView from '@/views/Product/ProductManagementView.vue'
 
 const routes = [
   {
@@ -48,6 +53,51 @@ const routes = [
     component: UserManagementView,
     meta: {
       title: 'User Management',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/branch',
+    name: 'branch',
+    component: BranchManagementView,
+    meta: {
+      title: 'Branch Management',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/supplier',
+    name: 'supllier',
+    component: SupplierManagementView,
+    meta: {
+      title: 'Supplier Management',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/main-category',
+    name: 'main-category',
+    component: MainCategoryView,
+    meta: {
+      title: 'Category Management',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/sub-category',
+    name: 'sub-category',
+    component: SubCategoryView,
+    meta: {
+      title: 'Sub Category Management',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/product',
+    name: 'product',
+    component: ProductManagementView,
+    meta: {
+      title: 'Product Management',
       requiresAuth: true
     }
   },

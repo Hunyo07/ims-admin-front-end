@@ -1,13 +1,21 @@
 <script setup lang="ts">
 import { onClickOutside } from '@vueuse/core'
 import { ref } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
+const authStore = useAuthStore()
 const target = ref(null)
 const dropdownOpen = ref(false)
 
 onClickOutside(target, () => {
   dropdownOpen.value = false
 })
+const handleLogout = () => {
+  authStore.logout()
+  router.push('/')
+}
 </script>
 
 <template>
@@ -124,6 +132,7 @@ onClickOutside(target, () => {
       </ul>
       <router-link to="/">
         <button
+          @click="handleLogout"
           class="flex items-center gap-3.5 py-4 px-6 text-sm font-medium duration-300 ease-in-out hover:text-primary lg:text-base"
         >
           <svg

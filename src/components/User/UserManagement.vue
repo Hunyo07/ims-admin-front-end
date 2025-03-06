@@ -43,6 +43,8 @@ interface User {
   createdAt: string
   updatedAt: string
 }
+
+const selectedBranch = ref('all')
 const branches = ref([])
 const roles = ref([])
 const activeTab = ref('personal')
@@ -103,6 +105,34 @@ const paginatedUsers = computed(() => {
   const end = start + itemsPerPage.value
   return filteredUsers.value.slice(start, end)
 })
+const hasUnsavedChanges = computed(() => {
+  if (!showModal.value) return false
+  return Object.keys(newUser.value).some((key) => newUser.value[key] !== '')
+})
+const handleCloseModal = async () => {
+  if (hasUnsavedChanges.value) {
+    const result = await Swal.fire({
+      title: 'Unsaved Changes',
+      text: 'You have unsaved changes. Are you sure you want to close?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, discard changes',
+      cancelButtonText: 'No, keep editing',
+      customClass: {
+        confirmButton:
+          'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90',
+        cancelButton:
+          'swal2-cancel bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-opacity-90 ml-3'
+      }
+    })
+    if (!result.isConfirmed) return
+  }
+
+  showModal.value = false
+  resetForm()
+}
 const totalPages = computed(() => Math.ceil(filteredUsers.value.length / itemsPerPage.value))
 const calculateAge = (birthDate: string) => {
   if (!birthDate) return null
@@ -159,7 +189,6 @@ const fetchBranches = async () => {
       }
     })
     branches.value = response.data.branches || response.data
-    console.log('Fetched branches:', branches.value)
   } catch (error) {
     console.error('Error fetching branches:', error)
   }
@@ -210,10 +239,9 @@ const handleEditUser = (user) => {
   showModal.value = true
   activeTab.value = 'personal'
 }
-
+//filteredUsers computed property
 const filteredUsers = computed(() => {
   return users.value.filter((user) => {
-    // Add null check for role
     if (!user.role || !user.role.name) return false
 
     // Exclude superadmin users
@@ -223,8 +251,13 @@ const filteredUsers = computed(() => {
     const matchesSearch =
       fullName.includes(searchQuery.value.toLowerCase()) ||
       user.email.toLowerCase().includes(searchQuery.value.toLowerCase())
-    const matchesRole = selectedRole.value === 'all' || user.role.name === selectedRole.value
-    return matchesSearch && matchesRole
+    const matchesRole =
+      selectedRole.value === 'all' ||
+      user.role.name.toLowerCase() === selectedRole.value.toLowerCase()
+    const matchesBranch =
+      selectedBranch.value === 'all' || user.branch?._id === selectedBranch.value
+
+    return matchesSearch && matchesRole && matchesBranch
   })
 })
 
@@ -261,7 +294,8 @@ const handleUpdateUser = async () => {
       icon: 'success',
       title: 'Success!',
       text: 'User updated successfully',
-      timer: 1500
+      timer: 1000,
+      timerProgressBar: true
     })
 
     showModal.value = false
@@ -378,7 +412,8 @@ const handleAddUser = async () => {
       icon: 'success',
       title: 'Success!',
       text: 'User created successfully',
-      timer: 1500
+      timer: 1000,
+      timerProgressBar: true
     })
     await fetchUsers()
   } catch (error) {
@@ -428,6 +463,53 @@ const handleDeleteUser = async (userId) => {
   }
 }
 
+const handleToggleStatus = async (userId, currentStatus) => {
+  try {
+    const result = await Swal.fire({
+      title: `${currentStatus ? 'Deactivate' : 'Activate'} User?`,
+      text: `Are you sure you want to ${currentStatus ? 'deactivate' : 'activate'} this user?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: currentStatus ? '#d33' : '#3085d6',
+      cancelButtonColor: '#6B7280',
+      confirmButtonText: `Yes, ${currentStatus ? 'deactivate' : 'activate'} it!`
+    })
+
+    if (result.isConfirmed) {
+      const response = await axios.patch(
+        `http://localhost:5000/api/superadmin/toggle-user-status/${userId}`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${authStore.token}`
+          }
+        }
+      )
+
+      // Update local users list immediately
+      users.value = users.value.map((user) =>
+        user._id === userId ? { ...user, isActive: !currentStatus } : user
+      )
+
+      // Emit socket event
+      socket.emit('updateUser', response.data.user)
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Success!',
+        text: `User ${!currentStatus ? 'activated' : 'deactivated'} successfully`,
+        timer: 1500,
+        showConfirmButton: false
+      })
+    }
+  } catch (error) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: error.response?.data?.message || 'Error toggling user status'
+    })
+  }
+}
 onMounted(() => {
   fetchUsers()
   fetchRoles()
@@ -435,7 +517,7 @@ onMounted(() => {
 
   // Socket listeners for real-time updates
   socket.on('userCreated', (newUserData) => {
-    console.log('Received new user:', newUserData)
+    // console.log('Received new user:', newUserData)
     if (newUserData && newUserData._id) {
       // Check if user already exists
       const exists = users.value.some((user) => user._id === newUserData._id)
@@ -447,14 +529,14 @@ onMounted(() => {
   })
 
   socket.on('userUpdated', (updatedUser) => {
-    console.log('Received updated user:', updatedUser)
+    // console.log('Received updated user:', updatedUser)
     if (updatedUser && updatedUser._id) {
       users.value = users.value.map((user) => (user._id === updatedUser._id ? updatedUser : user))
     }
   })
 
   socket.on('userDeleted', (userId) => {
-    console.log('Received deleted user ID:', userId)
+    // console.log('Received deleted user ID:', userId)
     if (userId) {
       users.value = users.value.filter((user) => user._id !== userId)
     }
@@ -514,6 +596,15 @@ watch(
             <option value="admin">Admin</option>
             <option value="staff">Staff</option>
           </select>
+          <select
+            v-model="selectedBranch"
+            class="rounded-lg border border-stroke bg-transparent px-4 py-2 outline-none focus:border-primary dark:border-strokedark"
+          >
+            <option value="all">All Branches</option>
+            <option v-for="branch in branches" :key="branch._id" :value="branch._id">
+              {{ branch.name }}
+            </option>
+          </select>
           <button
             @click="showModal = true"
             class="inline-flex items-center justify-center rounded-lg bg-primary px-6 py-2 text-sm font-medium text-white hover:bg-opacity-90"
@@ -572,13 +663,23 @@ watch(
               </span>
             </td>
             <td class="py-4.5 px-4">
-              <span
-                :class="`inline-block rounded-full px-2.5 py-0.5 text-sm font-medium ${
-                  user.isActive ? 'bg-success text-white' : 'bg-danger text-white'
-                }`"
-              >
-                {{ user.isActive ? 'Active' : 'Inactive' }}
-              </span>
+              <div class="flex items-center space-x-2">
+                <div
+                  :class="`h-3 w-3 rounded-full ${
+                    user.isActive ? 'bg-success animate-pulse' : 'bg-danger'
+                  }`"
+                ></div>
+                <button
+                  @click="handleToggleStatus(user._id, user.isActive)"
+                  :class="`text-sm font-medium ${
+                    user.isActive
+                      ? 'text-success hover:text-meta-5'
+                      : 'text-danger hover:text-meta-8'
+                  }`"
+                >
+                  {{ user.isActive ? 'Active' : 'Inactive' }}
+                </button>
+              </div>
             </td>
             <td class="py-4.5 px-4">{{ user.branch?.name || 'Not Assigned' }}</td>
             <td class="py-4.5 px-4">
@@ -592,6 +693,21 @@ watch(
                   >
                     <path
                       d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"
+                    />
+                  </svg>
+                </button>
+                <button
+                  @click="handleToggleStatus(user._id, user.isActive)"
+                  :class="`hover:${user.isActive ? 'text-danger' : 'text-success'}`"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"
                     />
                   </svg>
                 </button>
@@ -683,8 +799,7 @@ watch(
           <button
             @click="
               () => {
-                showModal = false
-                resetForm()
+                handleCloseModal()
               }
             "
             class="hover:text-danger"
@@ -1152,8 +1267,7 @@ watch(
               type="button"
               @click="
                 () => {
-                  showModal = false
-                  resetForm()
+                  handleCloseModal()
                 }
               "
               class="rounded border border-stroke px-6 py-2 text-black hover:shadow-1 dark:border-strokedark dark:text-white"
