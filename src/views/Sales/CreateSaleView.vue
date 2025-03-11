@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, provide } from 'vue'
 import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import ProfileCard from '@/components/ProfileCard.vue'
-import UserManagement from '@/components/User/UserManagement.vue'
+import CreateSale from '@/components/Sales/CreateSale.vue'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 
-const pageTitle = ref('User Management')
+const pageTitle = ref('POS')
+// Provide a local placeholder image path
+provide('placeholderImage', '/images/placeholder.png')
 </script>
 
 <template>
@@ -14,7 +15,7 @@ const pageTitle = ref('User Management')
       <!-- Breadcrumb Start -->
       <BreadcrumbDefault :pageTitle="pageTitle" />
       <!-- BreadcruAmb End -->
-      <UserManagement />
+      <CreateSale />
     </div>
   </DefaultLayout>
 </template>

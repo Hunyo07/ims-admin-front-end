@@ -14,10 +14,13 @@ import AlertsView from '@/views/UiElements/AlertsView.vue'
 import ButtonsView from '@/views/UiElements/ButtonsView.vue'
 import UserManagementView from '@/views/User/UserManagementView.vue'
 import BranchManagementView from '@/views/Branch/BranchManagementView.vue'
+import CustomerManagementView from '@/views/Customer/CustomerManagementView.vue'
 import SupplierManagementView from '@/views/Supplier/SupplierManagementView.vue'
 import MainCategoryView from '@/views/Category/MainCategoryView.vue'
 import SubCategoryView from '@/views/Category/SubCategoryView.vue'
 import ProductManagementView from '@/views/Product/ProductManagementView.vue'
+import SalesManagementView from '@/views/Sales/SalesManagementView.vue'
+import CreatSaleView from '@/views/Sales/CreateSaleView.vue'
 
 const routes = [
   {
@@ -62,6 +65,33 @@ const routes = [
     component: BranchManagementView,
     meta: {
       title: 'Branch Management',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/customer',
+    name: 'customer',
+    component: CustomerManagementView,
+    meta: {
+      title: 'Customer Management',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/pos',
+    name: 'POS',
+    component: CreatSaleView,
+    meta: {
+      title: 'POS Management',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/sales',
+    name: 'sales',
+    component: SalesManagementView,
+    meta: {
+      title: 'Sales Management',
       requiresAuth: true
     }
   },

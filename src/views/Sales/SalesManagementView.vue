@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import ProfileCard from '@/components/ProfileCard.vue'
-import UserManagement from '@/components/User/UserManagement.vue'
+import SalesManagement from '@/components/Sales/SalesManagement.vue'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 
-const pageTitle = ref('User Management')
+const pageTitle = ref('Sales Management')
 </script>
 
 <template>
@@ -14,7 +13,7 @@ const pageTitle = ref('User Management')
       <!-- Breadcrumb Start -->
       <BreadcrumbDefault :pageTitle="pageTitle" />
       <!-- BreadcruAmb End -->
-      <UserManagement />
+      <SalesManagement />
     </div>
   </DefaultLayout>
 </template>
