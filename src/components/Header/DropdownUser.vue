@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onClickOutside } from '@vueuse/core'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 
@@ -16,6 +16,7 @@ const handleLogout = () => {
   authStore.logout()
   router.push('/')
 }
+const user = computed(() => authStore.user)
 </script>
 
 <template>
@@ -26,8 +27,10 @@ const handleLogout = () => {
       @click.prevent="dropdownOpen = !dropdownOpen"
     >
       <span class="hidden text-right lg:block">
-        <span class="block text-sm font-medium text-black dark:text-white">Thomas Anree</span>
-        <span class="block text-xs font-medium">UX Designer</span>
+        <span class="block text-sm font-medium text-black dark:text-white">
+          {{ user?.firstName || 'Guest' }}{{ user?.lastName || 'User' }}
+        </span>
+        <span class="block text-xs font-medium">{{ user?.role || 'No Role' }}</span>
       </span>
 
       <span class="h-12 w-12 rounded-full">

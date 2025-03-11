@@ -18,7 +18,6 @@ interface Product {
   price: number
   costPrice: number
   unit: string
-  branch: any
   currentStock: number
   images: string
   isActive: boolean
@@ -62,7 +61,6 @@ const newProduct = ref({
   price: '',
   costPrice: '',
   unit: '',
-  branchId: '',
   currentStock: '',
   images: null
 })
@@ -286,7 +284,6 @@ const resetForm = () => {
     price: '',
     costPrice: '',
     unit: '',
-    branchId: '',
     currentStock: '',
     images: null
   }
@@ -307,7 +304,6 @@ const handleEditProduct = (product) => {
     price: product.price,
     costPrice: product.costPrice,
     unit: product.unit,
-    branchId: product.branch?._id || '',
     currentStock: product.currentStock
   }
   showModal.value = true
@@ -450,11 +446,19 @@ const handleAddProduct = async () => {
     isSubmitting.value = true
     const formData = new FormData()
 
+    // Add all product data to formData, excluding null/undefined values
     Object.keys(newProduct.value).forEach((key) => {
-      if (newProduct.value[key] !== null && newProduct.value[key] !== undefined) {
+      if (
+        newProduct.value[key] !== null &&
+        newProduct.value[key] !== undefined &&
+        newProduct.value[key] !== ''
+      ) {
         formData.append(key, newProduct.value[key])
       }
     })
+
+    // Add stock value
+    formData.append('stock', newProduct.value.currentStock)
 
     const response = await axios.post('http://localhost:5000/api/products', formData, {
       headers: {
@@ -463,13 +467,12 @@ const handleAddProduct = async () => {
       }
     })
 
-    // Only add to local state if it's for the current branch
-    if (response.data.product.branch._id === authStore.user.branch) {
-      products.value = [response.data.product, ...products.value]
-    }
+    // Update local state with new product
+    products.value = [response.data.product, ...products.value]
 
-    // Emit socket event for other branches
+    // Emit socket event
     socket.emit('createProduct', response.data.product)
+
     showModal.value = false
     resetForm()
     Swal.fire({
@@ -479,6 +482,7 @@ const handleAddProduct = async () => {
       timer: 1500
     })
   } catch (error) {
+    console.error('Product creation error:', error)
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -489,16 +493,6 @@ const handleAddProduct = async () => {
   }
 }
 
-// Modify socket listener in onMounted
-socket.on('productCreated', (newProduct) => {
-  if (newProduct && newProduct._id) {
-    const exists = products.value.some((product) => product._id === newProduct._id)
-    // Only add products from other branches that don't exist in the local state
-    if (!exists && newProduct.branch._id !== authStore.user.branch) {
-      products.value = [newProduct, ...products.value]
-    }
-  }
-})
 // Update socket listeners
 onMounted(() => {
   fetchProducts()
@@ -507,15 +501,14 @@ onMounted(() => {
   fetchSuppliers()
   fetchSubCategories()
 
-  socket.on('productCreated', (newProduct) => {
-    if (newProduct && newProduct._id) {
-      // Only add if it doesn't exist in the local state
-      const exists = products.value.some((product) => product._id === newProduct._id)
-      if (!exists && newProduct.branch._id !== authStore.user.branch) {
-        products.value = [newProduct, ...products.value]
-      }
-    }
-  })
+  // socket.on('productCreated', (newProduct) => {
+  //   if (newProduct && newProduct._id) {
+  //     const exists = products.value.some((product) => product._id === newProduct._id)
+  //     if (!exists) {
+  //       products.value = [newProduct, ...products.value]
+  //     }
+  //   }
+  // })
 
   socket.on('productUpdated', (updatedProduct) => {
     if (updatedProduct && updatedProduct._id) {
@@ -659,7 +652,7 @@ watch(
           />
         </div>
         <div>
-          <label class="block text-sm font-medium text-black dark:text-white">Max Price</label>
+          <label class="mb-2 block text-sm font-medium text-black dark:text-white">Max Price</label>
           <input
             v-model.number="filters.maxPrice"
             type="number"
@@ -677,7 +670,7 @@ watch(
         <thead>
           <tr class="bg-gray-2 text-left dark:bg-meta-4">
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Product Name</th>
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Description</th>
+            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Barcode</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Category</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">SubCategory</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Price</th>
@@ -711,7 +704,7 @@ watch(
                 <p class="text-black dark:text-white">{{ product.name }}</p>
               </div>
             </td>
-            <td class="py-4.5 px-4">{{ product.description }}</td>
+            <td class="py-4.5 px-4">{{ product.barcode.text }}</td>
             <td class="py-4.5 px-4">{{ product.category?.name || 'Not Assigned' }}</td>
             <td class="py-4.5 px-4">{{ product.subCategory?.name || 'Not Assigned' }}</td>
             <td class="py-4.5 px-4">{{ formatPrice(product.price) }}</td>
@@ -995,22 +988,6 @@ watch(
                 <option value="liters">Liters</option>
                 <option value="meters">Meters</option>
                 <option value="boxes">Boxes</option>
-              </select>
-            </div>
-            <!-- Branch -->
-            <div>
-              <label class="mb-2.5 block text-black dark:text-white">
-                Branch <span class="text-danger">*</span>
-              </label>
-              <select
-                v-model="newProduct.branchId"
-                required
-                class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-              >
-                <option value="" disabled>Select a branch</option>
-                <option v-for="branch in branches" :key="branch._id" :value="branch._id">
-                  {{ branch.name }}
-                </option>
               </select>
             </div>
 

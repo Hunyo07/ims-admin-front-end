@@ -10,7 +10,7 @@ const pageTitle = ref('User Management')
 
 <template>
   <DefaultLayout>
-    <div class="mx-auto max-w-7xl">
+    <div class="mx-auto max-w-8xl">
       <!-- Breadcrumb Start -->
       <BreadcrumbDefault :pageTitle="pageTitle" />
       <!-- Breadcrumb End -->
