@@ -21,6 +21,7 @@ import SubCategoryView from '@/views/Category/SubCategoryView.vue'
 import ProductManagementView from '@/views/Product/ProductManagementView.vue'
 import SalesManagementView from '@/views/Sales/SalesManagementView.vue'
 import CreatSaleView from '@/views/Sales/CreateSaleView.vue'
+import BarcodesView from '@/views/Barcodes/BarcodeManagementView.vue'
 
 const routes = [
   {
@@ -126,6 +127,15 @@ const routes = [
     path: '/product',
     name: 'product',
     component: ProductManagementView,
+    meta: {
+      title: 'Product Management',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/barcodes',
+    name: 'barcodes',
+    component: BarcodesView,
     meta: {
       title: 'Product Management',
       requiresAuth: true

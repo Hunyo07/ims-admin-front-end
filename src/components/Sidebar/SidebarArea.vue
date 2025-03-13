@@ -162,7 +162,7 @@ const menuGroups = ref([
                 <path d="M1 4h2v16H1V4zm3 0h2v16H4V4zm3 0h2v16H7V4zm3 0h1v16h-1V4zm3 0h1v16h-1V4zm2 0h2v16h-2V4zm3 0h2v16h-2V4zm3 0h2v16h-2V4z"/>
               </svg>`,
         label: 'Barcode ',
-        route: '/tables'
+        route: '/barcodes'
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
