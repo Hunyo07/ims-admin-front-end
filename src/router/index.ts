@@ -22,6 +22,7 @@ import ProductManagementView from '@/views/Product/ProductManagementView.vue'
 import SalesManagementView from '@/views/Sales/SalesManagementView.vue'
 import CreatSaleView from '@/views/Sales/CreateSaleView.vue'
 import BarcodesView from '@/views/Barcodes/BarcodeManagementView.vue'
+import ReorderView from '@/views/Reorder/PurchaseMangementView.vue'
 
 const routes = [
   {
@@ -129,6 +130,15 @@ const routes = [
     component: ProductManagementView,
     meta: {
       title: 'Product Management',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/reorder',
+    name: 'reorder',
+    component: ReorderView,
+    meta: {
+      title: 'Reorder Management',
       requiresAuth: true
     }
   },
