@@ -23,6 +23,7 @@ import SalesManagementView from '@/views/Sales/SalesManagementView.vue'
 import CreatSaleView from '@/views/Sales/CreateSaleView.vue'
 import BarcodesView from '@/views/Barcodes/BarcodeManagementView.vue'
 import ReorderView from '@/views/Reorder/PurchaseMangementView.vue'
+import ReorderPointView from '@/views/Settings/ReorderPointView.vue'
 
 const routes = [
   {
@@ -121,6 +122,15 @@ const routes = [
     component: SubCategoryView,
     meta: {
       title: 'Sub Category Management',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/settings/reorder-point',
+    name: 'reorder-point',
+    component: ReorderPointView,
+    meta: {
+      title: 'Reorder Point',
       requiresAuth: true
     }
   },
