@@ -48,9 +48,7 @@ const fetchProducts = async () => {
         Authorization: `Bearer ${authStore.token}`
       }
     })
-    
-    // Debug the response
-    
+
     // Handle the specific response format from your API
     if (response.data && response.data.products && Array.isArray(response.data.products)) {
       products.value = response.data.products
@@ -62,8 +60,9 @@ const fetchProducts = async () => {
       console.error('Unexpected API response format:', response.data)
       products.value = []
     }
-    
-    // Debug the products array
+
+    // Fetch reorder points and associate them with products
+    await fetchReorderPoints()
   } catch (error) {
     console.error('Error fetching products:', error)
     Swal.fire({
@@ -73,6 +72,37 @@ const fetchProducts = async () => {
     })
   } finally {
     isLoading.value = false
+  }
+}
+
+// Add this new function to fetch reorder points
+const fetchReorderPoints = async () => {
+  try {
+    const response = await axios.get('http://localhost:5000/api/reorder-points', {
+      headers: {
+        Authorization: `Bearer ${authStore.token}`
+      }
+    })
+
+    const reorderPoints = response.data
+
+    // Associate reorder points with products
+    if (Array.isArray(reorderPoints)) {
+      products.value = products.value.map((product) => {
+        const reorderPoint = reorderPoints.find((rp) => rp.product._id === product._id)
+        if (reorderPoint) {
+          return {
+            ...product,
+            reorderPointId: reorderPoint._id,
+            reorderLevel: reorderPoint.minimumStock,
+            reorderQuantity: reorderPoint.reorderQuantity
+          }
+        }
+        return product
+      })
+    }
+  } catch (error) {
+    console.error('Error fetching reorder points:', error)
   }
 }
 
@@ -90,35 +120,66 @@ const openEditModal = (product: Product) => {
 // Save reorder settings
 const saveReorderSettings = async () => {
   if (!selectedProduct.value) return
-  
+
   try {
-    // Instead of updating the product directly, use the reorder point endpoint
-    const response = await axios.patch(
-      `http://localhost:5000/api/reorder-points/${selectedProduct.value.reorderPointId || 'create'}`,
-      {
+    let response
+
+    // Check if the product already has a reorder point ID
+    if (selectedProduct.value.reorderPointId) {
+      // Update existing reorder point
+      response = await axios.put(
+        `http://localhost:5000/api/reorder-points/${selectedProduct.value.reorderPointId}`,
+        {
+          minimumStock: editForm.value.reorderLevel,
+          reorderQuantity: editForm.value.reorderQuantity,
+          supplierId: selectedProduct.value.supplier?._id
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${authStore.token}`
+          }
+        }
+      )
+    } else {
+      // Create new reorder point
+      // Make sure all required fields are present and valid
+      if (!selectedProduct.value._id || !selectedProduct.value.supplier?._id) {
+        throw new Error('Missing required product or supplier information')
+      }
+
+      // Create new reorder point
+      const requestData = {
         productId: selectedProduct.value._id,
         minimumStock: editForm.value.reorderLevel,
         reorderQuantity: editForm.value.reorderQuantity,
         supplierId: selectedProduct.value.supplier?._id
-      },
-      {
+      }
+      console.log('Sending data to create reorder point:', requestData)
+
+      response = await axios.post('http://localhost:5000/api/reorder-points', requestData, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
+      })
+
+      // Store the new reorder point ID
+      if (response.data && response.data.reorderPoint) {
+        selectedProduct.value.reorderPointId = response.data.reorderPoint._id
       }
-    )
-    
+    }
+
     // Update product in the list
-    const index = products.value.findIndex(p => p._id === selectedProduct.value?._id)
+    const index = products.value.findIndex((p) => p._id === selectedProduct.value?._id)
     if (index !== -1) {
       products.value[index] = {
         ...products.value[index],
         reorderLevel: editForm.value.reorderLevel,
         maxStock: editForm.value.maxStock,
-        reorderQuantity: editForm.value.reorderQuantity
+        reorderQuantity: editForm.value.reorderQuantity,
+        reorderPointId: selectedProduct.value.reorderPointId
       }
     }
-    
+
     showEditModal.value = false
     Swal.fire({
       icon: 'success',
@@ -151,10 +212,10 @@ const stockFilter = ref('all')
 const filteredProducts = computed(() => {
   if (stockFilter.value === 'all') return products.value
   if (stockFilter.value === 'low') {
-    return products.value.filter(p => getStockStatus(p) === 'low')
+    return products.value.filter((p) => getStockStatus(p) === 'low')
   }
   if (stockFilter.value === 'out') {
-    return products.value.filter(p => getStockStatus(p) === 'out')
+    return products.value.filter((p) => getStockStatus(p) === 'out')
   }
   return products.value
 })
@@ -163,12 +224,13 @@ const filteredProducts = computed(() => {
 const searchQuery = ref('')
 const searchedProducts = computed(() => {
   if (!searchQuery.value) return filteredProducts.value
-  
+
   const query = searchQuery.value.toLowerCase()
   return filteredProducts.value.filter(
-    p => p.name.toLowerCase().includes(query) || 
-         p.sku.toLowerCase().includes(query) ||
-         (p.supplier?.name && p.supplier.name.toLowerCase().includes(query))
+    (p) =>
+      p.name.toLowerCase().includes(query) ||
+      p.sku.toLowerCase().includes(query) ||
+      (p.supplier?.name && p.supplier.name.toLowerCase().includes(query))
   )
 })
 
@@ -207,16 +269,18 @@ const applyBulkUpdate = async () => {
       })
       return
     }
-    
+
     const response = await axios.post(
-      'http://localhost:5000/api/products/bulk-update',
+      'http://localhost:5000/api/reorder-points/bulk-update',
       {
-        categoryId: bulkForm.value.categoryId,
-        updates: {
-          reorderLevel: bulkForm.value.reorderLevel,
-          maxStock: bulkForm.value.maxStock,
-          reorderQuantity: bulkForm.value.reorderQuantity
-        }
+        products: products.value
+          .filter((p) => p.category?._id === bulkForm.value.categoryId)
+          .map((p) => ({
+            id: p._id,
+            minimumStock: bulkForm.value.reorderLevel,
+            reorderQuantity: bulkForm.value.reorderQuantity,
+            supplierId: p.supplier?._id
+          }))
       },
       {
         headers: {
@@ -224,14 +288,14 @@ const applyBulkUpdate = async () => {
         }
       }
     )
-    
+
     showBulkModal.value = false
     await fetchProducts()
-    
+
     Swal.fire({
       icon: 'success',
       title: 'Success',
-      text: `Updated reorder settings for ${response.data.count || 'multiple'} products`,
+      text: `Updated reorder settings for ${response.data.results?.length || 'multiple'} products`,
       toast: true,
       position: 'top-end',
       showConfirmButton: false,
@@ -256,21 +320,17 @@ const triggerReorderCheck = async () => {
         Swal.showLoading()
       }
     })
-    
-    const response = await axios.post(
-      'http://localhost:5000/api/reorder/check',
-      {},
-      {
-        headers: {
-          Authorization: `Bearer ${authStore.token}`
-        }
+
+    const response = await axios.get('http://localhost:5000/api/reorder-points/check', {
+      headers: {
+        Authorization: `Bearer ${authStore.token}`
       }
-    )
-    
+    })
+
     Swal.fire({
       icon: 'success',
       title: 'Success',
-      text: `Created ${response.data.count || 0} new reorder requests`,
+      text: `Found ${response.data.reorderRequests?.length || 0} products that need reordering`,
       confirmButtonText: 'OK'
     })
   } catch (error) {
@@ -287,15 +347,54 @@ onMounted(() => {
   fetchProducts()
   fetchCategories()
 })
+// Add this function to your component
+const triggerAutoReorder = async () => {
+  try {
+    Swal.fire({
+      title: 'Processing',
+      text: 'Checking stock levels and creating purchase orders...',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading()
+      }
+    })
+
+    const response = await axios.post(
+      'http://localhost:5000/api/reorder-points/auto-reorder',
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${authStore.token}`
+        }
+      }
+    )
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Auto Reorder Complete',
+      text: `Created ${
+        response.data.ordersCreated || 0
+      } purchase orders for products that need reordering`,
+      confirmButtonText: 'OK'
+    })
+  } catch (error) {
+    console.error('Error triggering auto reorder:', error)
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'Failed to process auto reorder'
+    })
+  }
+}
 </script>
 
 <template>
-  <div class="rounded-sm border border-stroke bg-white px-5 pt-6 pb-2.5 shadow-default dark:border-strokedark dark:bg-boxdark sm:px-7.5 xl:pb-1">
+  <div
+    class="rounded-sm border border-stroke bg-white px-5 pt-6 pb-2.5 shadow-default dark:border-strokedark dark:bg-boxdark sm:px-7.5 xl:pb-1"
+  >
     <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
-      <h4 class="text-xl font-semibold text-black dark:text-white">
-        Reorder Point Settings
-      </h4>
-      
+      <h4 class="text-xl font-semibold text-black dark:text-white">Reorder Point Settings</h4>
+
       <div class="flex flex-wrap gap-3">
         <div class="relative">
           <input
@@ -306,11 +405,13 @@ onMounted(() => {
           />
           <span class="absolute left-3 top-2.5">
             <svg class="fill-body h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-              <path d="M18.031 16.617l4.283 4.282-1.415 1.415-4.282-4.283A8.96 8.96 0 0 1 11 20c-4.968 0-9-4.032-9-9s4.032-9 9-9 9 4.032 9 9a8.96 8.96 0 0 1-1.969 5.617zm-2.006-.742A6.977 6.977 0 0 0 18 11c0-3.868-3.133-7-7-7-3.868 0-7 3.132-7 7 0 3.867 3.132 7 7 7a6.977 6.977 0 0 0 4.875-1.975l.15-.15z" />
+              <path
+                d="M18.031 16.617l4.283 4.282-1.415 1.415-4.282-4.283A8.96 8.96 0 0 1 11 20c-4.968 0-9-4.032-9-9s4.032-9 9-9 9 4.032 9 9a8.96 8.96 0 0 1-1.969 5.617zm-2.006-.742A6.977 6.977 0 0 0 18 11c0-3.868-3.133-7-7-7-3.868 0-7 3.132-7 7 0 3.867 3.132 7 7 7a6.977 6.977 0 0 0 4.875-1.975l.15-.15z"
+              />
             </svg>
           </span>
         </div>
-        
+
         <select
           v-model="stockFilter"
           class="rounded-lg border border-stroke bg-transparent py-2 px-4 outline-none focus:border-primary dark:border-form-strokedark dark:bg-form-input"
@@ -319,14 +420,14 @@ onMounted(() => {
           <option value="low">Low Stock</option>
           <option value="out">Out of Stock</option>
         </select>
-        
+
         <button
           @click="showBulkModal = true"
           class="rounded-lg bg-primary py-2 px-4 text-white hover:bg-opacity-90"
         >
           Bulk Update
         </button>
-        
+
         <button
           @click="triggerReorderCheck"
           class="rounded-lg bg-success py-2 px-4 text-white hover:bg-opacity-90"
@@ -338,9 +439,11 @@ onMounted(() => {
 
     <div class="max-w-full overflow-x-auto">
       <div v-if="isLoading" class="flex justify-center py-8">
-        <div class="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
+        <div
+          class="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"
+        ></div>
       </div>
-      
+
       <div v-else-if="products.length === 0" class="py-8 text-center">
         <p class="text-gray-500">No products found. Please check your API connection.</p>
         <pre class="mt-4 text-xs text-left bg-gray-100 p-4 rounded max-w-lg mx-auto overflow-auto">
@@ -350,7 +453,7 @@ onMounted(() => {
           Searched products length: {{ searchedProducts.length }}
         </pre>
       </div>
-      
+
       <table v-else class="w-full table-auto">
         <thead>
           <tr class="bg-gray-2 text-left dark:bg-meta-4">
@@ -359,7 +462,6 @@ onMounted(() => {
             <th class="py-4 px-4 font-medium text-black dark:text-white">Supplier</th>
             <th class="py-4 px-4 font-medium text-black dark:text-white">Current Stock</th>
             <th class="py-4 px-4 font-medium text-black dark:text-white">Reorder Level</th>
-            <th class="py-4 px-4 font-medium text-black dark:text-white">Max Stock</th>
             <th class="py-4 px-4 font-medium text-black dark:text-white">Reorder Quantity</th>
             <th class="py-4 px-4 font-medium text-black dark:text-white">Status</th>
             <th class="py-4 px-4 font-medium text-black dark:text-white">Actions</th>
@@ -367,12 +469,10 @@ onMounted(() => {
         </thead>
         <tbody>
           <tr v-if="searchedProducts.length === 0">
-            <td colspan="9" class="py-4 px-4 text-center text-gray-500">
-              No products found
-            </td>
+            <td colspan="9" class="py-4 px-4 text-center text-gray-500">No products found</td>
           </tr>
-          <tr 
-            v-for="product in searchedProducts" 
+          <tr
+            v-for="product in searchedProducts"
             :key="product._id"
             class="border-b border-[#eee] dark:border-strokedark"
           >
@@ -384,10 +484,9 @@ onMounted(() => {
             <td class="py-4 px-4">{{ product.supplier?.name || 'N/A' }}</td>
             <td class="py-4 px-4">{{ product.currentStock }}</td>
             <td class="py-4 px-4">{{ product.reorderLevel || 'Not set' }}</td>
-            <td class="py-4 px-4">{{ product.maxStock || 'Not set' }}</td>
             <td class="py-4 px-4">{{ product.reorderQuantity || 'Not set' }}</td>
             <td class="py-4 px-4">
-              <span 
+              <span
                 class="inline-flex rounded-full px-3 py-1 text-sm font-medium"
                 :class="{
                   'bg-success bg-opacity-10 text-success': getStockStatus(product) === 'normal',
@@ -395,17 +494,30 @@ onMounted(() => {
                   'bg-danger bg-opacity-10 text-danger': getStockStatus(product) === 'out'
                 }"
               >
-                {{ getStockStatus(product) === 'normal' ? 'Normal' : 
-                   getStockStatus(product) === 'low' ? 'Low Stock' : 'Out of Stock' }}
+                {{
+                  getStockStatus(product) === 'normal'
+                    ? 'Normal'
+                    : getStockStatus(product) === 'low'
+                      ? 'Low Stock'
+                      : 'Out of Stock'
+                }}
               </span>
             </td>
             <td class="py-4 px-4">
-              <button
-                @click="openEditModal(product)"
-                class="hover:text-primary"
-              >
-                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              <button @click="openEditModal(product)" class="hover:text-primary">
+                <svg
+                  class="h-5 w-5"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
                 </svg>
               </button>
             </td>
@@ -423,10 +535,7 @@ onMounted(() => {
     <div class="relative w-full max-w-lg rounded-lg bg-white p-8 dark:bg-boxdark">
       <div class="mb-6 flex items-center justify-between">
         <h3 class="text-xl font-semibold">Edit Reorder Settings</h3>
-        <button
-          @click="showEditModal = false"
-          class="hover:text-danger"
-        >
+        <button @click="showEditModal = false" class="hover:text-danger">
           <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
@@ -475,7 +584,9 @@ onMounted(() => {
             min="1"
             class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
           />
-          <p class="mt-1 text-xs text-gray-500">Default quantity to reorder if maximum stock is not set</p>
+          <p class="mt-1 text-xs text-gray-500">
+            Default quantity to reorder if maximum stock is not set
+          </p>
         </div>
 
         <div class="mt-6 flex justify-end space-x-4">
@@ -504,10 +615,7 @@ onMounted(() => {
     <div class="relative w-full max-w-lg rounded-lg bg-white p-8 dark:bg-boxdark">
       <div class="mb-6 flex items-center justify-between">
         <h3 class="text-xl font-semibold">Bulk Update Reorder Settings</h3>
-        <button
-          @click="showBulkModal = false"
-          class="hover:text-danger"
-        >
+        <button @click="showBulkModal = false" class="hover:text-danger">
           <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"

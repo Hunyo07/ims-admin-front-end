@@ -234,9 +234,19 @@ const updateOrderStatus = async (orderId, newStatus) => {
 const generateFromReorderPoints = async () => {
   try {
     isLoading.value = true
+    
+    Swal.fire({
+      title: 'Processing',
+      text: 'Checking stock levels and creating purchase orders...',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading()
+      }
+    })
+    
     const response = await axios.post(
-      'http://localhost:5000/api/purchase-orders/from-reorder-points',
-      {}, // Removed branchId from request body
+      'http://localhost:5000/api/reorder-points/auto-reorder',
+      {}, 
       {
         headers: {
           Authorization: `Bearer ${authStore.token}`
@@ -244,14 +254,15 @@ const generateFromReorderPoints = async () => {
       }
     )
 
-    Swal.fire({
-      icon: 'success',
-      title: 'Success',
-      text: response.data.message
-    })
-
     // Refresh purchase orders list
     await fetchPurchaseOrders()
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Auto Reorder Complete',
+      text: `Created ${response.data.ordersCreated || 0} purchase orders for products that need reordering`,
+      confirmButtonText: 'OK'
+    })
   } catch (error) {
     console.error('Error generating purchase orders:', error)
     Swal.fire({
