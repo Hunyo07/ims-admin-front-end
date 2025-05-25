@@ -13,7 +13,6 @@ interface Category {
   name: string
   description: string
   isActive: boolean
-  branch: any
   createdAt: string
   updatedAt: string
 }
@@ -30,27 +29,13 @@ const isSubmitting = ref(false)
 const isDeleting = ref(false)
 const selectedCategoryId = ref(null)
 const editingCategory = ref(null)
-const branches = ref([])
 
 const newCategory = ref({
   name: '',
   description: '',
-  branchId: '',
   isActive: true
 })
-const fetchBranches = async () => {
-  try {
-    const response = await axios.get('http://localhost:5000/api/superadmin/branches', {
-      headers: {
-        Authorization: `Bearer ${authStore.token}`
-      }
-    })
-    branches.value = response.data?.filter((branch) => branch?.isActive) || []
-  } catch (error) {
-    console.error('Error fetching branches:', error)
-    branches.value = [] // Set empty array on error
-  }
-}
+
 // Update fetch function
 const fetchCategories = async () => {
   try {
@@ -60,10 +45,7 @@ const fetchCategories = async () => {
         Authorization: `Bearer ${authStore.token}`
       }
     })
-    categories.value = (response.data || []).map((category) => ({
-      ...category,
-      branch: category.branch || { name: 'Not Assigned' }
-    }))
+    categories.value = response.data || []
   } catch (error) {
     console.error('Error fetching categories:', error)
     categories.value = [] // Set empty array on error
@@ -128,7 +110,6 @@ const resetForm = () => {
   newCategory.value = {
     name: '',
     description: '',
-    branchId: '',
     isActive: true
   }
   isEditing.value = false
@@ -175,7 +156,6 @@ const handleEditCategory = (category) => {
   newCategory.value = {
     name: category.name,
     description: category.description,
-    branchId: category.branch?._id || '',
     isActive: category.isActive
   }
   showModal.value = true
@@ -310,28 +290,19 @@ const handleToggleStatus = async (categoryId, currentStatus) => {
 // Update socket listeners
 onMounted(() => {
   fetchCategories()
-  fetchBranches()
   socket.on('categoryCreated', (newCategory) => {
     if (newCategory && newCategory._id) {
-      const categoryWithBranch = {
-        ...newCategory,
-        branch: newCategory.branch || { name: 'Not Assigned' }
-      }
       const exists = categories.value.some((category) => category._id === newCategory._id)
       if (!exists) {
-        categories.value = [categoryWithBranch, ...categories.value]
+        categories.value = [newCategory, ...categories.value]
       }
     }
   })
 
   socket.on('categoryUpdated', (updatedCategory) => {
     if (updatedCategory && updatedCategory._id) {
-      const categoryWithBranch = {
-        ...updatedCategory,
-        branch: updatedCategory.branch || { name: 'Not Assigned' }
-      }
       categories.value = categories.value.map((category) =>
-        category._id === updatedCategory._id ? categoryWithBranch : category
+        category._id === updatedCategory._id ? updatedCategory : category
       )
     }
   })
@@ -363,7 +334,7 @@ onMounted(() => {
             <input
               type="text"
               v-model="searchQuery"
-              placeholder="Search Categorys..."
+              placeholder="Search Categories..."
               class="w-full rounded-lg border border-stroke bg-transparent py-2 pl-10 pr-4 outline-none focus:border-primary dark:border-strokedark"
             />
             <span class="absolute left-4 top-1/2 -translate-y-1/2">
@@ -399,17 +370,16 @@ onMounted(() => {
           <tr class="bg-gray-2 text-left dark:bg-meta-4">
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Category Name</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Description</th>
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Branch</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Status</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="isLoading">
-            <td colspan="8" class="text-center py-4">Loading...</td>
+            <td colspan="4" class="text-center py-4">Loading...</td>
           </tr>
           <tr v-else-if="paginatedCategories.length === 0">
-            <td colspan="5" class="text-center py-4">No categories found</td>
+            <td colspan="4" class="text-center py-4">No categories found</td>
           </tr>
           <tr
             v-for="category in paginatedCategories"
@@ -425,7 +395,6 @@ onMounted(() => {
               </div>
             </td>
             <td class="py-4.5 px-4">{{ category.description }}</td>
-            <td class="py-4.5 px-4">{{ category.branch?.name || 'Not Assigned' }}</td>
             <td class="py-4.5 px-4">
               <div class="flex items-center space-x-2">
                 <div
@@ -565,8 +534,6 @@ onMounted(() => {
           </button>
         </div>
 
-        <!--  s Navigation -->
-
         <form
           @submit.prevent="isEditing ? handleUpdateCategory() : handleAddCategory()"
           class="space-y-6"
@@ -595,21 +562,6 @@ onMounted(() => {
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               ></textarea>
             </div>
-            <div class="col-span-2">
-              <label class="mb-2.5 block text-black dark:text-white">
-                Branch <span class="text-danger">*</span>
-              </label>
-              <select
-                v-model="newCategory.branchId"
-                required
-                class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-              >
-                <option value="" disabled>Select a branch</option>
-                <option v-for="branch in branches" :key="branch._id" :value="branch._id">
-                  {{ branch.name }}
-                </option>
-              </select>
-            </div>
           </div>
 
           <!-- Form Actions -->
@@ -621,19 +573,40 @@ onMounted(() => {
                   handleCloseModal()
                 }
               "
-              class="rounded border border-stroke px-6 py-2 text-black hover:shadow-1 dark:border-strokedark dark:text-white"
+              class="rounded border border-stroke px-6 py-2 text-black hover:border-meta-1 hover:text-meta-1 dark:border-strokedark dark:text-white"
             >
               Cancel
             </button>
             <button
               type="submit"
+              class="inline-flex items-center justify-center rounded bg-primary px-6 py-2 text-white hover:bg-opacity-90"
               :disabled="isSubmitting"
-              class="rounded bg-primary px-6 py-2 text-white hover:bg-opacity-90"
             >
-              {{ isSubmitting ? 'Saving...' : isEditing ? 'Update' : 'Create' }}
+              <svg
+                v-if="isSubmitting"
+                class="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                ></circle>
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+              {{ isEditing ? 'Update' : 'Create' }}
             </button>
           </div>
-        </form>
+        </form> 
       </div>
     </div>
   </div>

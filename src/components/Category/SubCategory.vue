@@ -14,13 +14,11 @@ interface SubCategory {
   description: string
   isActive: boolean
   category: any
-  branch: any
   createdAt: string
   updatedAt: string
 }
 
 // refs
-const selectedBranchFilter = ref('')
 const selectedCategoryFilter = ref('')
 const searchQuery = ref('')
 const currentPage = ref(1)
@@ -32,29 +30,15 @@ const isSubmitting = ref(false)
 const isDeleting = ref(false)
 const selectedSubCategoryId = ref(null)
 const editingSubCategory = ref(null)
-const branches = ref([])
 const subCategories = ref<SubCategory[]>([])
 const categories = ref([])
 const newSubCategory = ref({
   name: '',
   description: '',
   categoryId: '',
-  branchId: '',
   isActive: true
 })
-const fetchBranches = async () => {
-  try {
-    const response = await axios.get('http://localhost:5000/api/superadmin/branches', {
-      headers: {
-        Authorization: `Bearer ${authStore.token}`
-      }
-    })
-    branches.value = response.data?.filter((branch) => branch?.isActive) || []
-  } catch (error) {
-    console.error('Error fetching branches:', error)
-    branches.value = [] // Set empty array on error
-  }
-}
+
 const totalPages = computed(() => {
   return Math.ceil(filteredSubCategories.value.length / itemsPerPage.value)
 })
@@ -90,10 +74,6 @@ const fetchCategories = async () => {
     })
     categories.value = (response.data || [])
       .filter((category) => category && typeof category === 'object')
-      .map((category) => ({
-        ...category,
-        branch: category.branch || { name: 'Not Assigned' }
-      }))
   } catch (error) {
     console.error('Error fetching categories:', error)
     categories.value = []
@@ -115,13 +95,10 @@ const filteredSubCategories = computed(() => {
       subCategory.name.toLowerCase().includes(searchLower) ||
       subCategory.description.toLowerCase().includes(searchLower)
 
-    const matchesBranch =
-      !selectedBranchFilter.value || subCategory.branch?._id === selectedBranchFilter.value
-
     const matchesCategory =
       !selectedCategoryFilter.value || subCategory.category?._id === selectedCategoryFilter.value
 
-    return matchesSearch && matchesBranch && matchesCategory
+    return matchesSearch && matchesCategory
   })
 })
 const paginatedSubCategories = computed(() => {
@@ -162,11 +139,10 @@ const resetForm = () => {
     name: '',
     description: '',
     categoryId: '',
-    branchId: '',
     isActive: true
   }
   isEditing.value = false
-  editingSubCategory.value = null // Fixed: changed from editingCategory to editingSubCategory
+  editingSubCategory.value = null
 }
 // Update CRUD functions
 const handleAddSubCategory = async () => {
@@ -203,41 +179,19 @@ const handleAddSubCategory = async () => {
   }
 }
 
-// Modify socket listener in onMounted
-socket.on('subCategoryCreated', (newSubCategory) => {
-  if (newSubCategory && newSubCategory._id) {
-    const exists = subCategories.value.some((sc) => sc._id === newSubCategory._id)
-    // Only add subcategories from other branches that don't exist in the local state
-    if (!exists && newSubCategory.branch._id !== authStore.user.branch) {
-      subCategories.value = [newSubCategory, ...subCategories.value]
-    }
-  }
-})
-
-// Modify socket listener in onMounted
-socket.on('subCategoryCreated', (newSubCategory) => {
-  if (newSubCategory && newSubCategory._id) {
-    const exists = subCategories.value.some((sc) => sc._id === newSubCategory._id)
-    // Only add subcategories from other branches that don't exist in the local state
-    if (!exists && newSubCategory.branch._id !== authStore.user.branch) {
-      subCategories.value = [newSubCategory, ...subCategories.value]
-    }
-  }
-})
 const handleEditSubCategory = async (subCategory) => {
   isEditing.value = true
   editingSubCategory.value = subCategory
 
   try {
-    // Fetch data and wait for both to complete
-    await Promise.all([fetchCategories(), fetchBranches()])
+    // Fetch categories data
+    await fetchCategories()
 
     // Set form values after data is loaded
     newSubCategory.value = {
       name: subCategory.name,
       description: subCategory.description,
       categoryId: subCategory.category?._id || '',
-      branchId: subCategory.branch?._id || '',
       isActive: subCategory.isActive
     }
 
@@ -266,7 +220,7 @@ const handleUpdateSubCategory = async () => {
     )
 
     // Refresh data immediately after successful update
-    await Promise.all([fetchSubCategories(), fetchCategories(), fetchBranches()])
+    await Promise.all([fetchSubCategories(), fetchCategories()])
 
     showModal.value = false
     resetForm()
@@ -378,11 +332,8 @@ const handleToggleStatus = async (subCategoryId, currentStatus) => {
 onMounted(() => {
   fetchSubCategories()
   fetchCategories()
-  fetchBranches()
 
   socket.on('subCategoryCreated', (newSubCategory) => {
-    // Only add to local state if it's for the current branch
-
     if (newSubCategory && newSubCategory._id) {
       const exists = subCategories.value.some((sc) => sc._id === newSubCategory._id)
       if (!exists) {
@@ -443,15 +394,6 @@ onMounted(() => {
               </svg>
             </span>
           </div>
-          <select
-            v-model="selectedBranchFilter"
-            class="rounded-lg border border-stroke bg-transparent py-2 px-4 outline-none focus:border-primary dark:border-strokedark"
-          >
-            <option value="">All Branches</option>
-            <option v-for="branch in branches" :key="branch._id" :value="branch._id">
-              {{ branch.name }}
-            </option>
-          </select>
 
           <select
             v-model="selectedCategoryFilter"
@@ -478,19 +420,19 @@ onMounted(() => {
         <!-- Update the table headers -->
         <thead>
           <tr class="bg-gray-2 text-left dark:bg-meta-4">
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Category Name</th>
+            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Sub Category Name</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Description</th>
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Branch</th>
+            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Category</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Status</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="isLoading">
-            <td colspan="8" class="text-center py-4">Loading...</td>
+            <td colspan="5" class="text-center py-4">Loading...</td>
           </tr>
           <tr v-else-if="paginatedSubCategories.length === 0">
-            <td colspan="5" class="text-center py-4">No categories found</td>
+            <td colspan="5" class="text-center py-4">No subcategories found</td>
           </tr>
           <tr
             v-for="subCategory in paginatedSubCategories"
@@ -506,7 +448,7 @@ onMounted(() => {
               </div>
             </td>
             <td class="py-4.5 px-4">{{ subCategory.description }}</td>
-            <td class="py-4.5 px-4">{{ subCategory.branch?.name || 'Not Assigned' }}</td>
+            <td class="py-4.5 px-4">{{ subCategory.category?.name || 'Not Assigned' }}</td>
             <td class="py-4.5 px-4">
               <div class="flex items-center space-x-2">
                 <div
@@ -646,8 +588,6 @@ onMounted(() => {
           </button>
         </div>
 
-        <!--  s Navigation -->
-
         <form
           @submit.prevent="isEditing ? handleUpdateSubCategory() : handleAddSubCategory()"
           class="space-y-6"
@@ -655,7 +595,7 @@ onMounted(() => {
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="mb-2.5 block text-black dark:text-white">
-                Category Name <span class="text-danger">*</span>
+                Sub Category Name <span class="text-danger">*</span>
               </label>
               <input
                 v-model="newSubCategory.name"
@@ -664,17 +604,6 @@ onMounted(() => {
                 placeholder="Enter subcategory name"
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               />
-            </div>
-            <div>
-              <label class="mb-2.5 block text-black dark:text-white">
-                Description <span class="text-danger">*</span>
-              </label>
-              <textarea
-                v-model="newSubCategory.description"
-                required
-                placeholder="Enter subcategory description"
-                class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-              ></textarea>
             </div>
             <div>
               <label class="mb-2.5 block text-black dark:text-white">
@@ -687,33 +616,24 @@ onMounted(() => {
               >
                 <option value="" disabled>Select a category</option>
                 <option
-                  v-for="category in categories.filter((c) => c?.isActive)"
+                  v-for="category in categories"
                   :key="category._id"
                   :value="category._id"
                 >
-                  {{ category?.name }}
+                  {{ category.name }}
                 </option>
               </select>
             </div>
-            <div>
+            <div class="col-span-2">
               <label class="mb-2.5 block text-black dark:text-white">
-                Branch <span class="text-danger">*</span>
+                Description <span class="text-danger">*</span>
               </label>
-
-              <select
-                v-model="newSubCategory.branchId"
+              <textarea
+                v-model="newSubCategory.description"
                 required
+                placeholder="Enter subcategory description"
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-              >
-                <option value="" disabled>Select a branch</option>
-                <option
-                  v-for="branch in branches.filter((b) => b.isActive)"
-                  :key="branch._id"
-                  :value="branch._id"
-                >
-                  {{ branch.name }}
-                </option>
-              </select>
+              ></textarea>
             </div>
           </div>
 
@@ -726,16 +646,37 @@ onMounted(() => {
                   handleCloseModal()
                 }
               "
-              class="rounded border border-stroke px-6 py-2 text-black hover:shadow-1 dark:border-strokedark dark:text-white"
+              class="rounded border border-stroke px-6 py-2 text-black hover:border-meta-1 hover:text-meta-1 dark:border-strokedark dark:text-white"
             >
               Cancel
             </button>
             <button
               type="submit"
+              class="inline-flex items-center justify-center rounded bg-primary px-6 py-2 text-white hover:bg-opacity-90"
               :disabled="isSubmitting"
-              class="rounded bg-primary px-6 py-2 text-white hover:bg-opacity-90"
             >
-              {{ isSubmitting ? 'Saving...' : isEditing ? 'Update' : 'Create' }}
+              <svg
+                v-if="isSubmitting"
+                class="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                ></circle>
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+              {{ isEditing ? 'Update' : 'Create' }}
             </button>
           </div>
         </form>

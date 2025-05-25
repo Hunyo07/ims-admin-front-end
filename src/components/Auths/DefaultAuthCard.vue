@@ -6,8 +6,8 @@
       <div class="hidden w-full xl:block xl:w-1/2" v-if="showIllustration">
         <div class="py-17.5 px-26 text-center">
           <router-link class="mb-5.5 inline-block" to="/">
-            <img class="hidden dark:block" src="@/assets/images/logo/logo.svg" alt="Logo" />
-            <img class="dark:hidden" src="@/assets/images/logo/logo-dark.svg" alt="Logo" />
+            <!-- <img class="hidden dark:block" src="@/assets/images/logo/logo.svg" alt="Logo" /> -->
+            <!-- <img class="dark:hidden" src="@/assets/images/logo/logo-dark.svg" alt="Logo" /> -->
           </router-link>
 
           <p class="font-medium 2xl:px-20">

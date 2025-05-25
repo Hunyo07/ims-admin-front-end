@@ -21,6 +21,7 @@
     "flatpickr": "^4.6.13",
     "jspdf-autotable": "^5.0.2",
     "jsvectormap": "^1.5.3",
+    "jszip": "^3.10.1",
     "pinia": "^2.1.7",
     "socket.io-client": "^4.8.1",
     "sweetalert2": "^11.17.2",

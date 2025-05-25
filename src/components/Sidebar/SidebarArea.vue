@@ -394,9 +394,11 @@ const menuGroups = ref([
   >
     <!-- SIDEBAR HEADER -->
     <div class="flex items-center justify-between gap-2 px-6 py-5.5 lg:py-6.5">
-      <router-link to="/">
-        <img src="@/assets/images/logo/logo.svg" alt="Logo" />
-      </router-link>
+      <!-- <router-link to=""> -->
+        <!-- <img src="@/assets/images/logo/logo.svg" alt="Logo" /> -->
+  <!-- <img src="@/assets/images/android-chrome-512x512.png" alt="Logo" /> -->
+<h1 class="font-sans font-bold text-white text-xl ">Books & Clothes House</h1>
+        <!-- </router-link> -->
 
       <button class="block lg:hidden" @click="sidebarStore.isSidebarOpen = false">
         <svg
