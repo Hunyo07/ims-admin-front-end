@@ -24,6 +24,8 @@ import CreatSaleView from '@/views/Sales/CreateSaleView.vue'
 import BarcodesView from '@/views/Barcodes/BarcodeManagementView.vue'
 import ReorderView from '@/views/Reorder/PurchaseMangementView.vue'
 import ReorderPointView from '@/views/Settings/ReorderPointView.vue'
+import InventoryCounts from '@/views/Inventory/InventoryCountsView.vue'
+import StockAdjustments from '@/views/Inventory/StockAdjustmentsView.vue'
 
 const routes = [
   {
@@ -50,6 +52,24 @@ const routes = [
     component: ECommerceView,
     meta: {
       title: 'eCommerce Dashboard',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/inventory-counts',
+    name: 'Inventory Counts',
+    component: InventoryCounts,
+    meta: {
+      title: 'Inventory Counts',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/stock-adjustments',
+    name: 'Stock Adjustments',
+    component: StockAdjustments,
+    meta: {
+      title: 'Stock Adjustments',
       requiresAuth: true
     }
   },

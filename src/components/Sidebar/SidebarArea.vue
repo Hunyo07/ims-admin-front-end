@@ -48,6 +48,13 @@ const menuGroups = ref([
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
+                <path d="M18 17H6v-2h12v2zm0-4H6v-2h12v2zm0-4H6V7h12v2zM3 22l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20z"/>
+              </svg>`,
+        label: 'Sales ',
+        route: '/sales'
+      },
+      {
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
                 <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
               </svg>`,
         label: 'User',
@@ -88,13 +95,13 @@ const menuGroups = ref([
       //   label: 'Profile',
       //   route: '/profile'
       // },
-      {
-        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
-              </svg>`,
-        label: 'Supplier ',
-        route: '/supplier'
-      },
+      // {
+      //   icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
+      //           <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
+      //         </svg>`,
+      //   label: 'Supplier ',
+      //   route: '/supplier'
+      // },
       // {
       //   icon: `<svg
       //             class="fill-current"
@@ -132,13 +139,13 @@ const menuGroups = ref([
       //     { label: 'Form Layout', route: '/forms/form-layout' }
       //   ]
       // },
-      {
-        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2z"/>
-              </svg>`,
-        label: 'Order ',
-        route: '/reorder'
-      },
+      // {
+      //   icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
+      //           <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2z"/>
+      //         </svg>`,
+      //   label: 'Order ',
+      //   route: '/reorder'
+      // },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
                 <path d="M4 11h4V7H4v4zm0 6h4v-4H4v4zm6 0h4v-4h-4v4zm6 0h4v-4h-4v4zm-6-6h4V7h-4v4zm6-4v4h4V7h-4z"/>
@@ -159,6 +166,19 @@ const menuGroups = ref([
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
+                <path d="M4 11h4V7H4v4zm0 6h4v-4H4v4zm6 0h4v-4h-4v4zm6 0h4v-4h-4v4zm-6-6h4V7h-4v4zm6-4v4h4V7h-4z"/>
+              </svg>`,
+        label: 'Inventory ',
+        route: '',
+        children: [
+          { label: 'Purchase order', route: '/reorder' },
+          { label: 'Inventory counts', route: '/inventory-counts' },
+          { label: 'Stock adjustments', route: '/stock-adjustments' },
+          { label: 'Supplier', route: '/supplier' }
+        ]
+      },
+      {
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
                 <path d="M1 4h2v16H1V4zm3 0h2v16H4V4zm3 0h2v16H7V4zm3 0h1v16h-1V4zm3 0h1v16h-1V4zm2 0h2v16h-2V4zm3 0h2v16h-2V4zm3 0h2v16h-2V4z"/>
               </svg>`,
         label: 'Barcode ',
@@ -171,13 +191,7 @@ const menuGroups = ref([
         label: 'POS ',
         route: '/pos'
       },
-      {
-        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M18 17H6v-2h12v2zm0-4H6v-2h12v2zm0-4H6V7h12v2zM3 22l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20z"/>
-              </svg>`,
-        label: 'Sales ',
-        route: '/sales'
-      },
+
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
                 <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
@@ -395,10 +409,10 @@ const menuGroups = ref([
     <!-- SIDEBAR HEADER -->
     <div class="flex items-center justify-between gap-2 px-6 py-5.5 lg:py-6.5">
       <!-- <router-link to=""> -->
-        <!-- <img src="@/assets/images/logo/logo.svg" alt="Logo" /> -->
-  <!-- <img src="@/assets/images/android-chrome-512x512.png" alt="Logo" /> -->
-<h1 class="font-sans font-bold text-white text-xl ">Books & Clothes House</h1>
-        <!-- </router-link> -->
+      <!-- <img src="@/assets/images/logo/logo.svg" alt="Logo" /> -->
+      <!-- <img src="@/assets/images/android-chrome-512x512.png" alt="Logo" /> -->
+      <h1 class="font-sans font-bold text-white text-xl">Books & Clothes House</h1>
+      <!-- </router-link> -->
 
       <button class="block lg:hidden" @click="sidebarStore.isSidebarOpen = false">
         <svg

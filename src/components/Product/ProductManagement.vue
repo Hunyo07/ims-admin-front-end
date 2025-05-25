@@ -62,7 +62,9 @@ const newProduct = ref({
   costPrice: '',
   unit: '',
   currentStock: '',
-  images: null
+  images: null,
+  sku: '',
+  barcodeText: ''
 })
 const handleImageChange = (event) => {
   const file = event.target.files[0]
@@ -285,7 +287,9 @@ const resetForm = () => {
     costPrice: '',
     unit: '',
     currentStock: '',
-    images: null
+    images: null,
+    sku: '',
+    barcodeText: ''
   }
   isEditing.value = false
   editingProduct.value = null
@@ -304,7 +308,9 @@ const handleEditProduct = (product) => {
     price: product.price,
     costPrice: product.costPrice,
     unit: product.unit,
-    currentStock: product.currentStock
+    currentStock: product.currentStock,
+    sku: product.sku || '',
+    barcodeText: product.barcode?.text || ''
   }
   showModal.value = true
 }
@@ -1006,19 +1012,32 @@ watch(
               />
             </div>
 
-            <!-- Image Upload -->
-            <!-- <div v-if="!isEditing">
+            <!-- SKU -->
+            <div>
               <label class="mb-2.5 block text-black dark:text-white">
-                Product Image <span class="text-danger">*</span>
+                SKU <span class="text-danger">*</span>
               </label>
               <input
-                type="file"
-                @change="handleImageChange"
-                accept="image/*"
-                required
+                v-model="newProduct.sku"
+                type="text"
+                :required="!isEditing"
+                placeholder="Enter product SKU"
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               />
-            </div> -->
+            </div>
+
+            <!-- Barcode -->
+            <div>
+              <label class="mb-2.5 block text-black dark:text-white">
+                Barcode
+              </label>
+              <input
+                v-model="newProduct.barcodeText"
+                type="text"
+                placeholder="Enter product barcode"
+                class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+              />
+            </div>
             <div v-if="!isEditing" class="col-span-2">
               <label class="mb-2.5 block text-black dark:text-white">
                 Product Image <span class="text-danger">*</span>
