@@ -155,81 +155,81 @@ const batchGenerateBarcodes = async () => {
   }
 }
 
-// Print barcode for a single product
-const printBarcode = async (productId) => {
-  try {
-    isPrinting.value = true
-    const response = await axios.get(`http://localhost:5000/api/barcodes/product/${productId}`, {
-      headers: {
-        Authorization: `Bearer ${authStore.token}`
-      }
-    })
+  // Print barcode for a single product
+  const printBarcode = async (productId) => {
+    try {
+      isPrinting.value = true
+      const response = await axios.get(`http://localhost:5000/api/barcodes/product/${productId}`, {
+        headers: {
+          Authorization: `Bearer ${authStore.token}`
+        }
+      })
 
-    const printData = response.data.printData
+      const printData = response.data.printData
 
-    // Create PDF with standard dimensions (in mm)
-    const doc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: [60, 40] // Standard small label size (60mm x 40mm)
-    })
+      // Create PDF with standard dimensions (in mm)
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: [60, 40] // Standard small label size (60mm x 40mm)
+      })
 
-    // Set margins and positions
-    const margin = 5
-    const width = 50 // Width of content area
-    const barcodeHeight = 15 // Standard height for retail barcodes
+      // Set margins and positions
+      const margin = 5
+      const width = 50 // Width of content area
+      const barcodeHeight = 15 // Standard height for retail barcodes
 
-    // Add product name (truncate if too long)
-    doc.setFontSize(8)
-    doc.setFont('helvetica', 'bold')
-    const name =
-      printData.productInfo.name.length > 25
-        ? printData.productInfo.name.substring(0, 22) + '...'
-        : printData.productInfo.name
-    doc.text(name, 30, margin + 4, { align: 'center' })
+      // Add product name (truncate if too long)
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'bold')
+      const name =
+        printData.productInfo.name.length > 25
+          ? printData.productInfo.name.substring(0, 22) + '...'
+          : printData.productInfo.name
+      doc.text(name, 30, margin + 4, { align: 'center' })
 
-    // Add SKU and price
-    doc.setFontSize(7)
-    doc.setFont('helvetica', 'normal')
-    doc.text(`SKU: ${printData.productInfo.sku}`, 30, margin + 8, { align: 'center' })
+      // Add SKU and price
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`SKU: ${printData.productInfo.sku}`, 30, margin + 8, { align: 'center' })
 
-    doc.setFontSize(8)
-    doc.setFont('helvetica', 'normal')
-    
-    // Improved price formatting with better error handling
-    const rawPrice = printData.productInfo?.price;
-    const cleanedPrice = typeof rawPrice === 'string'
-      ? rawPrice.replace(/[^\d.-]/g, '')
-      : rawPrice;
-    
-    const numericPrice = Number(cleanedPrice);
-    const priceText = Number.isFinite(numericPrice) ? numericPrice.toFixed(2) : '0.00';
-    
-    doc.text(`Price: P${priceText}`, 30, margin + 12, { align: 'center' })
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      
+      // Improved price formatting with better error handling
+      const rawPrice = printData.productInfo?.price;
+      const cleanedPrice = typeof rawPrice === 'string'
+        ? rawPrice.replace(/[^\d.-]/g, '')
+        : rawPrice;
+      
+      const numericPrice = Number(cleanedPrice);
+      const priceText = Number.isFinite(numericPrice) ? numericPrice.toFixed(2) : '0.00';
+      
+      doc.text(`Price: P${priceText}`, 30, margin + 12, { align: 'center' })
 
-    // Add barcode image with standard dimensions
-    const imgData = `data:image/png;base64,${printData.barcodeImage}`
-    doc.addImage(imgData, 'PNG', margin, margin + 14, width, barcodeHeight)
+      // Add barcode image with standard dimensions
+      const imgData = `data:image/png;base64,${printData.barcodeImage}`
+      doc.addImage(imgData, 'PNG', margin, margin + 14, width, barcodeHeight)
 
-    // Add barcode text
-    doc.setFontSize(7)
-    doc.setFont('helvetica', 'normal')
-    doc.text(printData.barcodeText, 30, margin + 32, { align: 'center' })
+      // Add barcode text
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'normal')
+      doc.text(printData.barcodeText, 30, margin + 32, { align: 'center' })
 
-    // Print the PDF
-    doc.autoPrint()
-    doc.output('dataurlnewwindow')
-  } catch (error) {
-    console.error('Error printing barcode:', error)
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: error.response?.data?.message || 'Failed to print barcode'
-    })
-  } finally {
-    isPrinting.value = false
+      // Print the PDF
+      doc.autoPrint()
+      doc.output('dataurlnewwindow')
+    } catch (error) {
+      console.error('Error printing barcode:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error.response?.data?.message || 'Failed to print barcode'
+      })
+    } finally {
+      isPrinting.value = false
+    }
   }
-}
 
 
 
@@ -278,10 +278,10 @@ const printBarcodeWithQuantity = async (productId) => {
       const labelWidth = 60
       const labelHeight = 40
       const barcodeHeight = 15
-      const marginX = 10
-      const marginY = 10
-      const colGap = 5
-      const rowGap = 5
+      const marginX = 14
+      const marginY = 5
+      const colGap = 0
+      const rowGap = 0
       
       // Calculate columns and rows
       const cols = Math.floor((pageWidth - 2 * marginX) / (labelWidth + colGap))

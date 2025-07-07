@@ -5,7 +5,9 @@ import { useAuthStore } from '@/stores/auth'
 import Swal from 'sweetalert2'
 import Datepicker from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
-
+import { jsPDF } from 'jspdf'
+import 'jspdf-autotable'
+import { format } from 'date-fns'
 const authStore = useAuthStore()
 const purchaseOrders = ref([])
 const suppliers = ref([])
@@ -17,6 +19,17 @@ const selectedOrder = ref(null)
 const searchQuery = ref('')
 const statusFilter = ref('all')
 
+// Pagination variables
+const currentPage = ref(1)
+const itemsPerPage = ref(10)
+const totalItems = computed(() => filteredPurchaseOrders.value.length)
+const totalPages = computed(() => Math.ceil(totalItems.value / itemsPerPage.value))
+
+// Function to handle changing items per page
+const changeItemsPerPage = (newValue) => {
+  itemsPerPage.value = parseInt(newValue)
+  currentPage.value = 1 // Reset to first page when changing items per page
+}
 // Form data for creating a new purchase order
 const newOrder = ref({
   supplierId: '',
@@ -296,6 +309,11 @@ const filteredPurchaseOrders = computed(() => {
 
   return filtered
 })
+const paginatedPurchaseOrders = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  const end = start + itemsPerPage.value
+  return filteredPurchaseOrders.value.slice(start, end)
+})
 
 // Format date
 const formatDate = (dateString) => {
@@ -332,7 +350,226 @@ const getStatusBadgeClass = (status) => {
       return 'bg-gray-500 text-white'
   }
 }
+// Add a function specifically for PDF formatting to avoid the '+' sign issue
+const formatCurrencyForPDF = (amount) => {
+  // Format without using Intl.NumberFormat to avoid compatibility issues with jsPDF
+  return 'PHP ' + amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
 
+const exportPurchaseOrdersPDF = () => {
+  try {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    })
+
+    const marginLeft = 20
+    const marginRight = 20
+    const pageWidth = doc.internal.pageSize.width
+    const contentWidth = pageWidth - marginLeft - marginRight
+    const lineHeight = 7
+    let currentY = 20
+
+    // Add header with logo and company info
+    doc.setFontSize(22)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Purchase Orders Report', pageWidth / 2, currentY, { align: 'center' })
+    currentY += 12
+
+    // Add a horizontal line
+    doc.setDrawColor(220, 220, 220)
+    doc.setLineWidth(0.5)
+    doc.line(marginLeft, currentY, pageWidth - marginLeft, currentY)
+    currentY += 8
+
+    // Status filter info
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    let statusText = 'All Statuses'
+    if (statusFilter.value !== 'all') {
+      statusText = statusFilter.value.charAt(0).toUpperCase() + statusFilter.value.slice(1)
+    }
+    doc.text(`Status Filter: ${statusText}`, pageWidth / 2, currentY, { align: 'center' })
+    currentY += 5
+
+    // Generated On
+    const now = new Date()
+    doc.setFontSize(8)
+    doc.text(`Generated on: ${format(now, 'MMM dd, yyyy h:mm a')}`, pageWidth / 2, currentY, { align: 'center' })
+    currentY += 15
+
+    // Purchase Orders Statistics
+    doc.setDrawColor(240, 240, 240)
+    doc.setFillColor(250, 250, 250)
+    doc.roundedRect(marginLeft, currentY, contentWidth, 40, 2, 2, 'FD')
+    
+    currentY += 8
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(60, 60, 60)
+    doc.text('Purchase Orders Summary', marginLeft + 10, currentY)
+    currentY += 10
+
+    // Calculate statistics
+    const totalOrders = filteredPurchaseOrders.value.length
+    const totalAmount = filteredPurchaseOrders.value.reduce((sum, order) => sum + order.totalAmount, 0)
+    const pendingOrders = filteredPurchaseOrders.value.filter(order => order.status === 'pending').length
+    const receivedOrders = filteredPurchaseOrders.value.filter(order => order.status === 'received').length
+    
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(0, 0, 0)
+    
+    // Create a 2x2 grid for statistics
+    const colWidth = contentWidth / 2
+    
+    // Row 1
+    doc.text(`Total Orders: ${totalOrders}`, marginLeft + 10, currentY)
+    doc.text(`Total Amount: ${formatCurrencyForPDF(totalAmount)}`, marginLeft + 10 + colWidth, currentY)
+    currentY += lineHeight
+    
+    // Row 2
+    doc.text(`Pending Orders: ${pendingOrders}`, marginLeft + 10, currentY)
+    doc.text(`Received Orders: ${receivedOrders}`, marginLeft + 10 + colWidth, currentY)
+    
+    currentY += 15
+
+    // Purchase Orders Table
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(60, 60, 60)
+    doc.text('Purchase Orders', marginLeft, currentY)
+    currentY += 8
+
+    // Table headers with background
+    const headers = ['Order #', 'Supplier', 'Total', 'Status', 'Created']
+    const colWidths = [30, 60, 30, 30, 30]
+    
+    // Calculate positions for columns
+    const positions = []
+    let currentX = marginLeft
+    for (let i = 0; i < colWidths.length; i++) {
+      positions.push(currentX)
+      currentX += colWidths[i]
+    }
+    
+    // Draw header background
+    doc.setFillColor(240, 240, 240)
+    doc.rect(marginLeft, currentY, contentWidth, lineHeight, 'F')
+    
+    // Draw header text
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(0, 0, 0)
+    
+    for (let i = 0; i < headers.length; i++) {
+      doc.text(headers[i], positions[i] + 2, currentY + 5)
+    }
+    
+    currentY += lineHeight + 2
+
+    // Table rows
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    
+    // Track items per page for pagination
+    const itemsPerPage = 20
+    let itemsOnCurrentPage = 0
+    let totalPages = Math.ceil(filteredPurchaseOrders.value.length / itemsPerPage)
+    let currentPageNum = 1
+    
+    // Function to add header to new pages
+    const addTableHeader = () => {
+      currentY = 20
+      
+      // Add page header
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Purchase Orders Report - Continued', pageWidth / 2, currentY, { align: 'center' })
+      currentY += 10
+      
+      // Draw header background
+      doc.setFillColor(240, 240, 240)
+      doc.rect(marginLeft, currentY, contentWidth, lineHeight, 'F')
+      
+      // Draw header text
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'bold')
+      
+      for (let i = 0; i < headers.length; i++) {
+        doc.text(headers[i], positions[i] + 2, currentY + 5)
+      }
+      
+      currentY += lineHeight + 2
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+    }
+
+    // Draw alternating row backgrounds and data
+    filteredPurchaseOrders.value.forEach((order, index) => {
+      // Check if we need a new page
+      if (itemsOnCurrentPage >= itemsPerPage) {
+        doc.addPage()
+        currentPageNum++
+        itemsOnCurrentPage = 0
+        addTableHeader()
+      }
+      
+      // Draw row background (alternating)
+      if (index % 2 === 1) {
+        doc.setFillColor(248, 248, 248)
+        doc.rect(marginLeft, currentY - 1, contentWidth, lineHeight, 'F')
+      }
+      
+      // Format data
+      const rowData = [
+        order.orderNumber,
+        order.supplier.name.length > 25 ? order.supplier.name.substring(0, 25) + '...' : order.supplier.name,
+        formatCurrencyForPDF(order.totalAmount),
+        order.status.charAt(0).toUpperCase() + order.status.slice(1),
+        format(new Date(order.createdAt), 'MMM dd, yyyy')
+      ]
+      
+      // Draw row data
+      for (let i = 0; i < rowData.length; i++) {
+        doc.text(rowData[i], positions[i] + 2, currentY + 4)
+      }
+      
+      currentY += lineHeight
+      itemsOnCurrentPage++
+    })
+
+    // Footer with pagination on all pages
+    for (let i = 1; i <= currentPageNum; i++) {
+      doc.setPage(i)
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'italic')
+      doc.setTextColor(100, 100, 100)
+      doc.text(`Page ${i} of ${currentPageNum}`, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' })
+    }
+
+    doc.save(`Purchase_Orders_Report_${format(now, 'yyyy-MM-dd')}.pdf`)
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Success',
+      text: 'Purchase orders report exported successfully',
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 3000
+    })
+
+  } catch (error) {
+    console.error('Error exporting purchase orders to PDF:', error)
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'Failed to export purchase orders report'
+    })
+  }
+}
 onMounted(async () => {
   await Promise.all([fetchPurchaseOrders(), fetchSuppliers(), fetchProducts()])
 })
@@ -367,7 +604,7 @@ onMounted(async () => {
           </button>
           <button
             @click="generateFromReorderPoints"
-            class="inline-flex items-center justify-center rounded-md bg-success py-2 px-4 text-white hover:bg-opacity-90"
+            class="inline-flex items-center justify-center rounded-md bg-primary py-2 px-4 text-white hover:bg-opacity-90"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -382,6 +619,24 @@ onMounted(async () => {
               />
             </svg>
             Generate from Reorder Points
+          </button>
+          <button
+            @click="exportPurchaseOrdersPDF"
+            class="inline-flex items-center justify-center rounded-md bg-success py-2 px-4 text-white hover:bg-opacity-90"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-5 w-5 mr-1"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            Export PDF
           </button>
         </div>
       </div>

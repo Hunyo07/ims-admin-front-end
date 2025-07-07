@@ -4,7 +4,9 @@ import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import { socket } from '@/socket'
 import Swal from 'sweetalert2'
-
+import { jsPDF } from 'jspdf'
+import 'jspdf-autotable'
+import { format } from 'date-fns'
 const authStore = useAuthStore()
 
 // Update interfaces
@@ -133,6 +135,219 @@ const formatPrice = (price) => {
     style: 'currency',
     currency: 'PHP'
   }).format(price)
+}
+
+// Format currency for PDF to avoid the '+' sign issue
+const formatCurrencyForPDF = (amount) => {
+  // Format without using Intl.NumberFormat to avoid compatibility issues with jsPDF
+  return 'PHP ' + amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+const exportProductsPDF = () => {
+  try {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    })
+
+    const marginLeft = 20
+    const marginRight = 20
+    const pageWidth = doc.internal.pageSize.width
+    const contentWidth = pageWidth - marginLeft - marginRight
+    const lineHeight = 7
+    let currentY = 20
+
+    // Add header with title
+    doc.setFontSize(22)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Product Inventory Report', pageWidth / 2, currentY, { align: 'center' })
+    currentY += 12
+
+    // Add a horizontal line
+    doc.setDrawColor(220, 220, 220)
+    doc.setLineWidth(0.5)
+    doc.line(marginLeft, currentY, pageWidth - marginLeft, currentY)
+    currentY += 8
+
+    // Generated info
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    const now = new Date()
+    doc.text(`Generated on: ${format(now, 'MMM dd, yyyy h:mm a')}`, pageWidth / 2, currentY, { align: 'center' })
+    currentY += 15
+
+    // Inventory Statistics in a nice box
+    doc.setDrawColor(240, 240, 240)
+    doc.setFillColor(250, 250, 250)
+    doc.roundedRect(marginLeft, currentY, contentWidth, 40, 2, 2, 'FD')
+    
+    currentY += 8
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(60, 60, 60)
+    doc.text('Inventory Statistics', marginLeft + 10, currentY)
+    currentY += 10
+
+    // Calculate inventory statistics
+    const totalProducts = filteredProducts.value.length
+    const activeProducts = filteredProducts.value.filter(p => p.isActive).length
+    const totalValue = filteredProducts.value.reduce((sum, product) => sum + (product.price * product.currentStock), 0)
+    const totalStock = filteredProducts.value.reduce((sum, product) => sum + product.currentStock, 0)
+    
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(0, 0, 0)
+    
+    // Create a 2x2 grid for statistics
+    const colWidth = contentWidth / 2
+    
+    // Row 1
+    doc.text(`Total Products: ${totalProducts}`, marginLeft + 10, currentY)
+    doc.text(`Active Products: ${activeProducts}`, marginLeft + 10 + colWidth, currentY)
+    currentY += lineHeight
+    
+    // Row 2
+    doc.text(`Total Inventory Value: ${formatCurrencyForPDF(totalValue)}`, marginLeft + 10, currentY)
+    doc.text(`Total Stock Items: ${totalStock}`, marginLeft + 10 + colWidth, currentY)
+    
+    currentY += 15
+
+    // Products Table
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(60, 60, 60)
+    doc.text('Product List', marginLeft, currentY)
+    currentY += 8
+
+    // Table headers with background
+    const headers = ['Product Name', 'Category', 'Price', 'Cost', 'Stock', 'Status']
+    const colWidths = [50, 35, 25, 25, 20, 25]
+    
+    // Calculate positions for columns
+    const positions = []
+    let currentX = marginLeft
+    for (let i = 0; i < colWidths.length; i++) {
+      positions.push(currentX)
+      currentX += colWidths[i]
+    }
+    
+    // Draw header background
+    doc.setFillColor(240, 240, 240)
+    doc.rect(marginLeft, currentY, contentWidth, lineHeight, 'F')
+    
+    // Draw header text
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(0, 0, 0)
+    
+    for (let i = 0; i < headers.length; i++) {
+      doc.text(headers[i], positions[i] + 2, currentY + 5)
+    }
+    
+    currentY += lineHeight + 2
+
+    // Table rows
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    
+    // Track items per page for pagination
+    const itemsPerPage = 25
+    let itemsOnCurrentPage = 0
+    let totalPages = Math.ceil(filteredProducts.value.length / itemsPerPage)
+    let currentPage = 1
+    
+    // Function to add header to new pages
+    const addTableHeader = () => {
+      currentY = 20
+      
+      // Add page header
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Product Inventory Report - Continued', pageWidth / 2, currentY, { align: 'center' })
+      currentY += 10
+      
+      // Draw header background
+      doc.setFillColor(240, 240, 240)
+      doc.rect(marginLeft, currentY, contentWidth, lineHeight, 'F')
+      
+      // Draw header text
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'bold')
+      
+      for (let i = 0; i < headers.length; i++) {
+        doc.text(headers[i], positions[i] + 2, currentY + 5)
+      }
+      
+      currentY += lineHeight + 2
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+    }
+
+    // Draw alternating row backgrounds and data
+    filteredProducts.value.forEach((product, index) => {
+      // Check if we need a new page
+      if (itemsOnCurrentPage >= itemsPerPage) {
+        doc.addPage()
+        currentPage++
+        itemsOnCurrentPage = 0
+        addTableHeader()
+      }
+      
+      // Draw row background (alternating)
+      if (index % 2 === 1) {
+        doc.setFillColor(248, 248, 248)
+        doc.rect(marginLeft, currentY - 1, contentWidth, lineHeight, 'F')
+      }
+      
+      // Format data
+      const rowData = [
+        product.name.length > 25 ? product.name.substring(0, 25) + '...' : product.name,
+        product.category?.name || 'Not Assigned',
+        formatCurrencyForPDF(product.price),
+        formatCurrencyForPDF(product.costPrice),
+        `${product.currentStock} ${product.unit}`,
+        product.isActive ? 'Active' : 'Inactive'
+      ]
+      
+      // Draw row data
+      for (let i = 0; i < rowData.length; i++) {
+        doc.text(rowData[i], positions[i] + 2, currentY + 4)
+      }
+      
+      currentY += lineHeight
+      itemsOnCurrentPage++
+    })
+
+    // Footer with pagination on all pages
+    for (let i = 1; i <= currentPage; i++) {
+      doc.setPage(i)
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'italic')
+      doc.setTextColor(100, 100, 100)
+      doc.text(`Page ${i} of ${currentPage}`, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' })
+    }
+
+    doc.save(`Product_Inventory_${format(now, 'yyyy-MM-dd')}.pdf`)
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Success',
+      text: 'Product inventory report exported successfully',
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 3000
+    })
+
+  } catch (error) {
+    console.error('Error exporting products to PDF:', error)
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'Failed to export product inventory report'
+    })
+  }
 }
 const fetchBranches = async () => {
   try {
@@ -576,6 +791,25 @@ watch(
               </svg>
             </span>
           </div>
+
+          <button
+            @click="exportProductsPDF"
+            class="inline-flex items-center justify-center rounded-lg bg-success px-6 py-2 text-sm font-medium text-white hover:bg-opacity-90 mr-2"
+          >
+          <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-5 w-5 mr-1"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            Export PDF
+          </button>
 
           <button
             @click="showModal = true"

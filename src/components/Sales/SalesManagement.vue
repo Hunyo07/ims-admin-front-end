@@ -1,65 +1,69 @@
-<script setup lang="ts">
+<script setup>
 import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import { socket } from '@/socket'
 import Swal from 'sweetalert2'
 import { format } from 'date-fns'
+import { jsPDF } from 'jspdf'
+import 'jspdf-autotable'
 const authStore = useAuthStore()
-// Interfaces
-interface SaleItem {
-  product: string
-  name: string
-  quantity: number
-  price: number
-  total: number
-}
 
-interface Sale {
-  _id: string
-  items: SaleItem[]
-  customerName: string
-  customerPhone?: string
-  subtotal: number
-  total: number
-  paymentMethod: string
-  paymentAmount: number
-  change: number
-  deliveryMode: string
-  deliveryFee?: number
-  deliveryAddress?: string
-  createdBy: {
-    user: string
-    role: string
-  }
-  createdAt: string
-  updatedAt: string
-}
+// SaleItem structure (converted from TypeScript interface)
+// - product: string
+// - name: string
+// - quantity: number
+// - price: number
+// - total: number
 
-interface SalesStats {
-  overview: {
-    totalSales: number
-    totalRevenue: number
-    averageOrderValue: number
-    totalItems: number
-  }
-  paymentMethods: {
-    _id: string
-    count: number
-    total: number
-  }[]
-}
+// Sale structure (converted from TypeScript interface)
+// - _id: string
+// - items: SaleItem[]
+// - customerName: string
+// - customerPhone: string (optional)
+// - subtotal: number
+// - total: number
+// - paymentMethod: string
+// - paymentAmount: number
+// - change: number
+// - deliveryMode: string
+// - deliveryFee: number (optional)
+// - deliveryAddress: string (optional)
+// - createdBy: { user: string, role: string }
+// - createdAt: string
+// - updatedAt: string
 
-// State
-const sales = ref<Sale[]>([])
-const stats = ref<SalesStats | null>(null)
+// SalesStats structure (converted from TypeScript interface)
+// - overview: {
+//   - totalSales: number
+//   - totalRevenue: number
+//   - averageOrderValue: number
+//   - totalItems: number
+// }
+// - paymentMethods: Array of {
+//   - _id: string
+//   - count: number
+//   - total: number
+// }
+
+// State (removed type annotations)
+const sales = ref([])
+const stats = ref(null)
 const isLoading = ref(true)
 const isLoadingStats = ref(true)
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalItems = ref(0)
+// In the script section, keep the existing itemsPerPage ref
 const itemsPerPage = ref(10)
-const selectedSale = ref<Sale | null>(null)
+
+// Add a function to handle changing items per page
+const changeItemsPerPage = (newValue) => {
+  itemsPerPage.value = parseInt(newValue)
+  currentPage.value = 1 // Reset to first page when changing items per page
+  fetchSales()
+}
+const selectedSale = ref(null)
 const showSaleDetailsModal = ref(false)
 
 // Filters
@@ -71,7 +75,6 @@ const filters = ref({
   paymentMethod: '',
   deliveryMode: ''
 })
-// Branches for filter dropdown
 
 // Fetch sales data
 const fetchSales = async () => {
@@ -134,7 +137,7 @@ const fetchSales = async () => {
     Swal.fire({
       icon: 'error',
       title: 'Error',
-      text: error.response?.data?.message || 'Failed to fetch sales data'
+      text: 'Failed to fetch sales data'
     })
   } finally {
     isLoading.value = false
@@ -161,15 +164,13 @@ const fetchSalesStats = async () => {
       queryParams.append('endDate', endDate.toISOString())
     }
     
-    if (filters.value.deliveryMode) {
-      queryParams.append('deliveryMode', filters.value.deliveryMode)
-    }
-    
     if (filters.value.paymentMethod) {
       queryParams.append('paymentMethod', filters.value.paymentMethod)
     }
     
-    console.log('Fetching stats with params:', queryParams.toString())
+    if (filters.value.deliveryMode) {
+      queryParams.append('deliveryMode', filters.value.deliveryMode)
+    }
     
     const response = await axios.get(`http://localhost:5000/api/sales/stats?${queryParams.toString()}`, {
       headers: {
@@ -177,29 +178,22 @@ const fetchSalesStats = async () => {
       }
     })
     
-    console.log('Stats response:', response.data)
     stats.value = response.data
   } catch (error) {
-    console.error('Error fetching sales statistics:', error)
-    if (error.response) {
-      console.error('Error response data:', error.response.data)
-    }
+    console.error('Error fetching sales stats:', error)
     Swal.fire({
       icon: 'error',
       title: 'Error',
-      text: error.response?.data?.message || 'Failed to fetch sales statistics'
+      text: 'Failed to fetch sales statistics'
     })
   } finally {
     isLoadingStats.value = false
   }
 }
 
-// Fetch branches for filter
-
-
-// Apply filters
+// Apply filters and refresh data
 const applyFilters = () => {
-  currentPage.value = 1
+  currentPage.value = 1 // Reset to first page when applying filters
   fetchSales()
   fetchSalesStats()
 }
@@ -219,25 +213,272 @@ const resetFilters = () => {
   fetchSalesStats()
 }
 
-
 // View sale details
-const viewSaleDetails = (sale: Sale) => {
+const viewSaleDetails = (sale) => {
   selectedSale.value = sale
   showSaleDetailsModal.value = true
 }
 
 // Format date
-const formatDate = (dateString: string) => {
+const formatDate = (dateString) => {
   return format(new Date(dateString), 'MMM dd, yyyy h:mm a')
 }
 
 // Format currency
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-PH', {
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'PHP'
   }).format(amount)
 }
+
+// Add a new function specifically for PDF formatting to avoid the '+' sign issue
+const formatCurrencyForPDF = (amount) => {
+  // Format without using Intl.NumberFormat to avoid compatibility issues with jsPDF
+  return 'PHP ' + amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+const exportSalesPDF = () => {
+  try {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    })
+
+    const marginLeft = 20
+    const marginRight = 20
+    const pageWidth = doc.internal.pageSize.width
+    const contentWidth = pageWidth - marginLeft - marginRight
+    const lineHeight = 7
+    let currentY = 20
+
+    // Add header with logo and company info
+    doc.setFontSize(22)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Sales Report', pageWidth / 2, currentY, { align: 'center' })
+    currentY += 12
+
+    // Add a horizontal line
+    doc.setDrawColor(220, 220, 220)
+    doc.setLineWidth(0.5)
+    doc.line(marginLeft, currentY, pageWidth - marginLeft, currentY)
+    currentY += 8
+
+    // Date Range and Generated info
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    let dateText = 'All Time'
+    if (filters.value.startDate && filters.value.endDate) {
+      dateText = `${filters.value.startDate} to ${filters.value.endDate}`
+    } else if (filters.value.startDate) {
+      dateText = `From ${filters.value.startDate}`
+    } else if (filters.value.endDate) {
+      dateText = `Until ${filters.value.endDate}`
+    }
+    doc.text(`Date Range: ${dateText}`, pageWidth / 2, currentY, { align: 'center' })
+    currentY += 5
+
+    // Generated On
+    const now = new Date()
+    doc.setFontSize(8)
+    doc.text(`Generated on: ${format(now, 'MMM dd, yyyy h:mm a')}`, pageWidth / 2, currentY, { align: 'center' })
+    currentY += 15
+
+    // Sales Statistics in a nice box
+    doc.setDrawColor(240, 240, 240)
+    doc.setFillColor(250, 250, 250)
+    doc.roundedRect(marginLeft, currentY, contentWidth, 40, 2, 2, 'FD')
+    
+    currentY += 8
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(60, 60, 60)
+    doc.text('Sales Statistics', marginLeft + 10, currentY)
+    currentY += 10
+
+    if (stats.value) {
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(0, 0, 0)
+      
+      // Create a 2x2 grid for statistics
+      const colWidth = contentWidth / 2
+      
+      // Row 1
+      doc.text(`Total Sales: ${stats.value.overview.totalSales}`, marginLeft + 10, currentY)
+      doc.text(`Total Revenue: ${formatCurrencyForPDF(stats.value.overview.totalRevenue)}`, marginLeft + 10 + colWidth, currentY)
+      currentY += lineHeight
+      
+      // Row 2
+      doc.text(`Average Order Value: ${formatCurrencyForPDF(stats.value.overview.averageOrderValue)}`, marginLeft + 10, currentY)
+      doc.text(`Total Items Sold: ${stats.value.overview.totalItems}`, marginLeft + 10 + colWidth, currentY)
+      
+      currentY += 15
+    }
+
+    // Payment Methods in a nice box
+    if (stats.value?.paymentMethods?.length) {
+      doc.setDrawColor(240, 240, 240)
+      doc.setFillColor(250, 250, 250)
+      doc.roundedRect(marginLeft, currentY, contentWidth, 10 + (stats.value.paymentMethods.length * lineHeight), 2, 2, 'FD')
+      
+      currentY += 8
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(60, 60, 60)
+      doc.text('Payment Methods', marginLeft + 10, currentY)
+      currentY += 8
+
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(0, 0, 0)
+      stats.value.paymentMethods.forEach(method => {
+        const label = method._id.charAt(0).toUpperCase() + method._id.slice(1)
+        doc.text(`${label}: ${method.count} transactions (${formatCurrencyForPDF(method.total)})`, marginLeft + 10, currentY)
+        currentY += lineHeight
+      })
+      
+      currentY += 8
+    }
+
+    // Sales Transactions Table
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(60, 60, 60)
+    doc.text('Sales Transactions', marginLeft, currentY)
+    currentY += 8
+
+    // Table headers with background
+    const headers = ['Date', 'Invoice', 'Customer', 'Items', 'Amount', 'Payment']
+    const colWidths = [25, 30, 45, 15, 30, 25]
+    
+    // Calculate positions for columns
+    const positions = []
+    let currentX = marginLeft
+    for (let i = 0; i < colWidths.length; i++) {
+      positions.push(currentX)
+      currentX += colWidths[i]
+    }
+    
+    // Draw header background
+    doc.setFillColor(240, 240, 240)
+    doc.rect(marginLeft, currentY, contentWidth, lineHeight, 'F')
+    
+    // Draw header text
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(0, 0, 0)
+    
+    for (let i = 0; i < headers.length; i++) {
+      doc.text(headers[i], positions[i] + 2, currentY + 5)
+    }
+    
+    currentY += lineHeight + 2
+
+    // Table rows
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    
+    // Track items per page for pagination
+    const itemsPerPage = 20
+    let itemsOnCurrentPage = 0
+    let totalPages = Math.ceil(sales.value.length / itemsPerPage)
+    let currentPage = 1
+    
+    // Function to add header to new pages
+    const addTableHeader = () => {
+      currentY = 20
+      
+      // Add page header
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Sales Report - Continued', pageWidth / 2, currentY, { align: 'center' })
+      currentY += 10
+      
+      // Draw header background
+      doc.setFillColor(240, 240, 240)
+      doc.rect(marginLeft, currentY, contentWidth, lineHeight, 'F')
+      
+      // Draw header text
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'bold')
+      
+      for (let i = 0; i < headers.length; i++) {
+        doc.text(headers[i], positions[i] + 2, currentY + 5)
+      }
+      
+      currentY += lineHeight + 2
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+    }
+
+    // Draw alternating row backgrounds and data
+    sales.value.forEach((sale, index) => {
+      // Check if we need a new page
+      if (itemsOnCurrentPage >= itemsPerPage) {
+        doc.addPage()
+        currentPage++
+        itemsOnCurrentPage = 0
+        addTableHeader()
+      }
+      
+      // Draw row background (alternating)
+      if (index % 2 === 1) {
+        doc.setFillColor(248, 248, 248)
+        doc.rect(marginLeft, currentY - 1, contentWidth, lineHeight, 'F')
+      }
+      
+      // Format data
+      const rowData = [
+        format(new Date(sale.createdAt), 'MMM dd'),
+        `#${sale._id.substring(0, 8)}`,
+        sale.customerName.length > 15 ? sale.customerName.substring(0, 15) + '...' : sale.customerName,
+        sale.items.length.toString(),
+        formatCurrencyForPDF(sale.total),
+        sale.paymentMethod.charAt(0).toUpperCase() + sale.paymentMethod.slice(1)
+      ]
+      
+      // Draw row data
+      for (let i = 0; i < rowData.length; i++) {
+        doc.text(rowData[i], positions[i] + 2, currentY + 4)
+      }
+      
+      currentY += lineHeight
+      itemsOnCurrentPage++
+    })
+
+    // Footer with pagination on all pages
+    for (let i = 1; i <= currentPage; i++) {
+      doc.setPage(i)
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'italic')
+      doc.setTextColor(100, 100, 100)
+      doc.text(`Page ${i} of ${currentPage}`, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' })
+    }
+
+    doc.save(`Sales_Report_${format(now, 'yyyy-MM-dd')}.pdf`)
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Success',
+      text: 'Sales report exported successfully',
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 3000
+    })
+
+  } catch (error) {
+    console.error('Error exporting sales to PDF:', error)
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'Failed to export sales report'
+    })
+  }
+}
+
 
 // Watch for page changes
 watch(currentPage, () => {
@@ -428,6 +669,15 @@ onMounted(() => {
       >
         Apply Filters
       </button>
+      <button
+    @click="exportSalesPDF"
+    class="flex items-center justify-center rounded bg-success px-6 py-2 text-white hover:bg-opacity-90"
+  >
+    <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+    </svg>
+    Export PDF
+  </button>
     </div>
   </div>
 
@@ -525,8 +775,8 @@ onMounted(() => {
         </button>
       </div>
       <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-        <div>
-          <p class="text-sm text-gray-700 dark:text-gray-400">
+        <div class="flex items-center">
+          <p class="text-sm text-gray-700 dark:text-gray-400 mr-4">
             Showing
             <span class="font-medium">{{ (currentPage - 1) * itemsPerPage + 1 }}</span>
             to
@@ -535,6 +785,23 @@ onMounted(() => {
             <span class="font-medium">{{ totalItems }}</span>
             results
           </p>
+          
+          <!-- Items per page selector -->
+          <div class="flex items-center">
+            <label for="itemsPerPage" class="text-sm text-gray-700 dark:text-gray-400 mr-2">Items per page:</label>
+            <select
+              id="itemsPerPage"
+              v-model="itemsPerPage"
+              @change="changeItemsPerPage(itemsPerPage)"
+              class="rounded border-[1.5px] border-stroke bg-transparent px-2 py-1 text-sm outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+            >
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </div>
         </div>
         <div>
           <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
