@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
 import ReorderPoint from '@/components/Reorder/ReordeRPoint.vue'
+import AutoReorderSchedule from '@/components/Settings/AutoReorderSchedule.vue'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 
 const pageTitle = ref('Reorder Management')
@@ -13,6 +14,13 @@ const pageTitle = ref('Reorder Management')
       <!-- Breadcrumb Start -->
       <BreadcrumbDefault :pageTitle="pageTitle" />
       <!-- Breadcrumb End -->
+
+      <!-- Auto-Reorder Schedule Configuration -->
+      <div class="mb-6">
+        <AutoReorderSchedule />
+      </div>
+
+      <!-- Reorder Point Settings -->
       <ReorderPoint />
     </div>
   </DefaultLayout>

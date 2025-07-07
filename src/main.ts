@@ -7,13 +7,33 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import VueApexCharts from 'vue3-apexcharts'
 
+// Import Font Awesome
+import { library } from '@fortawesome/fontawesome-svg-core'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import {
+  faCheckCircle,
+  faExclamationTriangle,
+  faExclamationCircle,
+  faInfoCircle
+} from '@fortawesome/free-solid-svg-icons'
+
+// Add icons to library
+library.add(faCheckCircle, faExclamationTriangle, faExclamationCircle, faInfoCircle)
+
 import App from './App.vue'
-import router from './router'
+import router from './router/index.ts'
 
 const app = createApp(App)
 
 app.use(createPinia())
 app.use(router)
 app.use(VueApexCharts)
+app.component('font-awesome-icon', FontAwesomeIcon)
 
+// Add these imports
+import { vPermission, vRole } from './directives/permission'
+
+// Add these lines before app.mount('#app')
+app.directive('permission', vPermission)
+app.directive('role', vRole)
 app.mount('#app')

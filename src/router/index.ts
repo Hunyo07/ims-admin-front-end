@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-
 import SigninView from '@/views/Authentication/SigninView.vue'
 import SignupView from '@/views/Authentication/SignupView.vue'
 import CalendarView from '@/views/CalendarView.vue'
@@ -26,6 +25,9 @@ import ReorderView from '@/views/Reorder/PurchaseMangementView.vue'
 import ReorderPointView from '@/views/Settings/ReorderPointView.vue'
 import InventoryCounts from '@/views/Inventory/InventoryCountsView.vue'
 import StockAdjustments from '@/views/Inventory/StockAdjustmentsView.vue'
+
+// Add this to your imports
+import { useAuthStore } from '@/stores/auth'
 
 const routes = [
   {
@@ -65,6 +67,14 @@ const routes = [
     }
   },
   {
+    path: '/inventory/stock-adjustments',
+    name: 'StockAdjustments',
+    component: StockAdjustments,
+    meta: {
+      requiresAuth: true
+    }
+  },
+  {
     path: '/stock-adjustments',
     name: 'Stock Adjustments',
     component: StockAdjustments,
@@ -73,13 +83,16 @@ const routes = [
       requiresAuth: true
     }
   },
+  // Update your route definitions to include role requirements
+  // Example for a route that requires specific roles:
   {
     path: '/users',
     name: 'users',
     component: UserManagementView,
     meta: {
       title: 'User Management',
-      requiresAuth: true
+      requiresAuth: true,
+      roles: ['superadmin', 'admin']
     }
   },
   {
@@ -273,20 +286,39 @@ const router = createRouter({
 })
 
 // Authentication Guard
+// Update your router.beforeEach guard
 router.beforeEach((to, from, next) => {
   document.title = `Books & Clothes House ${to.meta.title} | Cloud-Based IMS - Books & Clothes House`
 
-  const isAuthenticated = localStorage.getItem('token') // Adjust this based on your auth system
+  const authStore = useAuthStore()
+  const isAuthenticated = authStore.isAuthenticated
 
   // Prevent authenticated users from accessing signin/signup
   if (isAuthenticated && (to.name === 'signin' || to.name === 'signup')) {
     next({ name: 'eCommerce' }) // Redirect to dashboard or another page
   }
-  // Prevent unauthenticated users from accessing protected routes
-  else if (to.meta.requiresAuth && !isAuthenticated) {
-    next({ name: 'signin' }) // Redirect to login if not authenticated
+  // Check for authentication and role requirements
+  else if (to.meta.requiresAuth) {
+    if (!isAuthenticated) {
+      next({ name: 'signin' }) // Redirect to login if not authenticated
+    }
+    // Check for role requirements
+    else if (to.meta.roles && !authStore.hasRole(to.meta.roles)) {
+      // Redirect to unauthorized page or dashboard
+      next({ name: 'eCommerce' })
+    }
+    // Check for permission requirements
+    else if (
+      to.meta.permissions &&
+      !to.meta.permissions.every((permission) => authStore.hasPermission(permission))
+    ) {
+      // Redirect to unauthorized page or dashboard
+      next({ name: 'eCommerce' })
+    } else {
+      next() // Allow navigation
+    }
   } else {
-    next() // Allow navigation
+    next() // Allow navigation for public routes
   }
 })
 

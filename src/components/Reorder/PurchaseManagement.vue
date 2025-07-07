@@ -247,7 +247,7 @@ const updateOrderStatus = async (orderId, newStatus) => {
 const generateFromReorderPoints = async () => {
   try {
     isLoading.value = true
-    
+
     Swal.fire({
       title: 'Processing',
       text: 'Checking stock levels and creating purchase orders...',
@@ -256,10 +256,10 @@ const generateFromReorderPoints = async () => {
         Swal.showLoading()
       }
     })
-    
+
     const response = await axios.post(
       'http://localhost:5000/api/reorder-points/auto-reorder',
-      {}, 
+      {},
       {
         headers: {
           Authorization: `Bearer ${authStore.token}`
@@ -273,7 +273,9 @@ const generateFromReorderPoints = async () => {
     Swal.fire({
       icon: 'success',
       title: 'Auto Reorder Complete',
-      text: `Created ${response.data.ordersCreated || 0} purchase orders for products that need reordering`,
+      text: `Created ${
+        response.data.ordersCreated || 0
+      } purchase orders for products that need reordering`,
       confirmButtonText: 'OK'
     })
   } catch (error) {
@@ -339,9 +341,9 @@ const getStatusBadgeClass = (status) => {
     case 'pending':
       return 'bg-warning text-white'
     case 'approved':
-      return 'bg-info text-white'
+      return 'bg-blue-500 text-white'
     case 'shipped':
-      return 'bg-primary text-white'
+      return 'bg-yellow-600 text-white'
     case 'received':
       return 'bg-success text-white'
     case 'cancelled':
