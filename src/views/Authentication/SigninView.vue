@@ -28,22 +28,21 @@ const handleSubmit = async (e: Event) => {
       email: email.value,
       password: password.value
     })
-
     const { token, user } = response.data
-
     // Store auth data
     authStore.setToken(token)
     authStore.setUser(user)
+
     // Redirect based on role
     switch (user.role) {
       case 'superadmin':
         router.push('/eCommerce')
         break
       case 'admin':
-        router.push('/admin/dashboard')
+        router.push('/dashboard')
         break
       case 'staff':
-        router.push('/staff/dashboard')
+        router.push('/dashboard')
         break
       default:
         router.push('/')

@@ -1,16 +1,22 @@
 <script setup lang="ts">
 import { useSidebarStore } from '@/stores/sidebar'
+import { useAuthStore } from '@/stores/auth'
 import { useRoute } from 'vue-router'
+import { computed } from 'vue'
 import SidebarDropdown from './SidebarDropdown.vue'
 
 const sidebarStore = useSidebarStore()
+const authStore = useAuthStore()
 
 const props = defineProps(['item', 'index'])
 const currentPage = useRoute().name
 
 interface SidebarItem {
   label: string
+  roles?: string[]
+  permissions?: string[]
 }
+
 
 const handleItemClick = (item) => {
   const pageName = sidebarStore.page === props.item.label ? '' : props.item.label
@@ -20,10 +26,22 @@ const handleItemClick = (item) => {
     return props.item.children.some((child: SidebarItem) => sidebarStore.selected === child.label)
   }
 }
+
+// Check if user has access to this menu item
+const hasAccess = computed(() => {
+  // Check roles
+  const hasRequiredRole = !props.item.roles || authStore.hasRole(props.item.roles)
+  
+  // Check permissions
+  const hasRequiredPermission = !props.item.permissions || 
+    props.item.permissions.some(permission => authStore.hasPermission(permission))
+  
+  return hasRequiredRole && hasRequiredPermission
+})
 </script>
 
 <template>
-  <li>
+  <li v-if="hasAccess">
     <router-link
       :to="item.route"
       class="group relative flex items-center gap-2.5 rounded-sm py-2 px-4 font-medium text-bodydark1 duration-300 ease-in-out hover:bg-graydark dark:hover:bg-meta-4"

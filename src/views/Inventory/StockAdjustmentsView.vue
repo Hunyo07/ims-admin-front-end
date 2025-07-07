@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import StockAdustments from '@/components/Inventory/StockAdjustments.vue'
+import StockAdjustments from '@/components/Inventory/StockAdjustments.vue'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 
-const pageTitle = ref('Stock Adustments')
+const pageTitle = ref('Stock Adjustments')
 </script>
 
 <template>
@@ -13,7 +13,7 @@ const pageTitle = ref('Stock Adustments')
       <!-- Breadcrumb Start -->
       <BreadcrumbDefault :pageTitle="pageTitle" />
       <!-- Breadcrumb End -->
-      <StockAdustments />
+      <StockAdjustments />
     </div>
   </DefaultLayout>
 </template>

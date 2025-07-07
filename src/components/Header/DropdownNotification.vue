@@ -1,42 +1,82 @@
 <script setup lang="ts">
 import { onClickOutside } from '@vueuse/core'
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useNotificationStore } from '../../stores/notification'
+import { useRouter } from 'vue-router'
+import { formatDistanceToNow } from 'date-fns'
+
+const router = useRouter()
+const notificationStore = useNotificationStore()
 
 const target = ref(null)
 const dropdownOpen = ref(false)
-const notifying = ref(true)
 
 onClickOutside(target, () => {
   dropdownOpen.value = false
 })
 
-const notificationItems = ref([
-  {
-    route: '#',
-    title: 'Edit your information in a swipe',
-    details:
-      'Sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim.',
-    time: '12 May, 2025'
-  },
-  {
-    route: '#',
-    title: 'It is a long established fact',
-    details: 'that a reader will be distracted by the readable.',
-    time: '24 Feb, 2025'
-  },
-  {
-    route: '#',
-    title: 'There are many variations',
-    details: 'of passages of Lorem Ipsum available, but the majority have suffered',
-    time: '04 Jan, 2025'
-  },
-  {
-    route: '#',
-    title: 'There are many variations',
-    details: 'of passages of Lorem Ipsum available, but the majority have suffered',
-    time: '01 Dec, 2024'
+onMounted(() => {
+  notificationStore.fetchNotifications()
+})
+
+const hasUnread = computed(() => notificationStore.unreadCount > 0)
+
+const formatTime = (dateString: string) => {
+  try {
+    return formatDistanceToNow(new Date(dateString), { addSuffix: true })
+  } catch (e) {
+    return dateString
   }
-])
+}
+
+const handleNotificationClick = async (notification: any) => {
+  // Mark as read
+  await notificationStore.markAsRead(notification._id)
+  
+  // Navigate to link if provided
+  if (notification.link) {
+    router.push(notification.link)
+  }
+  
+  // Close dropdown
+  dropdownOpen.value = false
+}
+
+const markAllAsRead = async () => {
+  await notificationStore.markAllAsRead()
+}
+
+const clearAllRead = async () => {
+  await notificationStore.deleteAllRead()
+}
+
+const getNotificationIcon = (type: string) => {
+  switch (type) {
+    case 'success':
+      return 'check-circle'
+    case 'warning':
+      return 'exclamation-triangle'
+    case 'error':
+      return 'exclamation-circle'
+    case 'info':
+    default:
+      return 'info-circle'
+  }
+}
+
+const getNotificationColor = (type: string) => {
+  switch (type) {
+    case 'success':
+      return 'text-success'
+    case 'warning':
+      return 'text-warning'
+    case 'error':
+      return 'text-danger'
+    case 'info':
+    default:
+      return 'text-info'
+  }
+}
 </script>
 
 <template>
@@ -44,10 +84,10 @@ const notificationItems = ref([
     <router-link
       class="relative flex h-8.5 w-8.5 items-center justify-center rounded-full border-[0.5px] border-stroke bg-gray hover:text-primary dark:border-strokedark dark:bg-meta-4 dark:text-white"
       to="#"
-      @click.prevent="(dropdownOpen = !dropdownOpen), (notifying = false)"
+      @click.prevent="(dropdownOpen = !dropdownOpen)"
     >
       <span
-        :class="!notifying && 'hidden'"
+        v-if="hasUnread"
         class="absolute -top-0.5 right-0 z-1 h-2 w-2 rounded-full bg-meta-1"
       >
         <span
@@ -75,24 +115,56 @@ const notificationItems = ref([
       v-show="dropdownOpen"
       class="absolute -right-27 mt-2.5 flex h-90 w-75 flex-col rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark sm:right-0 sm:w-80"
     >
-      <div class="px-4.5 py-3">
-        <h5 class="text-sm font-medium text-bodydark2">Notification</h5>
+      <div class="px-4.5 py-3 flex justify-between items-center">
+        <h5 class="text-sm font-medium text-bodydark2">Notifications</h5>
+        <div class="flex space-x-2">
+          <button 
+            @click="markAllAsRead"
+            class="text-xs text-blue-500 hover:text-blue-700"
+          >
+            Mark all as read
+          </button>
+          <button 
+            @click="clearAllRead"
+            class="text-xs text-red-500 hover:text-red-700"
+          >
+            Clear read
+          </button>
+        </div>
       </div>
 
       <ul class="flex h-auto flex-col overflow-y-auto">
-        <template v-for="(item, index) in notificationItems" :key="index">
+        <li v-if="notificationStore.loading" class="flex justify-center items-center py-4">
+          <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+        </li>
+        
+        <li v-else-if="notificationStore.notifications.length === 0" class="py-4 text-center text-sm text-bodydark2">
+          No notifications
+        </li>
+        
+        <template v-else v-for="notification in notificationStore.notifications" :key="notification._id">
           <li>
-            <router-link
-              class="flex flex-col gap-2.5 border-t border-stroke px-4.5 py-3 hover:bg-gray-2 dark:border-strokedark dark:hover:bg-meta-4"
-              :to="item.route"
+            <div
+              @click="handleNotificationClick(notification)"
+              class="flex gap-2.5 border-t border-stroke px-4.5 py-3 hover:bg-gray-2 dark:border-strokedark dark:hover:bg-meta-4 cursor-pointer"
+              :class="{ 'bg-gray-100 dark:bg-meta-3': !notification.isRead }"
             >
-              <p class="text-sm">
-                <span class="text-black dark:text-white">{{ item.title }}</span>
-                {{ item.details }}
-              </p>
-
-              <p class="text-xs">{{ item.time }}</p>
-            </router-link>
+              <div class="flex-shrink-0">
+                <span :class="[getNotificationColor(notification.type), 'text-lg']">
+                  <i :class="`fas fa-${getNotificationIcon(notification.type)}`"></i>
+                </span>
+              </div>
+              
+              <div class="flex-1">
+                <p class="text-sm font-medium">
+                  {{ notification.title }}
+                </p>
+                <p class="text-sm text-black dark:text-white">
+                  {{ notification.message }}
+                </p>
+                <p class="text-xs text-bodydark2">{{ formatTime(notification.createdAt) }}</p>
+              </div>
+            </div>
           </li>
         </template>
       </ul>

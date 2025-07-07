@@ -15,13 +15,32 @@ const showDetailsModal = ref(false)
 const selectedCount = ref(null)
 const searchQuery = ref('')
 const statusFilter = ref('all')
+const currentPage = ref(1)
+const itemsPerPage = ref(10)
 
-// Form data for creating a new inventory count
 const newCount = ref({
   items: [{ productId: '', expectedQuantity: 0, actualQuantity: 0, notes: '' }],
   countDate: new Date(),
   notes: ''
 })
+
+const totalPages = computed(() =>
+  Math.ceil(filteredInventoryCounts.value.length / itemsPerPage.value)
+)
+
+const paginatedCounts = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  const end = start + itemsPerPage.value
+  return filteredInventoryCounts.value.slice(start, end)
+})
+
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) currentPage.value++
+}
+
+const prevPage = () => {
+  if (currentPage.value > 1) currentPage.value--
+}
 
 // Fetch all inventory counts
 const fetchInventoryCounts = async () => {
@@ -117,7 +136,7 @@ const createInventoryCount = async () => {
 
     isLoading.value = true
 
-    // Prepare the payload with the correct structure
+    // Prepare the payload
     const payload = {
       products: newCount.value.items.map((item) => ({
         productId: item.productId,
@@ -128,19 +147,62 @@ const createInventoryCount = async () => {
       notes: newCount.value.notes
     }
 
-    // Log the request payload
-    console.log('Creating inventory count with data:', payload)
-
+    // Create the inventory count
     const response = await axios.post('http://localhost:5000/api/inventory/counts', payload, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
     })
 
+    // Get the created count ID
+    const countId = response.data.inventoryCount._id
+
+    // Update product counts
+    await axios.patch(
+      `http://localhost:5000/api/inventory/counts/${countId}/products`,
+      {
+        products: newCount.value.items.map((item) => ({
+          productId: item.productId,
+          actualQuantity: item.actualQuantity,
+          notes: item.notes
+        }))
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${authStore.token}`
+        }
+      }
+    )
+
+    // Update status to completed
+    await axios.patch(
+      `http://localhost:5000/api/inventory/counts/${countId}/status`,
+      {
+        status: 'completed'
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${authStore.token}`
+        }
+      }
+    )
+
+    // Apply the inventory count to update stock levels
+    await axios.post(
+      `http://localhost:5000/api/inventory/counts/${countId}/apply`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${authStore.token}`
+        }
+      }
+    )
+
+    // Show success message
     Swal.fire({
       icon: 'success',
       title: 'Success',
-      text: 'Inventory count created successfully'
+      text: 'Inventory count created and stock levels updated successfully'
     })
 
     // Reset form and close modal
@@ -150,11 +212,11 @@ const createInventoryCount = async () => {
     // Refresh inventory counts list
     await fetchInventoryCounts()
   } catch (error) {
-    console.error('Error creating inventory count:', error)
+    console.error('Error creating and applying inventory count:', error)
     Swal.fire({
       icon: 'error',
       title: 'Error',
-      text: error.response?.data?.message || 'Failed to create inventory count'
+      text: error.response?.data?.message || 'Failed to create and apply inventory count'
     })
   } finally {
     isLoading.value = false
@@ -203,16 +265,31 @@ const viewCountDetails = async (countId) => {
 }
 
 // Filter inventory counts by search query
+// const filteredInventoryCounts = computed(() => {
+//   let filtered = inventoryCounts.value
+
+//   if (searchQuery.value) {
+//     const query = searchQuery.value.toLowerCase()
+//     filtered = filtered.filter(
+//       (count) =>
+//         count.countNumber.toLowerCase().includes(query) ||
+//         (Array.isArray(count.items) &&
+//           count.items.some((item) => item.product?.name?.toLowerCase().includes(query)))
+//     )
+//   }
+
+//   return filtered
+// })
 const filteredInventoryCounts = computed(() => {
-  let filtered = inventoryCounts.value
+  let filtered = inventoryCounts.value || []
 
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
     filtered = filtered.filter(
       (count) =>
         count.countNumber.toLowerCase().includes(query) ||
-        (Array.isArray(count.items) &&
-          count.items.some((item) => item.product?.name?.toLowerCase().includes(query)))
+        (Array.isArray(count.products) &&
+          count.products.some((item) => item.product?.name?.toLowerCase().includes(query)))
     )
   }
 
@@ -302,7 +379,7 @@ onMounted(async () => {
           </thead>
           <tbody>
             <tr
-              v-for="count in filteredInventoryCounts"
+              v-for="count in paginatedCounts"
               :key="count._id"
               class="border-b border-stroke dark:border-strokedark"
             >
@@ -338,6 +415,37 @@ onMounted(async () => {
             </tr>
           </tbody>
         </table>
+
+        <div class="flex items-center justify-between p-4">
+          <div class="flex items-center gap-2">
+            <select
+              v-model="itemsPerPage"
+              class="rounded border border-stroke bg-transparent px-2 py-1"
+            >
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="20">20</option>
+            </select>
+            <span>Items per page</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              @click="prevPage"
+              :disabled="currentPage === 1"
+              class="rounded px-3 py-1 disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <span>Page {{ currentPage }} of {{ totalPages }}</span>
+            <button
+              @click="nextPage"
+              :disabled="currentPage === totalPages"
+              class="rounded px-3 py-1 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

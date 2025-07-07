@@ -32,6 +32,27 @@ const isLoading = ref(true)
 const selectedProduct = ref<Product | null>(null)
 const showEditModal = ref(false)
 
+// Pagination state
+const currentPage = ref(1)
+const itemsPerPage = ref(10) // Or any default value you prefer
+
+// Pagination computed properties
+const totalPages = computed(() => Math.ceil(searchedProducts.value.length / itemsPerPage.value))
+
+const paginatedReorderPoints = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  const end = start + itemsPerPage.value
+  return searchedProducts.value.slice(start, end)
+})
+
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) currentPage.value++
+}
+
+const prevPage = () => {
+  if (currentPage.value > 1) currentPage.value--
+}
+
 // Form data for editing
 const editForm = ref({
   reorderLevel: 0,
@@ -209,6 +230,7 @@ const getStockStatus = (product: Product) => {
 
 // Filter products by stock status
 const stockFilter = ref('all')
+
 const filteredProducts = computed(() => {
   if (stockFilter.value === 'all') return products.value
   if (stockFilter.value === 'low') {
@@ -468,11 +490,11 @@ const triggerAutoReorder = async () => {
           </tr>
         </thead>
         <tbody>
-          <tr v-if="searchedProducts.length === 0">
+          <tr v-if="paginatedReorderPoints.length === 0">
             <td colspan="9" class="py-4 px-4 text-center text-gray-500">No products found</td>
           </tr>
           <tr
-            v-for="product in searchedProducts"
+            v-for="product in paginatedReorderPoints"
             :key="product._id"
             class="border-b border-[#eee] dark:border-strokedark"
           >
@@ -524,6 +546,37 @@ const triggerAutoReorder = async () => {
           </tr>
         </tbody>
       </table>
+      <!-- Pagination Controls -->
+      <div class="flex items-center justify-between p-4">
+        <div class="flex items-center gap-2">
+          <select
+            v-model="itemsPerPage"
+            class="rounded border border-stroke bg-transparent px-2 py-1"
+          >
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+          </select>
+          <span>Items per page</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            @click="prevPage"
+            :disabled="currentPage === 1"
+            class="rounded px-3 py-1 disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <span>Page {{ currentPage }} of {{ totalPages }}</span>
+          <button
+            @click="nextPage"
+            :disabled="currentPage === totalPages"
+            class="rounded px-3 py-1 disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 

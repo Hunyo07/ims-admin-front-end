@@ -2,5 +2,21 @@ import { io } from 'socket.io-client'
 
 export const socket = io('http://localhost:5000', {
   autoConnect: true,
-  reconnection: true
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+  timeout: 20000
+})
+
+// Add connection event listeners
+socket.on('connect', () => {
+  console.log('Socket connected:', socket.id)
+})
+
+socket.on('connect_error', (error) => {
+  console.error('Socket connection error:', error)
+})
+
+socket.on('disconnect', (reason) => {
+  console.log('Socket disconnected:', reason)
 })
