@@ -9,43 +9,6 @@ import { jsPDF } from 'jspdf'
 import 'jspdf-autotable'
 const authStore = useAuthStore()
 
-// SaleItem structure (converted from TypeScript interface)
-// - product: string
-// - name: string
-// - quantity: number
-// - price: number
-// - total: number
-
-// Sale structure (converted from TypeScript interface)
-// - _id: string
-// - items: SaleItem[]
-// - customerName: string
-// - customerPhone: string (optional)
-// - subtotal: number
-// - total: number
-// - paymentMethod: string
-// - paymentAmount: number
-// - change: number
-// - deliveryMode: string
-// - deliveryFee: number (optional)
-// - deliveryAddress: string (optional)
-// - createdBy: { user: string, role: string }
-// - createdAt: string
-// - updatedAt: string
-
-// SalesStats structure (converted from TypeScript interface)
-// - overview: {
-//   - totalSales: number
-//   - totalRevenue: number
-//   - averageOrderValue: number
-//   - totalItems: number
-// }
-// - paymentMethods: Array of {
-//   - _id: string
-//   - count: number
-//   - total: number
-// }
-
 // State (removed type annotations)
 const sales = ref([])
 const stats = ref(null)
@@ -776,7 +739,7 @@ onMounted(() => {
       </div>
       <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
         <div class="flex items-center">
-          <p class="text-sm text-gray-700 dark:text-gray-400 mr-4">
+          <!-- <p class="text-sm text-gray-700 dark:text-gray-400 mr-4">
             Showing
             <span class="font-medium">{{ (currentPage - 1) * itemsPerPage + 1 }}</span>
             to
@@ -785,10 +748,9 @@ onMounted(() => {
             <span class="font-medium">{{ totalItems }}</span>
             results
           </p>
-          
+           -->
           <!-- Items per page selector -->
           <div class="flex items-center">
-            <label for="itemsPerPage" class="text-sm text-gray-700 dark:text-gray-400 mr-2">Items per page:</label>
             <select
               id="itemsPerPage"
               v-model="itemsPerPage"
@@ -802,6 +764,8 @@ onMounted(() => {
               <option value="100">100</option>
             </select>
           </div>
+          <label for="itemsPerPage" class="text-sm text-gray-700 dark:text-gray-400 ml-2">Items per page</label>
+
         </div>
         <div>
           <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">

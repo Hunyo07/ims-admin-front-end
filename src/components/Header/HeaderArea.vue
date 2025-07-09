@@ -61,7 +61,7 @@ const sidebarStore = useSidebarStore()
         <form action="https://formbold.com/s/unique_form_id" method="POST">
           <div class="relative">
             <button class="absolute top-1/2 left-0 -translate-y-1/2">
-              <svg
+              <!-- <svg
                 class="fill-body hover:fill-primary dark:fill-bodydark dark:hover:fill-primary"
                 width="20"
                 height="20"
@@ -81,14 +81,14 @@ const sidebarStore = useSidebarStore()
                   d="M13.2857 13.2857C13.6112 12.9603 14.1388 12.9603 14.4642 13.2857L18.0892 16.9107C18.4147 17.2362 18.4147 17.7638 18.0892 18.0892C17.7638 18.4147 17.2362 18.4147 16.9107 18.0892L13.2857 14.4642C12.9603 14.1388 12.9603 13.6112 13.2857 13.2857Z"
                   fill=""
                 />
-              </svg>
+              </svg> -->
             </button>
 
-            <input
+            <!-- <input
               type="text"
               placeholder="Type to search..."
               class="w-full xl:w-125 bg-transparent pr-4 pl-9 focus:outline-none"
-            />
+            /> -->
           </div>
         </form>
       </div>
@@ -106,7 +106,7 @@ const sidebarStore = useSidebarStore()
           <!-- Notification Menu Area -->
 
           <!-- Chat Notification Area -->
-          <DropdownMessage />
+          <!-- <DropdownMessage /> -->
           <!-- Chat Notification Area -->
         </ul>
 

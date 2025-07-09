@@ -39,10 +39,10 @@ const handleSubmit = async (e: Event) => {
         router.push('/eCommerce')
         break
       case 'admin':
-        router.push('/dashboard')
+        router.push('/eCommerce')
         break
       case 'staff':
-        router.push('/dashboard')
+        router.push('/eCommerce')
         break
       default:
         router.push('/')

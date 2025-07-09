@@ -5,6 +5,9 @@ import { useAuthStore } from '@/stores/auth'
 import Swal from 'sweetalert2'
 import Datepicker from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
+import { jsPDF } from 'jspdf'
+import 'jspdf-autotable'
+import { format } from 'date-fns'
 
 const authStore = useAuthStore()
 const inventoryCounts = ref([]) // Ensure this is correctly populated
@@ -17,6 +20,213 @@ const searchQuery = ref('')
 const statusFilter = ref('all')
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
+
+// Format currency for PDF
+const formatCurrencyForPDF = (amount) => {
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP'
+  }).format(amount)
+}
+
+const exportInventoryCountsPDF = async () => {
+  try {
+    // Create a new PDF document
+    const doc = new jsPDF()
+    
+    // Set margins
+    const marginLeft = 15
+    const marginRight = 15
+    const pageWidth = doc.internal.pageSize.width
+    const contentWidth = pageWidth - marginLeft - marginRight
+    const lineHeight = 7
+    let currentY = 20
+
+    // Add header with title
+    doc.setFontSize(22)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Inventory Counts Report', pageWidth / 2, currentY, { align: 'center' })
+    currentY += 12
+
+    // Add a horizontal line
+    doc.setDrawColor(220, 220, 220)
+    doc.setLineWidth(0.5)
+    doc.line(marginLeft, currentY, pageWidth - marginLeft, currentY)
+    currentY += 8
+
+    // Generated On
+    const now = new Date()
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Generated on: ${format(now, 'MMM dd, yyyy h:mm a')}`, pageWidth / 2, currentY, { align: 'center' })
+    currentY += 15
+
+    // Inventory Counts Statistics in a box
+    doc.setDrawColor(240, 240, 240)
+    doc.setFillColor(250, 250, 250)
+    doc.roundedRect(marginLeft, currentY, contentWidth, 30, 2, 2, 'FD')
+    
+    currentY += 8
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(60, 60, 60)
+    doc.text('Inventory Counts Overview', marginLeft + 10, currentY)
+    currentY += 10
+
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(0, 0, 0)
+    
+    // Create a 2x1 grid for statistics
+    const colWidth = contentWidth / 2
+    
+    // Statistics row
+    doc.text(`Total Counts: ${inventoryCounts.value.length}`, marginLeft + 10, currentY)
+    doc.text(`Total Products Counted: ${getTotalProductsCounted()}`, marginLeft + 10 + colWidth, currentY)
+    
+    currentY += 15
+
+    // Inventory Counts Table
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(60, 60, 60)
+    doc.text('Inventory Counts', marginLeft, currentY)
+    currentY += 8
+
+    // Table headers with background
+    const headers = ['Count #', 'Date', 'Items Count', 'Created By']
+    const colWidths = [30, 40, 40, 60]
+    
+    // Calculate positions for columns
+    const positions = []
+    let currentX = marginLeft
+    for (let i = 0; i < colWidths.length; i++) {
+      positions.push(currentX)
+      currentX += colWidths[i]
+    }
+    
+    // Draw header background
+    doc.setFillColor(240, 240, 240)
+    doc.rect(marginLeft, currentY, contentWidth, lineHeight, 'F')
+    
+    // Draw header text
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(0, 0, 0)
+    
+    for (let i = 0; i < headers.length; i++) {
+      doc.text(headers[i], positions[i] + 2, currentY + 5)
+    }
+    
+    currentY += lineHeight + 2
+
+    // Table rows
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    
+    // Track items per page for pagination
+    const itemsPerPage = 20
+    let itemsOnCurrentPage = 0
+    let totalPages = Math.ceil(filteredInventoryCounts.value.length / itemsPerPage)
+    let currentPage = 1
+    
+    // Function to add header to new pages
+    const addTableHeader = () => {
+      currentY = 20
+      
+      // Add page header
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Inventory Counts Report - Continued', pageWidth / 2, currentY, { align: 'center' })
+      currentY += 10
+      
+      // Draw header background
+      doc.setFillColor(240, 240, 240)
+      doc.rect(marginLeft, currentY, contentWidth, lineHeight, 'F')
+      
+      // Draw header text
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'bold')
+      
+      for (let i = 0; i < headers.length; i++) {
+        doc.text(headers[i], positions[i] + 2, currentY + 5)
+      }
+      
+      currentY += lineHeight + 2
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+    }
+
+    // Draw alternating row backgrounds and data
+    filteredInventoryCounts.value.forEach((count, index) => {
+      // Check if we need a new page
+      if (itemsOnCurrentPage >= itemsPerPage) {
+        doc.addPage()
+        currentPage++
+        itemsOnCurrentPage = 0
+        addTableHeader()
+      }
+      
+      // Draw row background (alternating)
+      if (index % 2 === 1) {
+        doc.setFillColor(248, 248, 248)
+        doc.rect(marginLeft, currentY - 1, contentWidth, lineHeight, 'F')
+      }
+      
+      // Format data
+      const rowData = [
+        count.countNumber,
+        formatDate(count.countDate),
+        Array.isArray(count.products) ? count.products.length.toString() : '0',
+        count.createdBy?.user.firstName || 'Unknown'
+      ]
+      
+      // Draw row data
+      for (let i = 0; i < rowData.length; i++) {
+        doc.text(rowData[i], positions[i] + 2, currentY + 4)
+      }
+      
+      currentY += lineHeight
+      itemsOnCurrentPage++
+    })
+
+    // Footer with pagination on all pages
+    for (let i = 1; i <= currentPage; i++) {
+      doc.setPage(i)
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'italic')
+      doc.setTextColor(100, 100, 100)
+      doc.text(`Page ${i} of ${currentPage}`, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' })
+    }
+
+    doc.save(`Inventory_Counts_Report_${format(now, 'yyyy-MM-dd')}.pdf`)
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Success',
+      text: 'Inventory counts report exported successfully',
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 3000
+    })
+
+  } catch (error) {
+    console.error('Error exporting inventory counts to PDF:', error)
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'Failed to export inventory counts report'
+    })
+  }
+}
+
+// Helper function to get total products counted
+const getTotalProductsCounted = () => {
+  return inventoryCounts.value.reduce((total, count) => {
+    return total + (Array.isArray(count.products) ? count.products.length : 0)
+  }, 0)
+}
 
 const newCount = ref({
   items: [{ productId: '', expectedQuantity: 0, actualQuantity: 0, notes: '' }],
@@ -320,6 +530,26 @@ onMounted(async () => {
       <div class="flex flex-wrap items-center justify-between gap-4">
         <h3 class="text-xl font-semibold text-black dark:text-white">Inventory Counts</h3>
         <div class="flex items-center gap-3">
+          <button
+    @click="exportInventoryCountsPDF"
+    class="inline-flex items-center justify-center rounded-md bg-success py-2 px-4 text-white hover:bg-opacity-90"
+  >
+    <svg
+      class="mr-2 h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+      ></path>
+    </svg>
+    Export PDF
+  </button>
           <button
             @click="showCreateModal = true"
             class="inline-flex items-center justify-center rounded-md bg-primary py-2 px-4 text-white hover:bg-opacity-90"

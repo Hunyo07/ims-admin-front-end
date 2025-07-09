@@ -97,8 +97,8 @@ const newUser = ref({
     tin: '',
     philHealth: '',
     pagIbig: ''
-  },
-  branchId: ''
+  }
+  // branchId: ''
 })
 const paginatedUsers = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value
@@ -232,8 +232,8 @@ const handleEditUser = (user) => {
       tin: user.governmentIds?.tin || '',
       philHealth: user.governmentIds?.philHealth || '',
       pagIbig: user.governmentIds?.pagIbig || ''
-    },
-    branchId: user.branch?._id || ''
+    }
+    // branchId: user.branch?._id || ''
   }
   isEditing.value = true
   showModal.value = true
@@ -322,10 +322,10 @@ const validateForm = () => {
     formError.value = 'Please select a role'
     return false
   }
-  if (!newUser.value.branchId) {
-    formError.value = 'Please select a branch'
-    return false
-  }
+  // if (!newUser.value.branchId) {
+  //   formError.value = 'Please select a branch'
+  //   return false
+  // }
   if (newUser.value.schedule.workDays.length === 0) {
     formError.value = 'Please select at least one work day'
     return false
@@ -369,8 +369,8 @@ const resetForm = () => {
       tin: '',
       philHealth: '',
       pagIbig: ''
-    },
-    branchId: ''
+    }
+    // branchId: ''
   }
   isEditing.value = false
   editingUser.value = null
@@ -596,7 +596,7 @@ watch(
             <option value="admin">Admin</option>
             <option value="staff">Staff</option>
           </select>
-          <select
+          <!-- <select
             v-model="selectedBranch"
             class="rounded-lg border border-stroke bg-transparent px-4 py-2 outline-none focus:border-primary dark:border-strokedark"
           >
@@ -604,7 +604,7 @@ watch(
             <option v-for="branch in branches" :key="branch._id" :value="branch._id">
               {{ branch.name }}
             </option>
-          </select>
+          </select> -->
           <button
             @click="showModal = true"
             class="inline-flex items-center justify-center rounded-lg bg-primary px-6 py-2 text-sm font-medium text-white hover:bg-opacity-90"
@@ -624,7 +624,7 @@ watch(
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Email</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Role</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Status</th>
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Branch Designated</th>
+            <!-- <th class="py-4.5 px-4 font-medium text-black dark:text-white">Branch Designated</th> -->
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Actions</th>
           </tr>
         </thead>
@@ -681,7 +681,7 @@ watch(
                 </button>
               </div>
             </td>
-            <td class="py-4.5 px-4">{{ user.branch?.name || 'Not Assigned' }}</td>
+            <!-- <td class="py-4.5 px-4">{{ user.branch?.name || 'Not Assigned' }}</td> -->
             <td class="py-4.5 px-4">
               <div class="flex items-center space-x-2">
                 <button @click="handleEditUser(user)" class="hover:text-primary">
@@ -1166,7 +1166,7 @@ watch(
               </div>
             </div>
             <!-- Branch Assignment -->
-            <div>
+            <!-- <div>
               <label class="mb-2.5 block text-black dark:text-white">Branch</label>
               <select
                 v-model="newUser.branchId"
@@ -1178,7 +1178,7 @@ watch(
                   {{ branch.name }}
                 </option>
               </select>
-            </div>
+            </div> -->
           </div>
 
           <!-- Contact Tab -->

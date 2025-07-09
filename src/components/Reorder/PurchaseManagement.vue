@@ -6,7 +6,7 @@ import Swal from 'sweetalert2'
 import Datepicker from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
 import { jsPDF } from 'jspdf'
-import 'jspdf-autotable'
+import autoTable from 'jspdf-autotable'
 import { format } from 'date-fns'
 const authStore = useAuthStore()
 const purchaseOrders = ref([])
@@ -205,7 +205,230 @@ const viewOrderDetails = async (orderId) => {
     isLoading.value = false
   }
 }
+const exportPurchaseOrderDetailsPDF = () => {
+  try {
+    if (!selectedOrder.value) return
+    
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    })
 
+    const marginLeft = 20
+    const marginRight = 20
+    const pageWidth = doc.internal.pageSize.width
+    const contentWidth = pageWidth - marginLeft - marginRight
+    const lineHeight = 7
+    let currentY = 20
+
+    // Add header with title
+    doc.setFontSize(22)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Purchase Order Details', pageWidth / 2, currentY, { align: 'center' })
+    currentY += 12
+
+    // Add a horizontal line
+    doc.setDrawColor(220, 220, 220)
+    doc.setLineWidth(0.5)
+    doc.line(marginLeft, currentY, pageWidth - marginLeft, currentY)
+    currentY += 8
+
+    // Order Number and Date
+    doc.setFontSize(12)
+    doc.setFont('helvetica', 'bold')
+    doc.text(`Order #: ${selectedOrder.value.orderNumber}`, marginLeft, currentY)
+    
+    // Generated On
+    const now = new Date()
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Generated on: ${format(now, 'MMM dd, yyyy h:mm a')}`, pageWidth - marginRight, currentY, { align: 'right' })
+    currentY += 15
+
+    // Order Information Section
+    doc.setDrawColor(240, 240, 240)
+    doc.setFillColor(250, 250, 250)
+    doc.roundedRect(marginLeft, currentY, contentWidth / 2 - 5, 50, 2, 2, 'FD')
+    doc.roundedRect(marginLeft + contentWidth / 2 + 5, currentY, contentWidth / 2 - 5, 50, 2, 2, 'FD')
+    
+    // Order Information
+    currentY += 8
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(60, 60, 60)
+    doc.text('Order Information', marginLeft + 5, currentY)
+    currentY += 7
+
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(0, 0, 0)
+    
+    doc.text(`Status: ${selectedOrder.value.status.charAt(0).toUpperCase() + selectedOrder.value.status.slice(1)}`, marginLeft + 5, currentY)
+    currentY += lineHeight - 2
+    
+    doc.text(`Created: ${formatDate(selectedOrder.value.createdAt)}`, marginLeft + 5, currentY)
+    currentY += lineHeight - 2
+    
+    doc.text(`Expected Delivery: ${formatDate(selectedOrder.value.expectedDeliveryDate) || 'N/A'}`, marginLeft + 5, currentY)
+    currentY += lineHeight - 2
+    
+    if (selectedOrder.value.receivedDate) {
+      doc.text(`Received: ${formatDate(selectedOrder.value.receivedDate)}`, marginLeft + 5, currentY)
+      currentY += lineHeight - 2
+    }
+    
+    doc.text(`Total Amount: ${formatCurrencyForPDF(selectedOrder.value.totalAmount)}`, marginLeft + 5, currentY)
+    
+    // Supplier Information
+    currentY = currentY - (lineHeight - 2) * (selectedOrder.value.receivedDate ? 4 : 3)
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Supplier Information', marginLeft + contentWidth / 2 + 10, currentY)
+    currentY += 7
+
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    
+    doc.text(`Supplier: ${selectedOrder.value.supplier.name}`, marginLeft + contentWidth / 2 + 10, currentY)
+    currentY += lineHeight - 2
+    
+    doc.text(`Contact: ${selectedOrder.value.supplier.contactPerson || 'N/A'}`, marginLeft + contentWidth / 2 + 10, currentY)
+    currentY += lineHeight - 2
+    
+    doc.text(`Phone: ${selectedOrder.value.supplier.phone || 'N/A'}`, marginLeft + contentWidth / 2 + 10, currentY)
+    currentY += lineHeight - 2
+    
+    doc.text(`Email: ${selectedOrder.value.supplier.email || 'N/A'}`, marginLeft + contentWidth / 2 + 10, currentY)
+    
+    // Reset Y position after the boxes
+    currentY += 20
+
+    // Order Items Table
+    doc.setFontSize(12)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Order Items', marginLeft, currentY)
+    currentY += 8
+
+    // Table headers
+    const headers = [['Product', 'SKU', 'Quantity', 'Unit Price', 'Total']]
+    
+    // Table data
+    const data = selectedOrder.value.items.map(item => [
+      item.product.name.length > 25 ? item.product.name.substring(0, 25) + '...' : item.product.name,
+      item.product.sku,
+      item.quantity.toString(),
+      formatCurrencyForPDF(item.unitPrice),
+      formatCurrencyForPDF(item.total)
+    ])
+
+    // Add total row
+    data.push([
+      { content: 'Total:', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } },
+      { content: formatCurrencyForPDF(selectedOrder.value.totalAmount), styles: { fontStyle: 'bold' } }
+    ])
+
+      // Generate the table
+      // doc.autoTable({
+      //   startY: currentY,
+      //   head: headers,
+      //   body: data,
+      //   theme: 'grid',
+      //   headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+      //   styles: { fontSize: 9, cellPadding: 3 },
+      //   columnStyles: {
+      //     0: { cellWidth: 60 },
+      //     1: { cellWidth: 30 },
+      //     2: { cellWidth: 20, halign: 'center' },
+      //     3: { cellWidth: 30, halign: 'right' },
+      //     4: { cellWidth: 30, halign: 'right' }
+      //   },
+      //   margin: { left: marginLeft, right: marginRight }
+      // })
+      autoTable(doc, {
+  startY: currentY,
+  head: headers,
+  body: data,
+  theme: 'grid',
+  headStyles: {
+    fillColor: [240, 240, 240],
+    textColor: [0, 0, 0],
+    fontStyle: 'bold'
+  },
+  styles: {
+    fontSize: 9,
+    cellPadding: 3
+  },
+  columnStyles: {
+    0: { cellWidth: 60 },
+    1: { cellWidth: 30 },
+    2: { cellWidth: 20, halign: 'center' },
+    3: { cellWidth: 30, halign: 'right' },
+    4: { cellWidth: 30, halign: 'right' }
+  },
+  margin: { left: marginLeft, right: marginRight }
+})
+
+    // Update current Y position after the table
+    currentY = doc.lastAutoTable.finalY + 10
+
+    // Add notes if available
+    if (selectedOrder.value.notes) {
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Notes', marginLeft, currentY)
+      currentY += 7
+
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.setDrawColor(240, 240, 240)
+      doc.setFillColor(250, 250, 250)
+      
+      // Create a box for notes
+      doc.roundedRect(marginLeft, currentY, contentWidth, 20, 2, 2, 'FD')
+      
+      // Add notes text with word wrapping
+      const splitNotes = doc.splitTextToSize(selectedOrder.value.notes, contentWidth - 10)
+      doc.text(splitNotes, marginLeft + 5, currentY + 5)
+    }
+
+    // Add footer
+    const pageCount = doc.internal.getNumberOfPages()
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i)
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'italic')
+      doc.setTextColor(100, 100, 100)
+      doc.text(
+        `Created by: ${selectedOrder.value.createdBy?.name || 'Unknown'} | Page ${i} of ${pageCount}`,
+        pageWidth / 2,
+        doc.internal.pageSize.height - 10,
+        { align: 'center' }
+      )
+    }
+
+    // Save the PDF
+    doc.save(`Purchase_Order_${selectedOrder.value.orderNumber}_${format(now, 'yyyy-MM-dd')}.pdf`)
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Success',
+      text: 'Purchase order details exported successfully',
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 3000
+    })
+
+  } catch (error) {
+    console.error('Error exporting purchase order details to PDF:', error)
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'Failed to export purchase order details'
+    })
+  }
+}
 // Update purchase order status
 const updateOrderStatus = async (orderId, newStatus) => {
   try {
@@ -1174,6 +1397,24 @@ onMounted(async () => {
           </div>
 
           <div class="flex items-center gap-3">
+            <button
+      @click="exportPurchaseOrderDetailsPDF"
+      class="inline-flex items-center justify-center rounded-md bg-success py-2 px-4 text-white hover:bg-opacity-90"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-5 w-5 mr-1"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+      >
+        <path
+          fill-rule="evenodd"
+          d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z"
+          clip-rule="evenodd"
+        />
+      </svg>
+      Export PDF
+    </button>
             <button
               v-if="selectedOrder.status === 'pending'"
               @click="updateOrderStatus(selectedOrder._id, 'approved')"

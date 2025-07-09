@@ -122,13 +122,13 @@ const allMenuGroups = ref([
         route: '/pos'
       },
 
-      {
-        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
-              </svg>`,
-        label: 'Report & Analytics',
-        route: '/tables'
-      }
+      // {
+      //   icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
+      //           <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+      //         </svg>`,
+      //   label: 'Report & Analytics',
+      //   route: '/tables'
+      // }
     ]
   },
   {
@@ -141,7 +141,7 @@ const allMenuGroups = ref([
         label: 'Settings',
         route: '#',
         children: [{ label: 'Reorder Point', route: '/settings/reorder-point' }],
-        roles: ['superadmin', 'admin']
+        roles: ['superadmin']
       }
       // {
       //   icon: `<svg

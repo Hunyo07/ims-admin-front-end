@@ -34,7 +34,7 @@ const user = computed(() => authStore.user)
       </span>
 
       <span class="h-12 w-12 rounded-full">
-        <img src="@/assets/images/user/user-01.png" alt="User" />
+        <img class="rounded-full" src="@/assets/images/user/user-.png" alt="User" />
       </span>
 
       <svg
