@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import ProfileCard from '@/components/ProfileCard.vue'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 
 const pageTitle = ref('Profile')
@@ -13,7 +12,7 @@ const pageTitle = ref('Profile')
       <!-- Breadcrumb Start -->
       <BreadcrumbDefault :pageTitle="pageTitle" />
       <!-- Breadcrumb End -->
-      <ProfileCard />
+      <!-- Remove <ProfileCard /> -->
     </div>
   </DefaultLayout>
 </template>

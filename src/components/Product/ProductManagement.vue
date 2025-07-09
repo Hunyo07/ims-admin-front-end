@@ -793,6 +793,7 @@ watch(
           </div>
 
           <button
+            v-if="authStore.hasPermission('export_reports')"
             @click="exportProductsPDF"
             class="inline-flex items-center justify-center rounded-lg bg-success px-6 py-2 text-sm font-medium text-white hover:bg-opacity-90 mr-2"
           >
@@ -811,7 +812,9 @@ watch(
             Export PDF
           </button>
 
+          <!-- Create Product button -->
           <button
+            v-if="authStore.hasPermission('manage_products')"
             @click="showModal = true"
             class="inline-flex items-center justify-center rounded-lg bg-primary px-6 py-2 text-sm font-medium text-white hover:bg-opacity-90"
           >
@@ -970,7 +973,7 @@ watch(
             </td>
             <td class="py-4.5 px-4">
               <div class="flex items-center space-x-2">
-                <button @click="handleEditProduct(product)" class="hover:text-primary">
+                <button v-if="authStore.hasPermission('edit_products')" @click="handleEditProduct(product)" class="hover:text-primary">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     class="h-5 w-5"
@@ -983,6 +986,7 @@ watch(
                   </svg>
                 </button>
                 <button
+                  v-if="authStore.hasPermission('delete_products')"
                   @click="handleDeleteProduct(product._id)"
                   class="hover:text-danger"
                   :disabled="isDeleting && selectedProductId === product._id"
@@ -1091,6 +1095,7 @@ watch(
         <!--  s Navigation -->
 
         <form
+          v-if="authStore.hasPermission('manage_products')"
           @submit.prevent="isEditing ? handleUpdateProduct() : handleAddProduct()"
           class="space-y-6"
         >

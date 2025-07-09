@@ -19,25 +19,29 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  showFallback: {
+  disabled: {
     type: Boolean,
     default: false
   },
-  fallbackMessage: {
+  disabledClass: {
     type: String,
-    default: 'Access Denied'
+    default: 'opacity-50 cursor-not-allowed'
   },
-  fallbackClass: {
+  tooltip: {
     type: String,
-    default: 'text-red-500 text-sm'
+    default: 'Insufficient permissions'
+  },
+  showTooltip: {
+    type: Boolean,
+    default: true
   }
 })
 
 const authStore = useAuthStore()
 
 const hasAccess = computed(() => {
-  // If no roles or permissions specified, deny access
-  if (props.roles.length === 0 && props.permissions.length === 0) return false
+  // If no roles or permissions specified, allow access
+  if (props.roles.length === 0 && props.permissions.length === 0) return true
 
   // Check roles
   let hasRole = true
@@ -62,16 +66,29 @@ const hasAccess = computed(() => {
   return hasRole && hasPermission
 })
 
-const accessDenied = computed(() => {
-  return !hasAccess.value && props.showFallback
+const isDisabled = computed(() => {
+  return props.disabled || !hasAccess.value
+})
+
+const buttonClass = computed(() => {
+  return isDisabled.value ? props.disabledClass : ''
+})
+
+const title = computed(() => {
+  if (!hasAccess.value && props.showTooltip) {
+    return props.tooltip
+  }
+  return ''
 })
 </script>
 
 <template>
-  <div v-if="hasAccess">
+  <button
+    :disabled="isDisabled"
+    :class="buttonClass"
+    :title="title"
+    @click="$emit('click', $event)"
+  >
     <slot></slot>
-  </div>
-  <div v-else-if="accessDenied" :class="fallbackClass">
-    {{ fallbackMessage }}
-  </div>
-</template>
+  </button>
+</template> 

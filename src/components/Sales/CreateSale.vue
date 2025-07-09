@@ -4,6 +4,8 @@ import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import Swal from 'sweetalert2'
 import { inject } from 'vue'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
 const placeholderImage = inject('placeholderImage', '/images/no-image.png')
 const authStore = useAuthStore()
 
@@ -31,6 +33,20 @@ interface Branch {
   name: string
 }
 
+interface LastSale {
+  cart: any[];
+  subtotal: number;
+  total: number;
+  paymentAmount: number;
+  change: number;
+  customerName: string;
+  deliveryFee: number;
+  deliveryMode: string;
+  date: string;
+  orderNumber?: string;
+  notes?: string;
+}
+
 // State
 const products = ref<Product[]>([])
 const filteredProducts = ref<Product[]>([])
@@ -45,6 +61,13 @@ const isProcessing = ref(false)
 const deliveryMode = ref('walk-in')
 const deliveryAddress = ref('')
 const deliveryFee = ref(0)
+const showReceipt = ref(false)
+const lastSale = ref<LastSale | null>(null)
+
+const closeReceipt = () => {
+  showReceipt.value = false
+  lastSale.value = null
+}
 
 // Computed properties
 const subtotal = computed(() => {
@@ -84,22 +107,6 @@ const fetchProducts = async () => {
     })
   } finally {
     isLoading.value = false
-  }
-}
-
-const fetchBranches = async () => {
-  try {
-    const response = await axios.get('http://localhost:5000/api/branches', {
-      headers: {
-        Authorization: `Bearer ${authStore.token}`
-      }
-    })
-    branches.value = response.data.data || response.data
-    if (branches.value.length > 0) {
-      selectedBranch.value = branches.value[0]._id
-    }
-  } catch (error) {
-    console.error('Error fetching branches:', error)
   }
 }
 
@@ -179,6 +186,149 @@ const clearCart = () => {
   paymentAmount.value = 0
 }
 
+const printReceipt = () => {
+  const printContents = document.getElementById('receipt-section').innerHTML
+  const originalContents = document.body.innerHTML
+  document.body.innerHTML = printContents
+  window.print()
+  document.body.innerHTML = originalContents
+  window.location.reload()
+}
+
+const saveReceiptAsPDF = () => {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const marginLeft = 20;
+  const marginRight = 20;
+  const pageWidth = doc.internal.pageSize.width;
+  const contentWidth = pageWidth - marginLeft - marginRight;
+  let y = 20;
+
+  // Title
+  doc.setFontSize(22);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Sales Receipt', pageWidth / 2, y, { align: 'center' });
+  y += 12;
+
+  // Order Number and Date
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  if (lastSale.value && lastSale.value.orderNumber) {
+    doc.text(`Order #: ${lastSale.value.orderNumber}`, marginLeft, y);
+  }
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Date: ${lastSale.value?.date || new Date().toLocaleString()}`, pageWidth - marginRight, y, { align: 'right' });
+  y += 15;
+
+  // Info Boxes (Order Info, Customer Info, Cashier)
+  doc.setDrawColor(240, 240, 240);
+  doc.setFillColor(250, 250, 250);
+  doc.roundedRect(marginLeft, y, contentWidth / 2 - 5, 32, 2, 2, 'FD');
+  doc.roundedRect(marginLeft + contentWidth / 2 + 5, y, contentWidth / 2 - 5, 32, 2, 2, 'FD');
+
+  // Order Info
+  let infoY = y + 7;
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(60, 60, 60);
+  doc.text('Order Information', marginLeft + 5, infoY);
+  infoY += 6;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(0, 0, 0);
+  doc.text(`Status: Completed`, marginLeft + 5, infoY);
+  infoY += 5;
+  doc.text(`Total: ${formatCurrencyForPDF(lastSale.value?.total ?? total.value)}`, marginLeft + 5, infoY);
+  infoY += 5;
+  doc.text(`Payment: ${formatCurrencyForPDF(lastSale.value?.paymentAmount ?? paymentAmount.value)}`, marginLeft + 5, infoY);
+  infoY += 5;
+  doc.text(`Change: ${formatCurrencyForPDF(lastSale.value?.change ?? change.value)}`, marginLeft + 5, infoY);
+  if ((lastSale.value?.deliveryMode ?? deliveryMode.value) === 'delivery') {
+    infoY += 5;
+    doc.text(`Delivery Fee: ${formatCurrencyForPDF(lastSale.value?.deliveryFee ?? deliveryFee.value)}`, marginLeft + 5, infoY);
+  }
+
+  // Customer Info & Cashier
+  let custY = y + 7;
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Customer Information', marginLeft + contentWidth / 2 + 10, custY);
+  custY += 6;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Name: ${lastSale.value?.customerName || customerName.value}`, marginLeft + contentWidth / 2 + 10, custY);
+  custY += 5;
+  doc.text(`Phone: ${customerPhone.value || 'N/A'}`, marginLeft + contentWidth / 2 + 10, custY);
+  custY += 5;
+  doc.text(`Cashier: ${authStore.user?.firstName || ''} ${authStore.user?.lastName || ''}`.trim(), marginLeft + contentWidth / 2 + 10, custY);
+
+  y += 32 + 10;
+
+  // Items Table
+  const isDelivery = (lastSale.value?.deliveryMode ?? deliveryMode.value) === 'delivery';
+  autoTable(doc, {
+    startY: y,
+    head: [['Product', 'SKU', 'Quantity', 'Unit Price', 'Total']],
+    body: (lastSale.value?.cart || cart.value).map(item => [
+      item.name,
+      item.sku || '',
+      String(item.quantity),
+      formatCurrencyForPDF(item.price),
+      formatCurrencyForPDF(item.price * item.quantity)
+    ]),
+    theme: 'grid',
+    headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+    styles: { fontSize: 9, cellPadding: 3 },
+    columnStyles: {
+      0: { cellWidth: 60 },
+      1: { cellWidth: 30 },
+      2: { cellWidth: 20, halign: 'center' },
+      3: { cellWidth: 30, halign: 'right' },
+      4: { cellWidth: 30, halign: 'right' }
+    },
+    foot: [
+      ...(isDelivery ? [[
+        { content: '', colSpan: 3 },
+        { content: 'Delivery Fee:', styles: { fontStyle: 'bold' as const, halign: 'right' as const } },
+        { content: formatCurrencyForPDF(lastSale.value?.deliveryFee ?? deliveryFee.value), styles: { fontStyle: 'bold' as const, halign: 'right' as const } }
+      ]] : []),
+      [
+        { content: '', colSpan: 3 },
+        { content: 'Total:', styles: { fontStyle: 'bold' as const, halign: 'right' as const } },
+        { content: formatCurrencyForPDF(lastSale.value?.total ?? total.value), styles: { fontStyle: 'bold' as const, halign: 'right' as const } }
+      ]
+    ],
+    margin: { left: marginLeft, right: marginRight }
+  });
+  // Fix for jsPDF lastAutoTable type error
+  y = ((doc as any).lastAutoTable && (doc as any).lastAutoTable.finalY) ? (doc as any).lastAutoTable.finalY + 10 : y + 10;
+
+  // Notes (if any)
+  if (lastSale.value && lastSale.value.notes) {
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Notes', marginLeft, y);
+    y += 7;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setDrawColor(240, 240, 240);
+    doc.setFillColor(250, 250, 250);
+    doc.roundedRect(marginLeft, y, contentWidth, 20, 2, 2, 'FD');
+    const splitNotes = doc.splitTextToSize(lastSale.value.notes, contentWidth - 10);
+    doc.text(splitNotes, marginLeft + 5, y + 5);
+    y += 25;
+  }
+
+  // Thank you message
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(12);
+  doc.text('Thank you for your purchase!', pageWidth / 2, y, { align: 'center' });
+  doc.save('receipt.pdf');
+}
+const formatCurrencyForPDF = (amount: number) => {
+  // Format without using Intl.NumberFormat to avoid compatibility issues with jsPDF
+  return 'PHP ' + amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
 const processSale = async () => {
   if (cart.value.length === 0) {
     Swal.fire({
@@ -222,11 +372,25 @@ const processSale = async () => {
       }
     })
     
-    Swal.fire({
-      icon: 'success',
-      title: 'Sale Completed',
-      text: `Total: ${formatCurrency(response.data.sale.total)}, Change: ${formatCurrency(response.data.sale.change)}`
-    })
+    // Swal.fire({
+    //   icon: 'success',
+    //   title: 'Sale Completed',
+    //   text: `Total: ${formatCurrency(response.data.sale.total)}, Change: ${formatCurrency(response.data.sale.change)}`
+    // })
+    
+    // Set receipt data BEFORE clearing cart/resetting form
+    lastSale.value = {
+      cart: JSON.parse(JSON.stringify(cart.value)),
+      subtotal: subtotal.value,
+      total: total.value,
+      paymentAmount: paymentAmount.value,
+      change: change.value,
+      customerName: customerName.value,
+      deliveryFee: deliveryFee.value,
+      deliveryMode: deliveryMode.value,
+      date: new Date().toLocaleString()
+    }
+    showReceipt.value = true
     
     // Reset form
     clearCart()
@@ -242,6 +406,20 @@ const processSale = async () => {
     
     // Refresh product list to get updated stock levels
     fetchProducts()
+    
+    // After successful sale:
+    // showReceipt.value = true // This line is now moved up
+    // lastSale.value = { // This line is now moved up
+    //   cart: JSON.parse(JSON.stringify(cart.value)),
+    //   subtotal: subtotal.value,
+    //   total: total.value,
+    //   paymentAmount: paymentAmount.value,
+    //   change: change.value,
+    //   customerName: customerName.value,
+    //   deliveryFee: deliveryFee.value,
+    //   deliveryMode: deliveryMode.value,
+    //   date: new Date().toLocaleString()
+    // }
     
   } catch (error) {
     console.error('Error processing sale:', error)
@@ -611,6 +789,7 @@ watch(customerSearchQuery, () => {
             ></textarea>
           </div>
           
+          <!-- Delivery Fee input -->
           <div>
             <label class="mb-2.5 block text-sm font-medium text-black dark:text-white">Delivery Fee</label>
             <div class="relative">
@@ -619,9 +798,10 @@ watch(customerSearchQuery, () => {
                 v-model="deliveryFee"
                 min="0"
                 step="10"
-                class="w-full rounded-lg border-[1.5px] border-stroke bg-transparent pl-10 pr-4 py-2.5 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+                class="w-full rounded-lg border-[1.5px] border-stroke bg-transparent pr-4 py-2.5 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               />
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₱</span>
+              <!-- Show formatted value below input -->
+              <div class="text-xs text-gray-500 mt-1">{{ formatCurrency(deliveryFee) }}</div>
             </div>
           </div>
         </div>
@@ -638,16 +818,18 @@ watch(customerSearchQuery, () => {
           </select>
         </div>
         
+        <!-- Payment Amount input -->
         <div>
           <label class="mb-2.5 block text-sm font-medium text-black dark:text-white">Payment Amount</label>
           <div class="relative">
             <input
               type="number"
               v-model="paymentAmount"
-              class="w-full rounded-lg border-[1.5px] border-stroke bg-transparent pl-10 pr-4 py-2.5 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+              class="w-full rounded-lg border-[1.5px] border-stroke bg-transparent pr-4 py-2.5 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               :class="{ 'border-danger': insufficientPayment }"
             />
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₱</span>
+            <!-- Show formatted value below input -->
+            <div class="text-xs text-gray-500 mt-1">{{ formatCurrency(paymentAmount) }}</div>
           </div>
           <p v-if="insufficientPayment" class="mt-1 text-xs text-danger">
             Payment amount must be at least {{ formatCurrency(total) }}
@@ -686,6 +868,7 @@ watch(customerSearchQuery, () => {
       <!-- Checkout Button -->
       <div class="mt-6">
         <button
+          v-if="authStore.hasPermission('process_sales')"
           @click="processSale"
           :disabled="cart.length === 0 || insufficientPayment || isProcessing"
           class="w-full rounded-lg bg-primary py-3 px-6 text-white transition hover:bg-opacity-90 disabled:bg-opacity-50 flex items-center justify-center"
@@ -704,6 +887,47 @@ watch(customerSearchQuery, () => {
             Complete Sale
           </span>
         </button>
+      </div>
+    </div>
+  </div>
+  <div v-if="showReceipt" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div class="bg-white p-6 rounded shadow max-w-md w-full relative">
+      <button @click="closeReceipt" class="absolute top-2 right-2 text-gray-400 hover:text-danger">&times;</button>
+      <div id="receipt-section">
+        <h2 class="text-lg font-bold text-center mb-2">Books & Clothes House</h2>
+        <div class="text-xs text-center mb-2">{{ lastSale.date }}</div>
+        <div class="mb-2">Customer: {{ lastSale.customerName }}</div>
+        <div class="border-t border-b py-2 my-2">
+          <div v-for="item in lastSale.cart" :key="item.productId" class="flex justify-between text-sm">
+            <span>{{ item.name }} x{{ item.quantity }}</span>
+            <span>₱{{ item.price.toFixed(2) }}</span>
+          </div>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span>Subtotal:</span>
+          <span>₱{{ lastSale.subtotal.toFixed(2) }}</span>
+        </div>
+        <div v-if="lastSale.deliveryMode === 'delivery'" class="flex justify-between text-sm">
+          <span>Delivery Fee:</span>
+          <span>₱{{ lastSale.deliveryFee.toFixed(2) }}</span>
+        </div>
+        <div class="flex justify-between text-sm font-bold">
+          <span>Total:</span>
+          <span>₱{{ lastSale.total.toFixed(2) }}</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span>Payment:</span>
+          <span>₱{{ lastSale.paymentAmount.toFixed(2) }}</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span>Change:</span>
+          <span>₱{{ lastSale.change.toFixed(2) }}</span>
+        </div>
+        <div class="text-center mt-4 text-xs">Thank you for your purchase!</div>
+      </div>
+      <div class="flex justify-center gap-4 mt-4">
+        <button @click="printReceipt" class="bg-primary text-white px-4 py-2 rounded">Print Receipt</button>
+        <button @click="saveReceiptAsPDF" class="bg-success text-white px-4 py-2 rounded">Save as PDF</button>
       </div>
     </div>
   </div>

@@ -28,13 +28,15 @@ const handleSubmit = async (e: Event) => {
       email: email.value,
       password: password.value
     })
+    
     const { token, user } = response.data
     // Store auth data
     authStore.setToken(token)
     authStore.setUser(user)
 
-    // Redirect based on role
-    switch (user.role) {
+    // Redirect based on role\
+    console.log('User role:', user.role.name)
+    switch (user.role.name) {
       case 'superadmin':
         router.push('/eCommerce')
         break
@@ -42,7 +44,7 @@ const handleSubmit = async (e: Event) => {
         router.push('/eCommerce')
         break
       case 'staff':
-        router.push('/eCommerce')
+        router.push('/pos')
         break
       default:
         router.push('/')
@@ -59,7 +61,7 @@ const handleSubmit = async (e: Event) => {
   <div
     class="flex min-h-screen items-center justify-center bg-gray-100 px-4 py-12 dark:bg-boxdark sm:px-6 lg:px-8"
   >
-    <DefaultAuthCard subtitle="Welcome back" title="Inventory Management System">
+    <DefaultAuthCard subtitle="" title="Inventory Management System">
       <form @submit="handleSubmit" class="space-y-6">
         <InputGroup
           label="Email Address"
@@ -101,6 +103,12 @@ const handleSubmit = async (e: Event) => {
             />
           </svg>
         </InputGroup>
+        <!-- Forgot Password Link -->
+        <div class="mb-4 text-right">
+          <router-link to="/forgot-password" class="text-primary hover:underline text-sm">
+            Forgot Password?
+          </router-link>
+        </div>
         <!-- Error Alert -->
         <div
           v-if="errorMessage"
@@ -114,31 +122,12 @@ const handleSubmit = async (e: Event) => {
           </svg>
           {{ errorMessage }}
         </div>
-        <div class="flex items-center justify-between">
-          <div class="flex items-center">
-            <input
-              id="remember-me"
-              type="checkbox"
-              class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-            />
-            <label for="remember-me" class="ml-2 block text-sm text-gray-600 dark:text-gray-400">
-              Remember me
-            </label>
-          </div>
-
-          <router-link
-            to="/auth/reset-password"
-            class="text-sm font-medium text-primary hover:text-primary-dark"
-          >
-            Forgot password?
-          </router-link>
-        </div>
 
         <div>
           <button
             type="submit"
             :disabled="isLoading"
-            class="group relative flex w-full justify-center rounded-lg border border-primary bg-primary px-4 py-3 text-sm font-medium text-white transition hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 dark:focus:ring-offset-boxdark"
+            class="group relative flex w-full justify-center rounded-lg bg-rose-400 px-4 py-3 text-sm font-medium text-white transition hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 dark:focus:ring-offset-boxdark"
           >
             <span class="absolute inset-y-0 left-0 flex items-center pl-3">
               <svg
@@ -173,18 +162,6 @@ const handleSubmit = async (e: Event) => {
             </span>
             {{ isLoading ? 'Signing in...' : 'Sign In' }}
           </button>
-        </div>
-
-        <div class="mt-6 text-center">
-          <p class="text-sm text-gray-600 dark:text-gray-400">
-            Need help? Contact
-            <a
-              href="mailto:support@example.com"
-              class="font-medium text-primary hover:text-primary-dark"
-            >
-              support
-            </a>
-          </p>
         </div>
       </form>
     </DefaultAuthCard>

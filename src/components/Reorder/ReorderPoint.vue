@@ -99,7 +99,7 @@ const fetchProducts = async () => {
 // Add this new function to fetch reorder points
 const fetchReorderPoints = async () => {
   try {
-    const response = await axios.get('http://localhost:5000/api/reorder-points', {
+    const response = await axios.get('http://localhost:5000/api/reorder', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -149,7 +149,7 @@ const saveReorderSettings = async () => {
     if (selectedProduct.value.reorderPointId) {
       // Update existing reorder point
       response = await axios.put(
-        `http://localhost:5000/api/reorder-points/${selectedProduct.value.reorderPointId}`,
+        `http://localhost:5000/api/reorder/${selectedProduct.value.reorderPointId}`,
         {
           minimumStock: editForm.value.reorderLevel,
           reorderQuantity: editForm.value.reorderQuantity,
@@ -177,7 +177,7 @@ const saveReorderSettings = async () => {
       }
       console.log('Sending data to create reorder point:', requestData)
 
-      response = await axios.post('http://localhost:5000/api/reorder-points', requestData, {
+      response = await axios.post('http://localhost:5000/api/reorder', requestData, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -293,7 +293,7 @@ const applyBulkUpdate = async () => {
     }
 
     const response = await axios.post(
-      'http://localhost:5000/api/reorder-points/bulk-update',
+      'http://localhost:5000/api/reorder/bulk-update',
       {
         products: products.value
           .filter((p) => p.category?._id === bulkForm.value.categoryId)
@@ -343,7 +343,7 @@ const triggerReorderCheck = async () => {
       }
     })
 
-    const response = await axios.get('http://localhost:5000/api/reorder-points/check', {
+    const response = await axios.get('http://localhost:5000/api/reorder/check', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -382,7 +382,7 @@ const triggerAutoReorder = async () => {
     })
 
     const response = await axios.post(
-      'http://localhost:5000/api/reorder-points/auto-reorder',
+      'http://localhost:5000/api/reorder/auto-reorder',
       {},
       {
         headers: {

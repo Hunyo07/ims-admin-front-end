@@ -6,7 +6,7 @@ import Swal from 'sweetalert2'
 import Datepicker from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
 import { jsPDF } from 'jspdf'
-import 'jspdf-autotable'
+import autoTable from 'jspdf-autotable'
 import { format } from 'date-fns'
 
 const authStore = useAuthStore()
@@ -220,6 +220,111 @@ const exportInventoryCountsPDF = async () => {
     })
   }
 }
+
+// Add exportInventoryCountDetailsPDF function
+const exportInventoryCountDetailsPDF = () => {
+  if (!selectedCount.value) return;
+  const count = selectedCount.value.inventoryCount;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const marginLeft = 20;
+  const marginRight = 20;
+  const pageWidth = doc.internal.pageSize.width;
+  const contentWidth = pageWidth - marginLeft - marginRight;
+  let currentY = 20;
+
+  // Title
+  doc.setFontSize(22);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Inventory Count Details', pageWidth / 2, currentY, { align: 'center' });
+  currentY += 12;
+
+  // Line
+  doc.setDrawColor(220, 220, 220);
+  doc.setLineWidth(0.5);
+  doc.line(marginLeft, currentY, pageWidth - marginLeft, currentY);
+  currentY += 8;
+
+  // Count Info Box
+  doc.setDrawColor(240, 240, 240);
+  doc.setFillColor(250, 250, 250);
+  doc.roundedRect(marginLeft, currentY, contentWidth, 32, 2, 2, 'FD');
+  let infoY = currentY + 8;
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(60, 60, 60);
+  doc.text('Count Information', marginLeft + 5, infoY);
+  infoY += 7;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(0, 0, 0);
+  doc.text(`Count Number: ${count.countNumber}`, marginLeft + 5, infoY);
+  infoY += 5;
+  doc.text(`Count Date: ${formatDate(count.countDate)}`, marginLeft + 5, infoY);
+  infoY += 5;
+  doc.text(`Created: ${formatDate(count.createdAt)}`, marginLeft + 5, infoY);
+  infoY += 5;
+  doc.text(`Created By: ${count.createdBy?.user.firstName || 'Unknown'}`, marginLeft + 5, infoY);
+  currentY += 36;
+
+  // Items Table
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Count Items', marginLeft, currentY);
+  currentY += 8;
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Product Name', 'SKU', 'Expected Qty', 'Notes']],
+    body: count.products.map(item => [
+      item.product.name,
+      item.product.sku,
+      String(item.expectedQuantity),
+      item.notes || '-'
+    ]),
+    theme: 'grid',
+    headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+    styles: { fontSize: 9, cellPadding: 3 },
+    columnStyles: {
+      0: { cellWidth: 60 },
+      1: { cellWidth: 30 },
+      2: { cellWidth: 30, halign: 'center' },
+      3: { cellWidth: 50 }
+    },
+    margin: { left: marginLeft, right: marginRight }
+  });
+  currentY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : currentY + 40;
+
+  // Notes
+  if (selectedCount.value.notes) {
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Notes', marginLeft, currentY);
+    currentY += 7;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setDrawColor(240, 240, 240);
+    doc.setFillColor(250, 250, 250);
+    doc.roundedRect(marginLeft, currentY, contentWidth, 20, 2, 2, 'FD');
+    const splitNotes = doc.splitTextToSize(selectedCount.value.notes, contentWidth - 10);
+    doc.text(splitNotes, marginLeft + 5, currentY + 5);
+  }
+
+  // Footer
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100, 100, 100);
+    doc.text(
+      `Created by: ${count.createdBy?.user.firstName || 'Unknown'} | Page ${i} of ${pageCount}`,
+      pageWidth / 2,
+      doc.internal.pageSize.height - 10,
+      { align: 'center' }
+    );
+  }
+
+  doc.save(`Inventory_Count_Details_${count.countNumber}.pdf`);
+};
 
 // Helper function to get total products counted
 const getTotalProductsCounted = () => {
@@ -531,25 +636,26 @@ onMounted(async () => {
         <h3 class="text-xl font-semibold text-black dark:text-white">Inventory Counts</h3>
         <div class="flex items-center gap-3">
           <button
-    @click="exportInventoryCountsPDF"
-    class="inline-flex items-center justify-center rounded-md bg-success py-2 px-4 text-white hover:bg-opacity-90"
-  >
-    <svg
-      class="mr-2 h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-      ></path>
-    </svg>
-    Export PDF
-  </button>
+            v-if="authStore.hasRole(['admin', 'superadmin'])"
+            @click="exportInventoryCountsPDF"
+            class="inline-flex items-center justify-center rounded-md bg-success py-2 px-4 text-white hover:bg-opacity-90"
+          >
+            <svg
+              class="mr-2 h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              ></path>
+            </svg>
+            Export PDF
+          </button>
           <button
             @click="showCreateModal = true"
             class="inline-flex items-center justify-center rounded-md bg-primary py-2 px-4 text-white hover:bg-opacity-90"
@@ -896,7 +1002,6 @@ onMounted(async () => {
       <div class="border-b border-stroke px-6.5 py-4 dark:border-strokedark">
         <div class="flex items-center justify-between">
           <h3 class="text-xl font-semibold text-black dark:text-white">Inventory Count Details</h3>
-
           <button @click="showDetailsModal = false" class="text-gray-500 hover:text-red-500">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -915,8 +1020,8 @@ onMounted(async () => {
           </button>
         </div>
       </div>
-
       <div class="p-6.5">
+     
         <div class="grid grid-cols-2 gap-6 mb-6">
           <div class="col-span-1">
             <h4 class="text-lg font-semibold mb-3">Count Information</h4>
@@ -975,8 +1080,15 @@ onMounted(async () => {
             {{ selectedCount.notes }}
           </div>
         </div>
+        <div class="flex items-center justify-end mb-4">
+          <button
+            v-if="authStore.hasPermission('generate_reports')"
+            @click="exportInventoryCountDetailsPDF"
+            class="inline-flex items-center justify-center rounded-md bg-success py-2 px-4 mr-4 text-center font-medium text-white hover:bg-opacity-90"
+          >
+            Export PDF
+          </button>
 
-        <div class="flex items-center justify-end">
           <button
             @click="showDetailsModal = false"
             class="inline-flex items-center justify-center rounded-md border border-stroke py-2 px-4 text-center font-medium text-black hover:border-primary hover:bg-primary hover:text-white dark:border-strokedark dark:text-white"

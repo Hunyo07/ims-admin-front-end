@@ -342,6 +342,7 @@ onMounted(() => {
           </div>
 
           <button
+            v-if="authStore.hasPermission('manage_customers')"
             @click="showModal = true"
             class="inline-flex items-center justify-center rounded-lg bg-primary px-6 py-2 text-sm font-medium text-white hover:bg-opacity-90"
           >
@@ -400,7 +401,7 @@ onMounted(() => {
             </td>
             <td class="py-4.5 px-4">
               <div class="flex items-center space-x-2">
-                <button @click="handleEditCustomer(customer)" class="hover:text-primary">
+                <button v-if="authStore.hasPermission('edit_customers')" @click="handleEditCustomer(customer)" class="hover:text-primary">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     class="h-5 w-5"
@@ -414,6 +415,7 @@ onMounted(() => {
                 </button>
           
                 <button
+                  v-if="authStore.hasPermission('delete_customers')"
                   @click="handleDeleteCustomer(customer._id)"
                   class="hover:text-danger"
                   :disabled="isDeleting && selectedCustomerId === customer._id"

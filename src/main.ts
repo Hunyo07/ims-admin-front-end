@@ -36,4 +36,20 @@ import { vPermission, vRole } from './directives/permission'
 // Add these lines before app.mount('#app')
 app.directive('permission', vPermission)
 app.directive('role', vRole)
+
+// Initialize user data if token exists
+const pinia = createPinia()
+app.use(pinia)
+
+// Fetch user data on app initialization
+import { useAuthStore } from './stores/auth'
+const authStore = useAuthStore()
+
+// If user has a token, fetch their current data
+if (authStore.token) {
+  authStore.fetchCurrentUser().catch(error => {
+    console.error('Failed to fetch user data on app initialization:', error)
+  })
+}
+
 app.mount('#app')

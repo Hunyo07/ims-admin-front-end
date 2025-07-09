@@ -1,22 +1,55 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
 // @ts-ignore
 import VueApexCharts from 'vue3-apexcharts'
 
-const chartData = {
-  series: [65, 34, 45, 12],
-  labels: ['Desktop', 'Tablet', 'Mobile', 'Unknown']
+interface Props {
+  productData?: {
+    totalProducts?: number
+    activeProducts?: number
+    totalStock?: number
+    averagePrice?: number
+    totalValue?: number
+    lowStock?: number
+  } | null
 }
+
+const props = withDefaults(defineProps<Props>(), {
+  productData: null
+})
 
 const chart = ref(null)
 
-const apexOptions = {
+// Generate chart data based on product statistics
+const chartData = computed(() => {
+  if (!props.productData) {
+    return {
+      series: [0, 0, 0, 0],
+      labels: ['Active Products', 'Low Stock', 'Out of Stock', 'Total Value']
+    }
+  }
+
+  const { totalProducts, activeProducts, lowStock, totalValue } = props.productData
+  
+  // Calculate percentages and values for the donut chart
+  const activePercentage = totalProducts ? (activeProducts / totalProducts) * 100 : 0
+  const lowStockPercentage = totalProducts ? (lowStock / totalProducts) * 100 : 0
+  const outOfStockPercentage = totalProducts ? ((totalProducts - activeProducts) / totalProducts) * 100 : 0
+  const valuePercentage = totalValue ? Math.min((totalValue / 100000) * 100, 100) : 0 // Normalize to 100k max
+
+  return {
+    series: [activePercentage, lowStockPercentage, outOfStockPercentage, valuePercentage],
+    labels: ['Active Products', 'Low Stock', 'Out of Stock', 'Inventory Value']
+  }
+})
+
+const apexOptions = computed(() => ({
   chart: {
     type: 'donut',
     width: 380
   },
-  colors: ['#3C50E0', '#6577F3', '#8FD0EF', '#0FADCF'],
-  labels: chartData.labels,
+  colors: ['#10B981', '#F59E0B', '#EF4444', '#3B82F6'],
+  labels: chartData.value.labels,
   legend: {
     show: false,
     position: 'bottom'
@@ -42,7 +75,14 @@ const apexOptions = {
       }
     }
   ]
-}
+}))
+
+// Watch for changes in product data and update chart
+watch(() => props.productData, () => {
+  if (chart.value) {
+    chart.value.updateSeries(chartData.value.series)
+  }
+}, { deep: true })
 </script>
 
 <template>
@@ -51,7 +91,8 @@ const apexOptions = {
   >
     <div class="mb-3 justify-between gap-4 sm:flex">
       <div>
-        <h4 class="text-xl font-bold text-black dark:text-white">Visitors Analytics</h4>
+        <h4 class="text-xl font-bold text-black dark:text-white">Product Analytics</h4>
+        <p class="text-sm text-gray-500">Inventory distribution overview</p>
       </div>
       <div>
         <div class="relative z-20 inline-block">
@@ -100,37 +141,37 @@ const apexOptions = {
     <div class="-mx-8 flex flex-wrap items-center justify-center gap-y-3">
       <div class="w-full px-8 sm:w-1/2">
         <div class="flex w-full items-center">
-          <span class="mr-2 block h-3 w-full max-w-3 rounded-full bg-primary"></span>
+          <span class="mr-2 block h-3 w-full max-w-3 rounded-full bg-[#10B981]"></span>
           <p class="flex w-full justify-between text-sm font-medium text-black dark:text-white">
-            <span> Desktop </span>
-            <span> 65% </span>
+            <span> Active Products </span>
+            <span> {{ productData?.activeProducts || 0 }} </span>
           </p>
         </div>
       </div>
       <div class="w-full px-8 sm:w-1/2">
         <div class="flex w-full items-center">
-          <span class="mr-2 block h-3 w-full max-w-3 rounded-full bg-[#6577F3]"></span>
+          <span class="mr-2 block h-3 w-full max-w-3 rounded-full bg-[#F59E0B]"></span>
           <p class="flex w-full justify-between text-sm font-medium text-black dark:text-white">
-            <span> Tablet </span>
-            <span> 34% </span>
+            <span> Low Stock </span>
+            <span> {{ productData?.lowStock || 0 }} </span>
           </p>
         </div>
       </div>
       <div class="w-full px-8 sm:w-1/2">
         <div class="flex w-full items-center">
-          <span class="mr-2 block h-3 w-full max-w-3 rounded-full bg-[#8FD0EF]"></span>
+          <span class="mr-2 block h-3 w-full max-w-3 rounded-full bg-[#EF4444]"></span>
           <p class="flex w-full justify-between text-sm font-medium text-black dark:text-white">
-            <span> Mobile </span>
-            <span> 45% </span>
+            <span> Out of Stock </span>
+            <span> {{ (productData?.totalProducts || 0) - (productData?.activeProducts || 0) }} </span>
           </p>
         </div>
       </div>
       <div class="w-full px-8 sm:w-1/2">
         <div class="flex w-full items-center">
-          <span class="mr-2 block h-3 w-full max-w-3 rounded-full bg-[#0FADCF]"></span>
+          <span class="mr-2 block h-3 w-full max-w-3 rounded-full bg-[#3B82F6]"></span>
           <p class="flex w-full justify-between text-sm font-medium text-black dark:text-white">
-            <span> Unknown </span>
-            <span> 12% </span>
+            <span> Total Value </span>
+            <span> ₱{{ productData?.totalValue?.toLocaleString() || '0' }} </span>
           </p>
         </div>
       </div>

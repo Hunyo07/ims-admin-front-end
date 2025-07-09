@@ -633,6 +633,7 @@ onMounted(() => {
         Apply Filters
       </button>
       <button
+    v-if="authStore.hasPermission('generate_reports')"
     @click="exportSalesPDF"
     class="flex items-center justify-center rounded bg-success px-6 py-2 text-white hover:bg-opacity-90"
   >

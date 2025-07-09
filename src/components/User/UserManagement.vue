@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import { socket } from '@/socket'
 import Swal from 'sweetalert2'
+import { ref, onMounted, computed, watch } from 'vue'
 
 const authStore = useAuthStore()
 
@@ -556,6 +556,20 @@ watch(
     newUser.value.age = calculateAge(newDate)
   }
 )
+
+// Place these after all imports and before the export
+const canAssignRole = computed(() => authStore.hasPermission('assign_roles') || authStore.hasPermission('manage_users'));
+const canCreateUser = computed(() => authStore.hasPermission('manage_users'));
+const filteredRoles = computed(() => {
+  const userRole = authStore.getUserRole();
+  if (userRole === 'superadmin') {
+    // Exclude superadmin and customer from the dropdown
+    return roles.value.filter(role => role.name !== 'superadmin' && role.name !== 'customer');
+  } else if (userRole === 'admin') {
+    return roles.value.filter(role => role.name === 'staff');
+  }
+  return [];
+});
 </script>
 
 <template>
@@ -606,6 +620,7 @@ watch(
             </option>
           </select> -->
           <button
+            v-if="canCreateUser"
             @click="showModal = true"
             class="inline-flex items-center justify-center rounded-lg bg-primary px-6 py-2 text-sm font-medium text-white hover:bg-opacity-90"
           >
@@ -624,7 +639,6 @@ watch(
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Email</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Role</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Status</th>
-            <!-- <th class="py-4.5 px-4 font-medium text-black dark:text-white">Branch Designated</th> -->
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Actions</th>
           </tr>
         </thead>
@@ -1041,14 +1055,16 @@ watch(
                 <div>
                   <label class="mb-2.5 block text-black dark:text-white">Role</label>
                   <select
+                    v-if="canAssignRole"
                     v-model="newUser.role"
                     required
                     class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
                   >
-                    <option v-for="role in roles" :key="role._id" :value="role._id">
+                    <option v-for="role in filteredRoles" :key="role._id" :value="role._id">
                       {{ role.name }}
                     </option>
                   </select>
+                  <input v-else type="text" v-model="newUser.role" readonly class="w-full rounded border-[1.5px] border-stroke bg-gray-100 px-5 py-3 outline-none dark:border-form-strokedark dark:bg-form-input" :required="false" tabindex="-1" />
                 </div>
                 <div>
                   <label class="mb-2.5 block text-black dark:text-white">Employment Date</label>

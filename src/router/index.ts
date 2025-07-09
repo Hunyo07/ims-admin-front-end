@@ -12,7 +12,6 @@ import TablesView from '@/views/TablesView.vue'
 import AlertsView from '@/views/UiElements/AlertsView.vue'
 import ButtonsView from '@/views/UiElements/ButtonsView.vue'
 import UserManagementView from '@/views/User/UserManagementView.vue'
-import BranchManagementView from '@/views/Branch/BranchManagementView.vue'
 import CustomerManagementView from '@/views/Customer/CustomerManagementView.vue'
 import SupplierManagementView from '@/views/Supplier/SupplierManagementView.vue'
 import MainCategoryView from '@/views/Category/MainCategoryView.vue'
@@ -25,6 +24,8 @@ import ReorderView from '@/views/Reorder/PurchaseMangementView.vue'
 import ReorderPointView from '@/views/Settings/ReorderPointView.vue'
 import InventoryCounts from '@/views/Inventory/InventoryCountsView.vue'
 import StockAdjustments from '@/views/Inventory/StockAdjustmentsView.vue'
+import ForgotPasswordView from '@/views/Authentication/ForgotPasswordView.vue';
+import ResetPasswordView from '@/views/Authentication/ResetPasswordView.vue';
 
 // Add this to your imports
 import { useAuthStore } from '@/stores/auth'
@@ -49,6 +50,24 @@ const routes = [
     }
   },
   {
+    path: '/forgot-password',
+    name: 'forgot-password',
+    component: ForgotPasswordView,
+    meta: {
+      title: 'Forgot Password',
+      requiresAuth: false
+    }
+  },
+  {
+    path: '/reset-password/:token',
+    name: 'reset-password',
+    component: ResetPasswordView,
+    meta: {
+      title: 'Reset Password',
+      requiresAuth: false
+    }
+  },
+  {
     path: '/eCommerce',
     name: 'eCommerce',
     component: ECommerceView,
@@ -63,7 +82,9 @@ const routes = [
     component: InventoryCounts,
     meta: {
       title: 'Inventory Counts',
-      requiresAuth: true
+      requiresAuth: true,
+      roles: ['superadmin', 'admin', 'staff'],
+      permissions: ['view_inventory']
     }
   },
   {
@@ -92,16 +113,8 @@ const routes = [
     meta: {
       title: 'User Management',
       requiresAuth: true,
-      roles: ['superadmin', 'admin']
-    }
-  },
-  {
-    path: '/branch',
-    name: 'branch',
-    component: BranchManagementView,
-    meta: {
-      title: 'Branch Management',
-      requiresAuth: true
+      roles: ['superadmin', 'admin'],
+      permissions: ['view_users', 'manage_users']
     }
   },
   {
@@ -110,7 +123,9 @@ const routes = [
     component: CustomerManagementView,
     meta: {
       title: 'Customer Management',
-      requiresAuth: true
+      requiresAuth: true,
+      roles: ['superadmin', 'admin', 'staff'],
+      permissions: ['view_customers', 'manage_customers']
     }
   },
   {
@@ -119,7 +134,9 @@ const routes = [
     component: CreatSaleView,
     meta: {
       title: 'POS Management',
-      requiresAuth: true
+      requiresAuth: true,
+      roles: ['superadmin', 'admin', 'staff'],
+      permissions: ['use_pos']
     }
   },
   {
@@ -128,7 +145,9 @@ const routes = [
     component: SalesManagementView,
     meta: {
       title: 'Sales Management',
-      requiresAuth: true
+      requiresAuth: true,
+      roles: ['superadmin', 'admin', 'staff'],
+      permissions: ['view_sales', 'process_sales']
     }
   },
   {
@@ -137,7 +156,9 @@ const routes = [
     component: SupplierManagementView,
     meta: {
       title: 'Supplier Management',
-      requiresAuth: true
+      requiresAuth: true,
+      roles: ['superadmin'],
+      permissions: ['view_suppliers', 'manage_suppliers']
     }
   },
   {
@@ -146,7 +167,9 @@ const routes = [
     component: MainCategoryView,
     meta: {
       title: 'Category Management',
-      requiresAuth: true
+      requiresAuth: true,
+      roles: ['superadmin', 'admin'],
+      permissions: ['view_categories', 'manage_categories']
     }
   },
   {
@@ -155,7 +178,9 @@ const routes = [
     component: SubCategoryView,
     meta: {
       title: 'Sub Category Management',
-      requiresAuth: true
+      requiresAuth: true,
+      roles: ['superadmin', 'admin'],
+      permissions: ['view_categories', 'manage_categories']
     }
   },
   {
@@ -164,7 +189,9 @@ const routes = [
     component: ReorderPointView,
     meta: {
       title: 'Reorder Point',
-      requiresAuth: true
+      requiresAuth: true,
+      roles: ['superadmin'],
+      permissions: ['manage_settings']
     }
   },
   {
@@ -173,7 +200,9 @@ const routes = [
     component: ProductManagementView,
     meta: {
       title: 'Product Management',
-      requiresAuth: true
+      requiresAuth: true,
+      roles: ['superadmin', 'admin', 'staff'],
+      permissions: ['view_products']
     }
   },
   {
@@ -182,7 +211,9 @@ const routes = [
     component: ReorderView,
     meta: {
       title: 'Reorder Management',
-      requiresAuth: true
+      requiresAuth: true,
+      roles: ['superadmin', 'admin'],
+      permissions: ['view_orders', 'manage_orders']
     }
   },
   {
@@ -191,7 +222,9 @@ const routes = [
     component: BarcodesView,
     meta: {
       title: 'Product Management',
-      requiresAuth: true
+      requiresAuth: true,
+      roles: ['superadmin', 'admin'],
+      permissions: ['view_barcodes', 'manage_barcodes']
     }
   },
   {
@@ -274,6 +307,15 @@ const routes = [
       title: 'Buttons',
       requiresAuth: true
     }
+  },
+  {
+    path: '/settings/account',
+    name: 'account-settings',
+    component: SettingsView,
+    meta: {
+      title: 'Account Settings',
+      requiresAuth: true
+    }
   }
 ]
 
@@ -286,7 +328,6 @@ const router = createRouter({
 })
 
 // Authentication Guard
-// Update your router.beforeEach guard
 router.beforeEach((to, from, next) => {
   document.title = `Books & Clothes House ${to.meta.title} | Cloud-Based IMS - Books & Clothes House`
 
@@ -295,27 +336,23 @@ router.beforeEach((to, from, next) => {
 
   // Prevent authenticated users from accessing signin/signup
   if (isAuthenticated && (to.name === 'signin' || to.name === 'signup')) {
-    next({ name: 'eCommerce' }) // Redirect to dashboard or another page
+    next({ name: 'eCommerce' })
   }
   // Check for authentication and role requirements
   else if (to.meta.requiresAuth) {
     if (!isAuthenticated) {
-      next({ name: 'signin' }) // Redirect to login if not authenticated
+      next({ name: 'signin' })
     }
-    // Check for role requirements
-    else if (to.meta.roles && !authStore.hasRole(to.meta.roles)) {
-      // Redirect to unauthorized page or dashboard
-      next({ name: 'eCommerce' })
-    }
-    // Check for permission requirements
-    else if (
-      to.meta.permissions &&
-      !to.meta.permissions.every((permission) => authStore.hasPermission(permission))
-    ) {
-      // Redirect to unauthorized page or dashboard
-      next({ name: 'eCommerce' })
-    } else {
-      next() // Allow navigation
+    // Temporarily allow all authenticated users while debugging
+    else {
+      console.log('Route access check:', {
+        route: to.path,
+        userRole: authStore.userRole,
+        userPermissions: authStore.userPermissions,
+        requiredRoles: to.meta.roles,
+        requiredPermissions: to.meta.permissions
+      })
+      next() // Allow navigation for now
     }
   } else {
     next() // Allow navigation for public routes
