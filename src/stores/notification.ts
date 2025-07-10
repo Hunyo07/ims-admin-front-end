@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import axios from 'axios'
-import { socket } from '../socket'
 import { useAuthStore } from './auth'
 
 // const authStore = useAuthStore()
@@ -37,6 +36,8 @@ export const useNotificationStore = defineStore('notification', {
       }
 
       try {
+        // Dynamically import socket to avoid circular dependency
+        const { socket } = await import('../socket')
         // Authenticate socket with user ID
         socket.emit('authenticate', authStore.user.id)
         // console.log('Socket authenticated for user:', authStore.user.id)
