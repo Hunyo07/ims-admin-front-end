@@ -35,7 +35,7 @@ const routes = [
   {
     path: '/',
     name: 'signin',
-    component: SigninView,
+    component: () => import('@/views/Authentication/SigninView.vue'),
     meta: {
       title: 'Signin',
       requiresAuth: false
@@ -44,7 +44,7 @@ const routes = [
   {
     path: '/auth/signup',
     name: 'signup',
-    component: SignupView,
+    component: () => import('@/views/Authentication/SignupView.vue'),
     meta: {
       title: 'Signup',
       requiresAuth: false
@@ -53,7 +53,7 @@ const routes = [
   {
     path: '/forgot-password',
     name: 'forgot-password',
-    component: ForgotPasswordView,
+    component: () => import('@/views/Authentication/ForgotPasswordView.vue'),
     meta: {
       title: 'Forgot Password',
       requiresAuth: false
@@ -62,7 +62,7 @@ const routes = [
   {
     path: '/reset-password/:token',
     name: 'reset-password',
-    component: ResetPasswordView,
+    component: () => import('@/views/Authentication/ResetPasswordView.vue'),
     meta: {
       title: 'Reset Password',
       requiresAuth: false
@@ -71,7 +71,7 @@ const routes = [
   {
     path: '/eCommerce',
     name: 'eCommerce',
-    component: ECommerceView,
+    component: () => import('@/views/Dashboard/ECommerceView.vue'),
     meta: {
       title: 'eCommerce Dashboard',
       requiresAuth: true
@@ -80,7 +80,7 @@ const routes = [
   {
     path: '/inventory-counts',
     name: 'Inventory Counts',
-    component: InventoryCounts,
+    component: () => import('@/views/Inventory/InventoryCountsView.vue'),
     meta: {
       title: 'Inventory Counts',
       requiresAuth: true,
@@ -91,7 +91,7 @@ const routes = [
   {
     path: '/inventory/stock-adjustments',
     name: 'StockAdjustments',
-    component: StockAdjustments,
+    component: () => import('@/views/Inventory/StockAdjustmentsView.vue'),
     meta: {
       requiresAuth: true
     }
@@ -99,7 +99,7 @@ const routes = [
   {
     path: '/stock-adjustments',
     name: 'Stock Adjustments',
-    component: StockAdjustments,
+    component: () => import('@/views/Inventory/StockAdjustmentsView.vue'),
     meta: {
       title: 'Stock Adjustments',
       requiresAuth: true
@@ -110,7 +110,7 @@ const routes = [
   {
     path: '/users',
     name: 'users',
-    component: UserManagementView,
+    component: () => import('@/views/User/UserManagementView.vue'),
     meta: {
       title: 'User Management',
       requiresAuth: true,
@@ -121,7 +121,7 @@ const routes = [
   {
     path: '/activity-logs',
     name: 'activity-logs',
-    component: ActivityLogView,
+    component: () => import('@/views/ActivityLog/ActivityLogView.vue'),
     meta: {
       title: 'Activity Logs',
       requiresAuth: true,
@@ -132,7 +132,7 @@ const routes = [
   {
     path: '/customer',
     name: 'customer',
-    component: CustomerManagementView,
+    component: () => import('@/views/Customer/CustomerManagementView.vue'),
     meta: {
       title: 'Customer Management',
       requiresAuth: true,
@@ -143,7 +143,7 @@ const routes = [
   {
     path: '/pos',
     name: 'POS',
-    component: CreatSaleView,
+    component: () => import('@/views/Sales/CreateSaleView.vue'),
     meta: {
       title: 'POS Management',
       requiresAuth: true,
@@ -154,7 +154,7 @@ const routes = [
   {
     path: '/sales',
     name: 'sales',
-    component: SalesManagementView,
+    component: () => import('@/views/Sales/SalesManagementView.vue'),
     meta: {
       title: 'Sales Management',
       requiresAuth: true,
@@ -165,7 +165,7 @@ const routes = [
   {
     path: '/supplier',
     name: 'supllier',
-    component: SupplierManagementView,
+    component: () => import('@/views/Supplier/SupplierManagementView.vue'),
     meta: {
       title: 'Supplier Management',
       requiresAuth: true,
@@ -176,7 +176,7 @@ const routes = [
   {
     path: '/main-category',
     name: 'main-category',
-    component: MainCategoryView,
+    component: () => import('@/views/Category/MainCategoryView.vue'),
     meta: {
       title: 'Category Management',
       requiresAuth: true,
@@ -187,7 +187,7 @@ const routes = [
   {
     path: '/sub-category',
     name: 'sub-category',
-    component: SubCategoryView,
+    component: () => import('@/views/Category/SubCategoryView.vue'),
     meta: {
       title: 'Sub Category Management',
       requiresAuth: true,
@@ -198,7 +198,7 @@ const routes = [
   {
     path: '/settings/reorder-point',
     name: 'reorder-point',
-    component: ReorderPointView,
+    component: () => import('@/views/Settings/ReorderPointView.vue'),
     meta: {
       title: 'Reorder Point',
       requiresAuth: true,
@@ -209,7 +209,7 @@ const routes = [
   {
     path: '/product',
     name: 'product',
-    component: ProductManagementView,
+    component: () => import('@/views/Product/ProductManagementView.vue'),
     meta: {
       title: 'Product Management',
       requiresAuth: true,
@@ -220,7 +220,7 @@ const routes = [
   {
     path: '/reorder',
     name: 'reorder',
-    component: ReorderView,
+    component: () => import('@/views/Reorder/PurchaseMangementView.vue'),
     meta: {
       title: 'Reorder Management',
       requiresAuth: true,
@@ -231,7 +231,7 @@ const routes = [
   {
     path: '/barcodes',
     name: 'barcodes',
-    component: BarcodesView,
+    component: () => import('@/views/Barcodes/BarcodeManagementView.vue'),
     meta: {
       title: 'Product Management',
       requiresAuth: true,
@@ -242,7 +242,7 @@ const routes = [
   {
     path: '/calendar',
     name: 'calendar',
-    component: CalendarView,
+    component: () => import('@/views/CalendarView.vue'),
     meta: {
       title: 'Calendar',
       requiresAuth: true
@@ -251,7 +251,7 @@ const routes = [
   {
     path: '/profile',
     name: 'profile',
-    component: ProfileView,
+    component: () => import('@/views/ProfileView.vue'),
     meta: {
       title: 'Profile',
       requiresAuth: true
@@ -260,7 +260,7 @@ const routes = [
   {
     path: '/forms/form-elements',
     name: 'formElements',
-    component: FormElementsView,
+    component: () => import('@/views/Forms/FormElementsView.vue'),
     meta: {
       title: 'Form Elements',
       requiresAuth: true
@@ -269,7 +269,7 @@ const routes = [
   {
     path: '/forms/form-layout',
     name: 'formLayout',
-    component: FormLayoutView,
+    component: () => import('@/views/Forms/FormLayoutView.vue'),
     meta: {
       title: 'Form Layout',
       requiresAuth: true
@@ -278,7 +278,7 @@ const routes = [
   {
     path: '/tables',
     name: 'tables',
-    component: TablesView,
+    component: () => import('@/views/TablesView.vue'),
     meta: {
       title: 'Tables',
       requiresAuth: true
@@ -287,7 +287,7 @@ const routes = [
   {
     path: '/pages/settings',
     name: 'settings',
-    component: SettingsView,
+    component: () => import('@/views/Pages/SettingsView.vue'),
     meta: {
       title: 'Settings',
       requiresAuth: true
@@ -296,7 +296,7 @@ const routes = [
   {
     path: '/charts/basic-chart',
     name: 'basicChart',
-    component: BasicChartView,
+    component: () => import('@/views/Charts/BasicChartView.vue'),
     meta: {
       title: 'Basic Chart',
       requiresAuth: true
@@ -305,7 +305,7 @@ const routes = [
   {
     path: '/ui-elements/alerts',
     name: 'alerts',
-    component: AlertsView,
+    component: () => import('@/views/UiElements/AlertsView.vue'),
     meta: {
       title: 'Alerts',
       requiresAuth: true
@@ -314,7 +314,7 @@ const routes = [
   {
     path: '/ui-elements/buttons',
     name: 'buttons',
-    component: ButtonsView,
+    component: () => import('@/views/UiElements/ButtonsView.vue'),
     meta: {
       title: 'Buttons',
       requiresAuth: true
@@ -323,7 +323,7 @@ const routes = [
   {
     path: '/settings/account',
     name: 'account-settings',
-    component: SettingsView,
+    component: () => import('@/views/Pages/SettingsView.vue'),
     meta: {
       title: 'Account Settings',
       requiresAuth: true
