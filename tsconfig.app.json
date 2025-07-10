@@ -9,5 +9,8 @@
     "paths": {
       "@/*": ["./src/*"]
     },
+    "outDir": "./dist/out-tsc",
+    "types": [],
+    "allowJs": true
   }
 }
