@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 import router from '@/router'
 
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:5000/api'
+  baseURL: 'https://ims-api-id38.onrender.com/api'
 })
 
 axiosInstance.interceptors.request.use(

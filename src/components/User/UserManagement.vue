@@ -163,7 +163,7 @@ const formatDate = (dateString) => {
 }
 const fetchRoles = async () => {
   try {
-    const response = await axios.get('http://localhost:5000/api/roles', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/roles', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -177,7 +177,7 @@ const fetchUsers = async () => {
   try {
 
     
-    const response = await axios.get('http://localhost:5000/api/superadmin/users', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/superadmin/users', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -198,7 +198,7 @@ const fetchUsers = async () => {
 }
 const fetchBranches = async () => {
   try {
-    const response = await axios.get('http://localhost:5000/api/superadmin/branches', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/superadmin/branches', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -289,7 +289,7 @@ const handleUpdateUser = async () => {
 
     isSubmitting.value = true
     const response = await axios.put(
-      `http://localhost:5000/api/superadmin/users/${editingUser.value._id}/profile`,
+      `https://ims-api-id38.onrender.com/api/superadmin/users/${editingUser.value._id}/profile`,
       newUser.value, // Use newUser instead of editingUser
       {
         headers: {
@@ -409,7 +409,7 @@ const handleAddUser = async () => {
 
     isSubmitting.value = true
     const response = await axios.post(
-      'http://localhost:5000/api/superadmin/create-user',
+      'https://ims-api-id38.onrender.com/api/superadmin/create-user',
       newUser.value,
       {
         headers: {
@@ -466,7 +466,7 @@ const handleDeleteUser = async (userId) => {
   if (result.isConfirmed) {
     try {
       isDeleting.value = true
-      await axios.delete(`http://localhost:5000/api/superadmin/delete-user/${userId}`, {
+      await axios.delete(`https://ims-api-id38.onrender.com/api/superadmin/delete-user/${userId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -510,7 +510,7 @@ const handleToggleStatus = async (userId, currentStatus) => {
 
     if (result.isConfirmed) {
       const response = await axios.patch(
-        `http://localhost:5000/api/superadmin/toggle-user-status/${userId}`,
+        `https://ims-api-id38.onrender.com/api/superadmin/toggle-user-status/${userId}`,
         {},
         {
           headers: {

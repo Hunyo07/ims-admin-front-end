@@ -57,7 +57,7 @@ const updateSettingsFromTime = () => {
 const fetchSettings = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('http://localhost:5000/api/settings', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/settings', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -85,7 +85,7 @@ const saveSettings = async () => {
     updateSettingsFromTime() // Ensure hour/minute are updated from time input
     isLoading.value = true
     await axios.put(
-      'http://localhost:5000/api/settings/auto-reorder-schedule',
+      'https://ims-api-id38.onrender.com/api/settings/auto-reorder-schedule',
       scheduleSettings.value,
       {
         headers: {

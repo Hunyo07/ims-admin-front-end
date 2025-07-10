@@ -74,7 +74,7 @@ const filteredSuppliers = computed(() => {
 const fetchSuppliers = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('http://localhost:5000/api/suppliers/suppliers', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/suppliers/suppliers', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -128,7 +128,7 @@ const handleDeleteSupplier = async (supplierId) => {
   if (result.isConfirmed) {
     try {
       isDeleting.value = true
-      await axios.delete(`http://localhost:5000/api/suppliers/${supplierId}`, {
+      await axios.delete(`https://ims-api-id38.onrender.com/api/suppliers/${supplierId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -167,7 +167,7 @@ const handleToggleStatus = async (supplierId, currentStatus) => {
 
     if (result.isConfirmed) {
       const response = await axios.patch(
-        `http://localhost:5000/api/suppliers/${supplierId}/toggle-status`,
+        `https://ims-api-id38.onrender.com/api/suppliers/${supplierId}/toggle-status`,
         {},
         {
           headers: {
@@ -202,7 +202,7 @@ const handleAddSupplier = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.post(
-      'http://localhost:5000/api/suppliers/create-supplier',
+      'https://ims-api-id38.onrender.com/api/suppliers/create-supplier',
       newSupplier.value,
       {
         headers: {
@@ -236,7 +236,7 @@ const handleUpdateSupplier = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.put(
-      `http://localhost:5000/api/suppliers/${editingSupplier.value._id}`,
+      `https://ims-api-id38.onrender.com/api/suppliers/${editingSupplier.value._id}`,
       newSupplier.value,
       {
         headers: {

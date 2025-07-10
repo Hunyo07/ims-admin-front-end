@@ -47,7 +47,7 @@ const totalPages = computed(() => {
 const fetchSubCategories = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('http://localhost:5000/api/subcategories', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/subcategories', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -66,7 +66,7 @@ const fetchSubCategories = async () => {
 }
 const fetchCategories = async () => {
   try {
-    const response = await axios.get('http://localhost:5000/api/categories', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/categories', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -147,7 +147,7 @@ const handleAddSubCategory = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.post(
-      'http://localhost:5000/api/subcategories/create',
+      'https://ims-api-id38.onrender.com/api/subcategories/create',
       newSubCategory.value,
       {
         headers: {
@@ -207,7 +207,7 @@ const handleUpdateSubCategory = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.put(
-      `http://localhost:5000/api/subcategories/${editingSubCategory.value._id}`,
+      `https://ims-api-id38.onrender.com/api/subcategories/${editingSubCategory.value._id}`,
       newSubCategory.value,
       {
         headers: {
@@ -253,7 +253,7 @@ const handleDeleteSubCategory = async (subCategoryId) => {
     try {
       isDeleting.value = true
       selectedSubCategoryId.value = subCategoryId
-      await axios.delete(`http://localhost:5000/api/subcategories/${subCategoryId}`, {
+      await axios.delete(`https://ims-api-id38.onrender.com/api/subcategories/${subCategoryId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -295,7 +295,7 @@ const handleToggleStatus = async (subCategoryId, currentStatus) => {
 
     if (result.isConfirmed) {
       const response = await axios.patch(
-        `http://localhost:5000/api/subcategories/${subCategoryId}/toggle-status`,
+        `https://ims-api-id38.onrender.com/api/subcategories/${subCategoryId}/toggle-status`,
         { isActive: !currentStatus },
         {
           headers: {

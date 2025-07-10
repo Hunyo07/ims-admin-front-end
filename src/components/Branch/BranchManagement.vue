@@ -65,7 +65,7 @@ const filteredBranches = computed(() => {
 const fetchBranches = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('http://localhost:5000/api/branches/branches', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/branches/branches', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -141,7 +141,7 @@ const handleDeleteBranch = async (branchId) => {
   if (result.isConfirmed) {
     try {
       isDeleting.value = true
-      await axios.delete(`http://localhost:5000/api/branches/branches/${branchId}`, {
+      await axios.delete(`https://ims-api-id38.onrender.com/api/branches/branches/${branchId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -174,7 +174,7 @@ const handleToggleStatus = async (branchId, currentStatus) => {
 
     if (result.isConfirmed) {
       const response = await axios.patch(
-        `http://localhost:5000/api/branches/branches/${branchId}`,
+        `https://ims-api-id38.onrender.com/api/branches/branches/${branchId}`,
         {},
         {
           headers: {
@@ -209,7 +209,7 @@ const handleAddBranch = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.post(
-      'http://localhost:5000/api/branches/create-branch',
+      'https://ims-api-id38.onrender.com/api/branches/create-branch',
       newBranch.value,
       {
         headers: {
@@ -246,7 +246,7 @@ const handleUpdateBranch = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.put(
-      `http://localhost:5000/api/branches/update-branch/${editingBranch.value._id}`,
+      `https://ims-api-id38.onrender.com/api/branches/update-branch/${editingBranch.value._id}`,
       newBranch.value,
       {
         headers: {

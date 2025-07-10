@@ -30,7 +30,7 @@ const newAdjustment = ref({
 const fetchAdjustments = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('http://localhost:5000/api/inventory/adjustments', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/inventory/adjustments', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -52,7 +52,7 @@ const fetchAdjustments = async () => {
 // Fetch products
 const fetchProducts = async () => {
   try {
-    const response = await axios.get('http://localhost:5000/api/products', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/products', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -68,7 +68,7 @@ const setCurrentQuantity = async () => {
   const productId = newAdjustment.value.productId
   if (productId) {
     try {
-      const response = await axios.get(`http://localhost:5000/api/products/${productId}`, {
+      const response = await axios.get(`https://ims-api-id38.onrender.com/api/products/${productId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -117,7 +117,7 @@ const createAdjustment = async () => {
       reference: newAdjustment.value.reference
     }
 
-    const response = await axios.post('http://localhost:5000/api/inventory/adjustments', payload, {
+    const response = await axios.post('https://ims-api-id38.onrender.com/api/inventory/adjustments', payload, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -165,7 +165,7 @@ const viewAdjustmentDetails = async (adjustmentId) => {
   try {
     isLoading.value = true
     const response = await axios.get(
-      `http://localhost:5000/api/inventory/adjustments/${adjustmentId}`,
+      `https://ims-api-id38.onrender.com/api/inventory/adjustments/${adjustmentId}`,
       {
         headers: {
           Authorization: `Bearer ${authStore.token}`

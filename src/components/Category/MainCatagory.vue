@@ -40,7 +40,7 @@ const newCategory = ref({
 const fetchCategories = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('http://localhost:5000/api/categories', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/categories', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -119,7 +119,7 @@ const handleAddCategory = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.post(
-      'http://localhost:5000/api/categories/create',
+      'https://ims-api-id38.onrender.com/api/categories/create',
       newCategory.value,
       {
         headers: {
@@ -164,7 +164,7 @@ const handleUpdateCategory = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.put(
-      `http://localhost:5000/api/categories/${editingCategory.value._id}`,
+      `https://ims-api-id38.onrender.com/api/categories/${editingCategory.value._id}`,
       newCategory.value,
       {
         headers: {
@@ -210,7 +210,7 @@ const handleDeleteCategory = async (categoryId) => {
     try {
       isDeleting.value = true
       selectedCategoryId.value = categoryId
-      await axios.delete(`http://localhost:5000/api/categories/${categoryId}`, {
+      await axios.delete(`https://ims-api-id38.onrender.com/api/categories/${categoryId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -254,7 +254,7 @@ const handleToggleStatus = async (categoryId, currentStatus) => {
 
     if (result.isConfirmed) {
       const response = await axios.patch(
-        `http://localhost:5000/api/categories/${categoryId}/toggle-status`,
+        `https://ims-api-id38.onrender.com/api/categories/${categoryId}/toggle-status`,
         {},
         {
           headers: {

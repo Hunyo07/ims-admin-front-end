@@ -82,7 +82,7 @@ const filteredCustomers = computed(() => {
 const fetchCustomers = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('http://localhost:5000/api/customers', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/customers', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -165,7 +165,7 @@ const handleToggleCustomerStatus = async (customer) => {
     try {
       isTogglingStatus.value = true
       selectedCustomerId.value = customer._id
-      const response = await axios.patch(`http://localhost:5000/api/customers/${customer._id}/toggle-status`, {}, {
+      const response = await axios.patch(`https://ims-api-id38.onrender.com/api/customers/${customer._id}/toggle-status`, {}, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -218,7 +218,7 @@ const handleDeleteCustomer = async (customerId) => {
   if (result.isConfirmed) {
     try {
       isDeleting.value = true
-      await axios.delete(`http://localhost:5000/api/customers/${customerId}`, {
+      await axios.delete(`https://ims-api-id38.onrender.com/api/customers/${customerId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -243,7 +243,7 @@ const handleAddCustomer = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.post(
-      'http://localhost:5000/api/customers/register',
+      'https://ims-api-id38.onrender.com/api/customers/register',
       newCustomer.value,
       {
         headers: {
@@ -277,7 +277,7 @@ const handleUpdateCustomer = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.put(
-      `http://localhost:5000/api/customers/${editingCustomer.value._id}`,
+      `https://ims-api-id38.onrender.com/api/customers/${editingCustomer.value._id}`,
       newCustomer.value,
       {
         headers: {
