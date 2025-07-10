@@ -18,7 +18,7 @@ const props = withDefaults(defineProps<Props>(), {
   productData: null
 })
 
-const chart = ref(null)
+const chart = ref<any>(null)
 
 // Generate chart data based on product statistics
 const chartData = computed(() => {
@@ -30,11 +30,15 @@ const chartData = computed(() => {
   }
 
   const { totalProducts, activeProducts, lowStock, totalValue } = props.productData
-  
+
+  // Provide default values to avoid possibly undefined errors
+  const safeActiveProducts = activeProducts ?? 0
+  const safeLowStock = lowStock ?? 0
+
   // Calculate percentages and values for the donut chart
-  const activePercentage = totalProducts ? (activeProducts / totalProducts) * 100 : 0
-  const lowStockPercentage = totalProducts ? (lowStock / totalProducts) * 100 : 0
-  const outOfStockPercentage = totalProducts ? ((totalProducts - activeProducts) / totalProducts) * 100 : 0
+  const activePercentage = totalProducts ? (safeActiveProducts / totalProducts) * 100 : 0
+  const lowStockPercentage = totalProducts ? (safeLowStock / totalProducts) * 100 : 0
+  const outOfStockPercentage = totalProducts ? ((totalProducts - safeActiveProducts) / totalProducts) * 100 : 0
   const valuePercentage = totalValue ? Math.min((totalValue / 100000) * 100, 100) : 0 // Normalize to 100k max
 
   return {

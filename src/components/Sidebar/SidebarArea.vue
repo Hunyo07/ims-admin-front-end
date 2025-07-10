@@ -1,6 +1,6 @@
-<script setup lang="ts">
-import { useSidebarStore } from '@/stores/sidebar'
-import { useAuthStore } from '@/stores/auth'
+<script >
+import { useSidebarStore } from '../../stores/sidebar'
+import { useAuthStore } from '../../stores/auth'
 import { onClickOutside } from '@vueuse/core'
 import { ref, computed } from 'vue'
 import SidebarItem from './SidebarItem.vue'
@@ -232,20 +232,18 @@ const filteredMenuGroups = computed(() => {
     <div class="no-scrollbar flex flex-col overflow-y-auto duration-300 ease-linear">
       <!-- Sidebar Menu -->
       <nav class="mt-5 py-4 px-4 lg:mt-9 lg:px-6">
-        <template v-for="menuGroup in filteredMenuGroups" :key="menuGroup.name">
-          <div>
-            <h3 class="mb-4 ml-4 text-sm font-medium text-bodydark2">{{ menuGroup.name }}</h3>
+        <div v-for="menuGroup in filteredMenuGroups" :key="menuGroup.name">
+          <h3 class="mb-4 ml-4 text-sm font-medium text-bodydark2">{{ menuGroup.name }}</h3>
 
-            <ul class="mb-6 flex flex-col gap-1.5">
-              <SidebarItem
-                v-for="(menuItem, index) in menuGroup.menuItems"
-                :item="menuItem"
-                :key="index"
-                :index="index"
-              />
-            </ul>
-          </div>
-        </template>
+          <ul class="mb-6 flex flex-col gap-1.5">
+            <SidebarItem
+              v-for="(menuItem, index) in menuGroup.menuItems"
+              :item="menuItem"
+              :key="index"
+              :index="index"
+            />
+          </ul>
+        </div>
       </nav>
       <!-- Sidebar Menu -->
     </div>

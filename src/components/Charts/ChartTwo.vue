@@ -22,7 +22,7 @@ const props = withDefaults(defineProps<Props>(), {
   salesData: null
 })
 
-const chart = ref(null)
+const chart = ref<any>(null)
 
 // Generate chart data based on payment methods
 const chartData = computed(() => {

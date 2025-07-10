@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '../stores/auth'
 import { computed } from 'vue'
 
 const authStore = useAuthStore()
@@ -91,7 +91,7 @@ const dashboardSections = computed(() => {
     ]
   }
 
-  return sections[userRole.value] || []
+  return sections[userRole.value as keyof typeof sections] || []
 })
 
 const canAccessFeature = (feature: string) => {
@@ -104,7 +104,7 @@ const canPerformAction = (action: string) => {
 </script>
 
 <template>
-  <div class="role-based-dashboard">
+  <div class="role-based-dashboard max-w-7xl mx-auto px-4 py-6">
     <!-- Role Header -->
     <div class="mb-6 p-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg text-white">
       <h1 class="text-2xl font-bold mb-2">Welcome, {{ authStore.userDisplayName }}</h1>
@@ -240,10 +240,4 @@ const canPerformAction = (action: string) => {
       </div>
     </div> -->
   </div>
-</template>
-
-<style scoped>
-.role-based-dashboard {
-  @apply max-w-7xl mx-auto px-4 py-6;
-}
-</style> 
+</template> 

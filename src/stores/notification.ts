@@ -127,7 +127,6 @@ export const useNotificationStore = defineStore('notification', {
         const authStore = useAuthStore()
         await axios.delete(
           `https://ims-api-id38.onrender.com/api/notifications/${id}`,
-          {},
           {
             headers: {
               Authorization: `Bearer ${authStore.token}`
@@ -152,18 +151,8 @@ export const useNotificationStore = defineStore('notification', {
     async deleteAllRead() {
       try {
         const authStore = useAuthStore()
-        // await axios.delete(
-        //   'https://ims-api-id38.onrender.com/api/notifications/read',
-        //   {},
-        //   {
-        //     headers: {
-        //       Authorization: `Bearer ${authStore.token}`
-        //     }
-        //   }
-        // )
         await axios.delete(
           'https://ims-api-id38.onrender.com/api/notifications/read',
-          {},
           {
             headers: {
               Authorization: `Bearer ${authStore.token}`

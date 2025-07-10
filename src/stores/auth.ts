@@ -42,7 +42,7 @@ export const useAuthStore = defineStore('auth', {
         const userData = response.data.user
         this.setUser(userData)
         return userData
-      } catch (error) {
+      } catch (error:any) {
         console.error('Failed to fetch current user:', error)
         // If token is invalid, clear auth data
         if (error.response?.status === 401) {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '../../stores/auth'
 import Swal from 'sweetalert2'
 import { inject } from 'vue'
 import { jsPDF } from 'jspdf'
@@ -115,7 +115,7 @@ const fetchProducts = async () => {
     })
     products.value = response.data.products || response.data
     filteredProducts.value = [...products.value]
-  } catch (error) {
+  } catch (error:any) {
     console.error('Error fetching products:', error)
     Swal.fire({
       icon: 'error',
@@ -204,7 +204,9 @@ const clearCart = () => {
 }
 
 const printReceipt = () => {
-  const printContents = document.getElementById('receipt-section').innerHTML
+  const receiptElement = document.getElementById('receipt-section')
+  if (!receiptElement) return
+  const printContents = receiptElement.innerHTML
   const originalContents = document.body.innerHTML
   document.body.innerHTML = printContents
   window.print()
@@ -425,7 +427,7 @@ const processSale = async () => {
     fetchProducts()
     
     
-  } catch (error) {
+  } catch (error:any) {
     console.error('Error processing sale:', error)
     let message = 'Failed to process sale'
   if (axios.isAxiosError && axios.isAxiosError(error)) {
@@ -552,9 +554,22 @@ watch(customerSearchQuery, () => {
   filterCustomers()
   showCustomerDropdown.value = true
 })
+
+// Helper to get product image safely
+function getProductImage(product: any): string {
+  return Array.isArray(product.images) && product.images.length > 0 ? product.images[0].url : placeholderImage
+}
+
+// Helper for quantity input event
+function handleQuantityInput(index: number, event: Event) {
+  const target = event.target as HTMLInputElement
+  const value = target && target.value ? parseInt(target.value) || 0 : 0
+  updateQuantity(index, value)
+}
 </script>
 
 <template>
+  <div>
   <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
     <!-- Product Selection -->
     <div class="md:col-span-2 rounded-sm border border-stroke bg-white p-5 shadow-default dark:border-strokedark dark:bg-boxdark">
@@ -598,7 +613,7 @@ watch(customerSearchQuery, () => {
           <div class="flex flex-col h-full">
             <div class="mb-3 h-28 overflow-hidden rounded-lg relative">
               <img
-                :src="Array.isArray((product as any).images) && (product as any).images.length > 0 ? (product as any).images[0].url : placeholderImage"
+                :src="getProductImage(product)"
                 :alt="product.name"
                 class="h-full w-full object-cover"
               />
@@ -671,7 +686,7 @@ watch(customerSearchQuery, () => {
             <input
               type="number"
               :value="item.quantity"
-              @input="updateQuantity(index, $event.target && ($event.target as HTMLInputElement).value ? parseInt(($event.target as HTMLInputElement).value) || 0 : 0)"
+              @input="handleQuantityInput(index, $event)"
               class="h-7 w-12 rounded border border-stroke bg-transparent text-center text-xs outline-none dark:border-strokedark"
               min="1"
               :max="item.maxQuantity"
@@ -948,4 +963,5 @@ watch(customerSearchQuery, () => {
       </div>
     </div>
   </div>
+</div>
 </template>

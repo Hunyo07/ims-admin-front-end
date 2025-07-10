@@ -1,6 +1,6 @@
-<script setup lang="ts">
-import { useSidebarStore } from '@/stores/sidebar'
-import { useAuthStore } from '@/stores/auth'
+<script setup >
+import { useSidebarStore } from '../../stores/sidebar'
+import { useAuthStore } from '../../stores/auth'
 import { useRoute } from 'vue-router'
 import { computed } from 'vue'
 import SidebarDropdown from './SidebarDropdown.vue'
@@ -11,19 +11,16 @@ const authStore = useAuthStore()
 const props = defineProps(['item', 'index'])
 const currentPage = useRoute().name
 
-interface SidebarItem {
-  label: string
-  roles?: string[]
-  permissions?: string[]
-}
-
-
+/**
+ * Handles item click for sidebar navigation.
+ * @param {any} item
+ */
 const handleItemClick = (item) => {
   const pageName = sidebarStore.page === props.item.label ? '' : props.item.label
   sidebarStore.page = pageName
 
   if (props.item.children) {
-    return props.item.children.some((child: SidebarItem) => sidebarStore.selected === child.label)
+    return props.item.children.some(child => sidebarStore.selected === child.label)
   }
 }
 
