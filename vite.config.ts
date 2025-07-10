@@ -31,6 +31,6 @@ export default defineConfig({
         }
       }
     },
-    chunkSizeWarningLimit: 1500 // (in KB, e.g., 1500 = 1.5MB)
+    chunkSizeWarningLimit: 2000 // (in KB, e.g., 1500 = 1.5MB)
   }
 })
