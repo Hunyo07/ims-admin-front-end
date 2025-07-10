@@ -1,14 +1,14 @@
-<script setup lang="ts">
-import { useAuthStore } from '@/stores/auth'
+<script setup >
+import { useAuthStore } from '../../stores/auth'
 import { computed } from 'vue'
 
 const props = defineProps({
   roles: {
-    type: Array as () => string[],
+    type: Array ,
     default: () => []
   },
   permissions: {
-    type: Array as () => string[],
+    type: Array ,
     default: () => []
   },
   requireAllPermissions: {
