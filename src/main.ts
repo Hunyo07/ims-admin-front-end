@@ -24,8 +24,9 @@ import App from './App.vue'
 import router from '@/router'
 
 const app = createApp(App)
+const pinia = createPinia()
 
-app.use(createPinia())
+app.use(pinia)
 app.use(router)
 app.use(VueApexCharts)
 app.component('font-awesome-icon', FontAwesomeIcon)
@@ -41,7 +42,7 @@ app.directive('role', vRole)
 // const pinia = createPinia()
 // app.use(pinia)
 
-// Fetch user data on app initialization
+// Fetch user data on app initialization (after Pinia is registered)
 import { useAuthStore } from './stores/auth'
 const authStore = useAuthStore()
 
