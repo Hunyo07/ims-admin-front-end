@@ -1,7 +1,6 @@
-import { useAuthStore } from '../stores/auth'
-
 export const vPermission = {
-  mounted(el: HTMLElement, binding: any) {
+  mounted: async (el: HTMLElement, binding: any) => {
+    const { useAuthStore } = await import('../stores/auth')
     const authStore = useAuthStore()
     const { value } = binding
     

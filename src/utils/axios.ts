@@ -1,5 +1,4 @@
 import axios from 'axios'
-import { useAuthStore } from '../stores/auth'
 import router from '../router'
 
 const axiosInstance = axios.create({
@@ -7,7 +6,8 @@ const axiosInstance = axios.create({
 })
 
 axiosInstance.interceptors.request.use(
-  (config) => {
+  async (config) => {
+    const { useAuthStore } = await import('../stores/auth')
     const authStore = useAuthStore()
     if (authStore.token) {
       config.headers.Authorization = `Bearer ${authStore.token}`
@@ -21,8 +21,9 @@ axiosInstance.interceptors.request.use(
 
 axiosInstance.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error.response?.status === 401) {
+      const { useAuthStore } = await import('../stores/auth')
       const authStore = useAuthStore()
       authStore.logout()
       router.push('/auth/signin')
