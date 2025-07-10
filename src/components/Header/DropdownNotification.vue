@@ -1,86 +1,86 @@
 <script setup >
-import { onClickOutside } from '@vueuse/core'
-import { ref, computed, onMounted } from 'vue'
-import { useNotificationStore } from '../../stores/notification'
-import { useRouter } from 'vue-router'
-import { formatDistanceToNow } from 'date-fns'
+// import { onClickOutside } from '@vueuse/core'
+// import { ref, computed, onMounted } from 'vue'
+// import { useNotificationStore } from '../../stores'
+// import { useRouter } from 'vue-router'
+// import { formatDistanceToNow } from 'date-fns'
 
-const router = useRouter()
-const notificationStore = useNotificationStore()
+// const router = useRouter()
+// const notificationStore = useNotificationStore()
 
-const target = ref(null)
-const dropdownOpen = ref(false)
+// const target = ref(null)
+// const dropdownOpen = ref(false)
 
-onClickOutside(target, () => {
-  dropdownOpen.value = false
-})
+// onClickOutside(target, () => {
+//   dropdownOpen.value = false
+// })
 
-onMounted(() => {
-  notificationStore.fetchNotifications()
-})
+// onMounted(() => {
+//   notificationStore.fetchNotifications()
+// })
 
-const hasUnread = computed(() => notificationStore.unreadCount > 0)
+// const hasUnread = computed(() => notificationStore.unreadCount > 0)
 
-const formatTime = (dateString) => {
-  try {
-    return formatDistanceToNow(new Date(dateString), { addSuffix: true })
-  } catch (e) {
-    return dateString
-  }
-}
+// const formatTime = (dateString) => {
+//   try {
+//     return formatDistanceToNow(new Date(dateString), { addSuffix: true })
+//   } catch (e) {
+//     return dateString
+//   }
+// }
 
-const handleNotificationClick = async (notification) => {
+// const handleNotificationClick = async (notification) => {
   // Mark as read
-  await notificationStore.markAsRead(notification._id)
+  // await notificationStore.markAsRead(notification._id)
   
   // Navigate to link if provided
-  if (notification.link) {
-    router.push(notification.link)
-  }
+  // if (notification.link) {
+  //   router.push(notification.link)
+  // }
   
   // Close dropdown
-  dropdownOpen.value = false
-}
+  // dropdownOpen.value = false
+// }
 
-const markAllAsRead = async () => {
-  await notificationStore.markAllAsRead()
-}
+// const markAllAsRead = async () => {
+  // await notificationStore.markAllAsRead()
+// }
 
-const clearAllRead = async () => {
-  await notificationStore.deleteAllRead()
-}
+// const clearAllRead = async () => {
+  // await notificationStore.deleteAllRead()
+// }
 
-const getNotificationIcon = (type) => {
-  switch (type) {
-    case 'success':
-      return 'check-circle'
-    case 'warning':
-      return 'exclamation-triangle'
-    case 'error':
-      return 'exclamation-circle'
-    case 'info':
-    default:
-      return 'info-circle'
-  }
-}
+// const getNotificationIcon = (type) => {
+//   switch (type) {
+//     case 'success':
+//        return 'check-circle'
+//     case 'warning':
+//       return 'exclamation-triangle'
+//     case 'error':
+//       return 'exclamation-circle'
+//     case 'info':
+//     default:
+//       return 'info-circle'
+//   }
+// }
 
-const getNotificationColor = (type) => {
-  switch (type) {
-    case 'success':
-      return 'text-success'
-    case 'warning':
-      return 'text-warning'
-    case 'error':
-      return 'text-danger'
-    case 'info':
-    default:
-      return 'text-info'
-  }
-}
+// const getNotificationColor = (type ) => {
+//   switch (type) {
+//     case 'success':
+//       return 'text-success'
+//     case 'warning':
+//       return 'text-warning'
+//     case 'error':
+//       return 'text-danger'
+//     case 'info':
+//     default:
+//       return 'text-info'
+//   }
+//   }
 </script>
 
 <template>
-  <li class="relative" ref="target">
+  <!-- <li class="relative" ref="target">
     <router-link
       class="relative flex h-8.5 w-8.5 items-center justify-center rounded-full border-[0.5px] border-stroke bg-gray hover:text-primary dark:border-strokedark dark:bg-meta-4 dark:text-white"
       to="#"
@@ -108,10 +108,10 @@ const getNotificationColor = (type) => {
           fill=""
         />
       </svg>
-    </router-link>
+    </router-link> -->
 
     <!-- Dropdown Start -->
-    <div
+    <!-- <div
       v-show="dropdownOpen"
       class="absolute -right-27 mt-2.5 flex h-90 w-75 flex-col rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark sm:right-0 sm:w-80"
     >
@@ -131,9 +131,9 @@ const getNotificationColor = (type) => {
             Clear read
           </button>
         </div>
-      </div>
+      </div> -->
 
-      <ul class="flex h-auto flex-col overflow-y-auto">
+      <!-- <ul class="flex h-auto flex-col overflow-y-auto">
         <li v-if="notificationStore.loading" class="flex justify-center items-center py-4">
           <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
         </li>
@@ -142,7 +142,7 @@ const getNotificationColor = (type) => {
           No notifications
         </li>
         
-        <div v-else v-for="notification in notificationStore.notifications" :key="notification._id">
+        <template v-else v-for="notification in notificationStore.notifications" :key="notification._id">
           <li>
             <div
               @click="handleNotificationClick(notification)"
@@ -166,9 +166,12 @@ const getNotificationColor = (type) => {
               </div>
             </div>
           </li>
-        </div>
+        </template>
       </ul>
-    </div>
+    </div> -->
     <!-- Dropdown End -->
-  </li>
+  <!-- </li> -->
+   <div>
+    
+   </div>
 </template>
