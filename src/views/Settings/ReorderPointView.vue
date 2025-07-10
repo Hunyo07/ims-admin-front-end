@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import ReorderPoint from '@/components/Reorder/ReordeRPoint.vue'
+import ReorderPoint from '@/components/Reorder/ReorderPoint.vue'
 import AutoReorderSchedule from '@/components/Settings/AutoReorderSchedule.vue'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 
