@@ -1,7 +1,7 @@
-<script setup lang="ts">
+<script setup >
 import { onClickOutside } from '@vueuse/core'
 import { ref, computed, onMounted } from 'vue'
-import { useNotificationStore } from '../../stores/notification'
+import { useNotificationStore } from '../../stores'
 import { useRouter } from 'vue-router'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -21,7 +21,7 @@ onMounted(() => {
 
 const hasUnread = computed(() => notificationStore.unreadCount > 0)
 
-const formatTime = (dateString: string) => {
+const formatTime = (dateString) => {
   try {
     return formatDistanceToNow(new Date(dateString), { addSuffix: true })
   } catch (e) {
@@ -29,7 +29,7 @@ const formatTime = (dateString: string) => {
   }
 }
 
-const handleNotificationClick = async (notification: any) => {
+const handleNotificationClick = async (notification) => {
   // Mark as read
   await notificationStore.markAsRead(notification._id)
   
@@ -50,7 +50,7 @@ const clearAllRead = async () => {
   await notificationStore.deleteAllRead()
 }
 
-const getNotificationIcon = (type: string) => {
+const getNotificationIcon = (type) => {
   switch (type) {
     case 'success':
       return 'check-circle'
@@ -64,7 +64,7 @@ const getNotificationIcon = (type: string) => {
   }
 }
 
-const getNotificationColor = (type: string) => {
+const getNotificationColor = (type) => {
   switch (type) {
     case 'success':
       return 'text-success'
@@ -142,7 +142,7 @@ const getNotificationColor = (type: string) => {
           No notifications
         </li>
         
-        <template v-else v-for="notification in notificationStore.notifications" :key="notification._id">
+        <div v-else v-for="notification in notificationStore.notifications" :key="notification._id">
           <li>
             <div
               @click="handleNotificationClick(notification)"
@@ -166,7 +166,7 @@ const getNotificationColor = (type: string) => {
               </div>
             </div>
           </li>
-        </template>
+        </div>
       </ul>
     </div>
     <!-- Dropdown End -->

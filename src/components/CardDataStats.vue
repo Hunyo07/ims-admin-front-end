@@ -104,6 +104,8 @@ const cardItems = ref([
 </script>
 
 <template>
+  <div>
+    
   <!-- Card Item Start -->
   <div
     v-for="(item, index) in cardItems"
@@ -159,4 +161,6 @@ const cardItems = ref([
     </div>
   </div>
   <!-- Card Item End -->
+  </div>
+
 </template>
