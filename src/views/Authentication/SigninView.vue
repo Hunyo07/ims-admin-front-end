@@ -4,6 +4,7 @@ import InputGroup from '@/components/Auths/InputGroup.vue'
 import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 
+
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
@@ -25,6 +26,7 @@ const handleSubmit = async (e: Event) => {
 
   try {
     const response = await axios.post('http://localhost:5000/api/auth/signin', {
+    // const response = await axios.post('http://localhost:5000/api/auth/signin', {
       email: email.value,
       password: password.value
     })

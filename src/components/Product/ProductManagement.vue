@@ -980,7 +980,7 @@ watch(
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Stock</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Status</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Created By</th>
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Actions</th>
+            <th class="py-4.5 px-4 font-medium text-black dark:text-white" v-if="authStore.canPerform('edit_product')">Actions</th>
           </tr>
         </thead>
         <tbody>

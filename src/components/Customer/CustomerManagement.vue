@@ -445,7 +445,7 @@ onMounted(() => {
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Address</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Status</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Preferred Delivery</th>
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Actions</th>
+            <th class="py-4.5 px-4 font-medium text-black dark:text-white" v-if="authStore.canPerform('edit_customer')">Actions</th>
           </tr>
         </thead>
         <tbody>
