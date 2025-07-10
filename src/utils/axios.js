@@ -4,31 +4,29 @@ const api = axios.create({
   baseURL: 'http://localhost:5000/api'
 })
 
+// Add request interceptor to include auth token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config
-
-    if (error.response.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true
-
-      try {
-        const response = await api.post('/auth/refresh-token')
-        const { token } = response.data
-
-        // Update stored token
-        localStorage.setItem('token', token)
-
-        // Update authorization header
-        originalRequest.headers['Authorization'] = `Bearer ${token}`
-
-        // Retry original request
-        return api(originalRequest)
-      } catch (refreshError) {
-        // Handle refresh token failure (e.g., redirect to login)
-        window.location.href = '/login'
-        return Promise.reject(refreshError)
-      }
+    // If we get a 401 error, redirect to login
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      localStorage.removeItem('permissions')
+      window.location.href = '/'
     }
 
     return Promise.reject(error)

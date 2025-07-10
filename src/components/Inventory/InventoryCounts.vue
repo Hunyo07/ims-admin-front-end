@@ -409,15 +409,11 @@ const setExpectedQuantity = async (index) => {
   const productId = newCount.value.items[index].productId
   if (productId) {
     try {
-      console.log('Fetching inventory for productId:', productId)
-
       const response = await axios.get(`http://localhost:5000/api/products/${productId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
       })
-
-      console.log('Product data:', response.data)
 
       // Ensure the response contains the expected quantity
       newCount.value.items[index].expectedQuantity = response.data.product.currentStock || 0
@@ -566,7 +562,6 @@ const viewCountDetails = async (countId) => {
     })
     selectedCount.value = response.data
     showDetailsModal.value = true
-    console.log(selectedCount.value)
   } catch (error) {
     console.error('Error fetching inventory count details:', error)
     Swal.fire({

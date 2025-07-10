@@ -145,14 +145,14 @@ const fetchDashboardData = async () => {
     // Check if any critical requests failed
     const failedRequests = results.filter(result => result.status === 'rejected')
     if (failedRequests.length > 0) {
-      console.warn('Some dashboard requests failed:', failedRequests.map(r => r.reason))
+      
       if (failedRequests.length === results.length) {
         error.value = 'Failed to load dashboard data'
       }
     }
 
   } catch (err) {
-    console.error('Failed to fetch dashboard data:', err)
+    
     error.value = 'Failed to load dashboard data'
   } finally {
     isLoading.value = false
@@ -181,7 +181,7 @@ onMounted(() => {
     </div>
 
     <!-- Stats Cards -->
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 xl:grid-cols-4 2xl:gap-7.5">
+    <div v-if="!authStore.getUserRole || authStore.getUserRole() !== 'staff'" class="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 xl:grid-cols-4 2xl:gap-7.5">
       <DataStatsOne :stats="formattedStats" :loading="isLoading" />
     </div>
 
@@ -201,6 +201,9 @@ onMounted(() => {
           <h4 class="mb-6 text-xl font-semibold text-black dark:text-white">
             Recent Sales
           </h4>
+          <div v-if="authStore.getUserRole && authStore.getUserRole() === 'staff'" class="mb-2 text-sm text-info">
+            This table reflects only your own sales.
+          </div>
           <div v-if="isLoading" class="flex justify-center py-4">
             <div class="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
           </div>
@@ -237,6 +240,9 @@ onMounted(() => {
           <h4 class="mb-6 text-xl font-semibold text-black dark:text-white">
             Low Stock Alert
           </h4>
+          <div v-if="authStore.getUserRole && authStore.getUserRole() === 'staff'" class="mb-2 text-sm text-info">
+            This table shows all low stock products in the system.
+          </div>
           <div v-if="isLoading" class="flex justify-center py-4">
             <div class="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
           </div>

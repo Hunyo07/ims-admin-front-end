@@ -30,6 +30,7 @@ interface Customer {
   address: Address
   gcashDetails?: GcashDetails
   preferredDeliveryTime?: string
+  isActive: boolean
   createdAt: string
   updatedAt: string
 }
@@ -40,6 +41,7 @@ const isLoading = ref(true)
 const searchQuery = ref('')
 const showModal = ref(false)
 const isDeleting = ref(false)
+const isTogglingStatus = ref(false)
 const selectedCustomerId = ref(null)
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
@@ -143,6 +145,60 @@ const handleEditCustomer = (customer) => {
   showModal.value = true
 }
 
+const handleToggleCustomerStatus = async (customer) => {
+  const action = customer.isActive ? 'deactivate' : 'activate'
+  const result = await Swal.fire({
+    title: `Are you sure?`,
+    text: `Do you want to ${action} ${customer.firstName} ${customer.lastName}?`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#3085d6',
+    cancelButtonColor: '#d33',
+    confirmButtonText: `Yes, ${action} customer!`,
+    customClass: {
+      confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90',
+      cancelButton: 'swal2-cancel bg-danger text-white px-4 py-2 rounded-lg hover:bg-opacity-90 ml-3'
+    }
+  })
+
+  if (result.isConfirmed) {
+    try {
+      isTogglingStatus.value = true
+      selectedCustomerId.value = customer._id
+      const response = await axios.patch(`http://localhost:5000/api/customers/${customer._id}/toggle-status`, {}, {
+        headers: {
+          Authorization: `Bearer ${authStore.token}`
+        }
+      })
+      
+      // Update the customer in the local array with the response data
+      const updatedCustomer = response.data.customer
+      customers.value = customers.value.map(c => 
+        c._id === customer._id ? updatedCustomer : c
+      )
+      
+      // Emit socket event for real-time update
+      socket.emit('customerStatusToggled', updatedCustomer)
+      
+      Swal.fire(
+        'Success!', 
+        `Customer has been ${action}d.`, 
+        'success'
+      )
+    } catch (error) {
+      console.error('Error toggling customer status:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error.response?.data?.message || `Error ${action}ing customer`
+      })
+    } finally {
+      isTogglingStatus.value = false
+      selectedCustomerId.value = null
+    }
+  }
+}
+
 const handleDeleteCustomer = async (customerId) => {
   selectedCustomerId.value = customerId
   const result = await Swal.fire({
@@ -152,7 +208,11 @@ const handleDeleteCustomer = async (customerId) => {
     showCancelButton: true,
     confirmButtonColor: '#3085d6',
     cancelButtonColor: '#d33',
-    confirmButtonText: 'Yes, delete it!'
+    confirmButtonText: 'Yes, delete it!',
+    customClass: {
+      confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90',
+      cancelButton: 'swal2-cancel bg-danger text-white px-4 py-2 rounded-lg hover:bg-opacity-90 ml-3'
+    }
   })
 
   if (result.isConfirmed) {
@@ -277,6 +337,11 @@ const resetForm = () => {
 onMounted(() => {
   fetchCustomers()
 
+  // Ensure socket is connected
+  if (!socket.connected) {
+    socket.connect()
+  }
+
   // Socket listeners for real-time updates
   socket.on('customerCreated', (newCustomer) => {
     if (newCustomer && newCustomer._id) {
@@ -295,6 +360,14 @@ onMounted(() => {
     }
   })
 
+  socket.on('customerStatusToggled', (updatedCustomer) => {
+    if (updatedCustomer && updatedCustomer._id) {
+      customers.value = customers.value.map((customer) =>
+        customer._id === updatedCustomer._id ? updatedCustomer : customer
+      )
+    }
+  })
+
   socket.on('customerDeleted', (customerId) => {
     if (customerId) {
       customers.value = customers.value.filter((customer) => customer._id !== customerId)
@@ -305,6 +378,7 @@ onMounted(() => {
   return () => {
     socket.off('customerCreated')
     socket.off('customerUpdated')
+    socket.off('customerStatusToggled')
     socket.off('customerDeleted')
   }
 })
@@ -342,7 +416,14 @@ onMounted(() => {
           </div>
 
           <button
-            v-if="authStore.hasPermission('manage_customers')"
+            @click="fetchCustomers"
+            class="inline-flex items-center justify-center rounded-lg bg-gray-500 px-4 py-2 text-sm font-medium text-white hover:bg-opacity-90 mr-2"
+            :disabled="isLoading"
+          >
+            {{ isLoading ? 'Loading...' : 'Refresh' }}
+          </button>
+          <button
+            v-if="authStore.canPerform('create_customer')"
             @click="showModal = true"
             class="inline-flex items-center justify-center rounded-lg bg-primary px-6 py-2 text-sm font-medium text-white hover:bg-opacity-90"
           >
@@ -362,16 +443,17 @@ onMounted(() => {
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Email</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Phone Number</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Address</th>
+            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Status</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Preferred Delivery</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="isLoading">
-            <td colspan="6" class="text-center py-4">Loading...</td>
+            <td colspan="7" class="text-center py-4">Loading...</td>
           </tr>
           <tr v-else-if="paginatedCustomers.length === 0">
-            <td colspan="6" class="text-center py-4">No customers found</td>
+            <td colspan="7" class="text-center py-4">No customers found</td>
           </tr>
           <tr
             v-for="customer in paginatedCustomers"
@@ -397,11 +479,23 @@ onMounted(() => {
               </div>
             </td>
             <td class="py-4.5 px-4">
-              {{ customer.preferredDeliveryTime || 'Not specified' }}
+              <span 
+                :class="[
+                  'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
+                  customer.isActive 
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                    : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                ]"
+              >
+                {{ customer.isActive ? 'Active' : 'Inactive' }}
+              </span>
             </td>
             <td class="py-4.5 px-4">
+              {{ customer.preferredDeliveryTime || 'Not specified' }}
+            </td>
+                        <td class="py-4.5 px-4">
               <div class="flex items-center space-x-2">
-                <button v-if="authStore.hasPermission('edit_customers')" @click="handleEditCustomer(customer)" class="hover:text-primary">
+                <button v-if="authStore.canPerform('edit_customer')" @click="handleEditCustomer(customer)" class="hover:text-primary">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     class="h-5 w-5"
@@ -413,9 +507,59 @@ onMounted(() => {
                     />
                   </svg>
                 </button>
+
+                <button
+                  v-if="authStore.canPerform('deactivate_customer')"
+                  @click="handleToggleCustomerStatus(customer)"
+                  class="hover:text-warning"
+                  :disabled="isTogglingStatus && selectedCustomerId === customer._id"
+                  :title="customer.isActive ? 'Deactivate Customer' : 'Activate Customer'"
+                >
+                  <svg
+                    v-if="!(isTogglingStatus && selectedCustomerId === customer._id)"
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      v-if="customer.isActive"
+                      fill-rule="evenodd"
+                      d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z"
+                      clip-rule="evenodd"
+                    />
+                    <path
+                      v-else
+                      fill-rule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                      clip-rule="evenodd"
+                    />
+                  </svg>
+                  <svg
+                    v-else
+                    class="animate-spin h-5 w-5"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    ></circle>
+                    <path
+                      class="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                </button>
           
                 <button
-                  v-if="authStore.hasPermission('delete_customers')"
+                  v-if="authStore.canPerform('delete_customer')"
                   @click="handleDeleteCustomer(customer._id)"
                   class="hover:text-danger"
                   :disabled="isDeleting && selectedCustomerId === customer._id"

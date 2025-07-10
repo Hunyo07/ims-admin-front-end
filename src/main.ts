@@ -21,7 +21,7 @@ import {
 library.add(faCheckCircle, faExclamationTriangle, faExclamationCircle, faInfoCircle)
 
 import App from './App.vue'
-import router from './router/index.ts'
+import router from '@/router'
 
 const app = createApp(App)
 
@@ -37,9 +37,9 @@ import { vPermission, vRole } from './directives/permission'
 app.directive('permission', vPermission)
 app.directive('role', vRole)
 
-// Initialize user data if token exists
-const pinia = createPinia()
-app.use(pinia)
+// // Initialize user data if token exists
+// const pinia = createPinia()
+// app.use(pinia)
 
 // Fetch user data on app initialization
 import { useAuthStore } from './stores/auth'

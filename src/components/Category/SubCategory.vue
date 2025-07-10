@@ -54,7 +54,6 @@ const fetchSubCategories = async () => {
     })
     subCategories.value = response.data
   } catch (error) {
-    console.error('Error fetching subcategories:', error)
     subCategories.value = []
     Swal.fire({
       icon: 'error',
@@ -75,7 +74,6 @@ const fetchCategories = async () => {
     categories.value = (response.data || [])
       .filter((category) => category && typeof category === 'object')
   } catch (error) {
-    console.error('Error fetching categories:', error)
     categories.value = []
     Swal.fire({
       icon: 'error',
@@ -197,7 +195,6 @@ const handleEditSubCategory = async (subCategory) => {
 
     showModal.value = true
   } catch (error) {
-    console.error('Error loading data for edit:', error)
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -319,7 +316,6 @@ const handleToggleStatus = async (subCategoryId, currentStatus) => {
       })
     }
   } catch (error) {
-    console.error('Toggle status error:', error)
     Swal.fire({
       icon: 'error',
       title: 'Error',

@@ -26,6 +26,7 @@ import InventoryCounts from '@/views/Inventory/InventoryCountsView.vue'
 import StockAdjustments from '@/views/Inventory/StockAdjustmentsView.vue'
 import ForgotPasswordView from '@/views/Authentication/ForgotPasswordView.vue';
 import ResetPasswordView from '@/views/Authentication/ResetPasswordView.vue';
+import ActivityLogView from '@/views/ActivityLog/ActivityLogView.vue';
 
 // Add this to your imports
 import { useAuthStore } from '@/stores/auth'
@@ -115,6 +116,17 @@ const routes = [
       requiresAuth: true,
       roles: ['superadmin', 'admin'],
       permissions: ['view_users', 'manage_users']
+    }
+  },
+  {
+    path: '/activity-logs',
+    name: 'activity-logs',
+    component: ActivityLogView,
+    meta: {
+      title: 'Activity Logs',
+      requiresAuth: true,
+      roles: ['superadmin'],
+      permissions: ['view_activity_logs']
     }
   },
   {
@@ -345,13 +357,13 @@ router.beforeEach((to, from, next) => {
     }
     // Temporarily allow all authenticated users while debugging
     else {
-      console.log('Route access check:', {
-        route: to.path,
-        userRole: authStore.userRole,
-        userPermissions: authStore.userPermissions,
-        requiredRoles: to.meta.roles,
-        requiredPermissions: to.meta.permissions
-      })
+      // console.log('Route access check:', {
+      //   route: to.path,
+      //   userRole: authStore.userRole,
+      //   userPermissions: authStore.userPermissions,
+      //   requiredRoles: to.meta.roles,
+      //   requiredPermissions: to.meta.permissions
+      // })
       next() // Allow navigation for now
     }
   } else {

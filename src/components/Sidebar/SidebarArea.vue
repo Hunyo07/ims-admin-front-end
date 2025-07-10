@@ -50,11 +50,10 @@ const allMenuGroups = ref([
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M18 17H6v-2h12v2zm0-4H6v-2h12v2zm0-4H6V7h12v2zM3 22l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20z"/>
+                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
               </svg>`,
         label: 'Sales ',
         route: '/sales',
-        roles: ['superadmin', 'admin'],
         permissions: ['view_sales', 'manage_sales']
       },
       {
@@ -68,15 +67,14 @@ const allMenuGroups = ref([
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                <path d="M16 4c0-1.11.89-2 2-2s2 .89 2 2-.89 2-2 2-2-.89-2-2zm4 18v-6h2.5l-2.54-7.63A1.5 1.5 0 0 0 18.54 8H17c-.8 0-1.54.37-2.01 1l-3.99 5.33V4c0-.55-.45-1-1-1s-1 .45-1 1v16h2v-7.5l3.5-4.67c.25-.33.62-.53 1.01-.53H19l1.5 4.5H20V22h2z"/>
               </svg>`,
         label: 'Customer',
         route: '/customer',
-        roles: ['superadmin', 'admin']
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M4 11h4V7H4v4zm0 6h4v-4H4v4zm6 0h4v-4h-4v4zm6 0h4v-4h-4v4zm-6-6h4V7h-4v4zm6-4v4h4V7h-4z"/>
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
               </svg>`,
         label: 'Category ',
         route: '',
@@ -96,7 +94,7 @@ const allMenuGroups = ref([
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M4 11h4V7H4v4zm0 6h4v-4H4v4zm6 0h4v-4h-4v4zm6 0h4v-4h-4v4zm-6-6h4V7h-4v4zm6-4v4h4V7h-4z"/>
+                <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 14H4v-4h11v4zm0-5H4V9h11v4zm5 5h-4V9h4v9z"/>
               </svg>`,
         label: 'Inventory ',
         route: '',
@@ -110,7 +108,7 @@ const allMenuGroups = ref([
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M1 4h2v16H1V4zm3 0h2v16H4V4zm3 0h2v16H7V4zm3 0h1v16h-1V4zm3 0h1v16h-1V4zm2 0h2v16h-2V4zm3 0h2v16h-2V4zm3 0h2v16h-2V4z"/>
+                <path d="M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z"/>
               </svg>`,
         label: 'Barcode ',
         route: '/barcodes',
@@ -118,7 +116,7 @@ const allMenuGroups = ref([
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M18 17H6v-2h12v2zm0-4H6v-2h12v2zm0-4H6V7h12v2zM3 22l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20z"/>
+                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 16.82 9.64 16 12 16s4.53.82 6.24 2.19c.48.38.76.96.76 1.58V19z"/>
               </svg>`,
         label: 'POS ',
         route: '/pos'
@@ -138,6 +136,7 @@ const allMenuGroups = ref([
         children: [
           { label: 'Reorder Point', route: '/settings/reorder-point' , roles: ['superadmin']},
           { label: 'Account Settings', route: '/settings/account' , roles: ['superadmin', 'admin', 'staff']},
+          { label: 'Activity Logs', route: '/activity-logs' , roles: ['superadmin']},
         ],
         roles: ['superadmin', 'admin', 'staff']
       }

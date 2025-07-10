@@ -36,24 +36,10 @@ export const useNotificationStore = defineStore('notification', {
         return
       }
 
-      // const authStore = useAuthStore()
-      // if (!authStore.isAuthenticated ||!authStore.user?._id) return
-      // // Authenticate socket with user ID
-      // socket.emit('authenticate', authStore.user?._id)
-
-      // // Listen for new notifications
-      // socket.on('newNotification', (data) => {
-      //   this.addNotification(data.notification)
-      // })
-
-      // // Fetch initial notifications
-      // await this.fetchNotifications()
-
-      // this.initialized = true
       try {
         // Authenticate socket with user ID
         socket.emit('authenticate', authStore.user.id)
-        console.log('Socket authenticated for user:', authStore.user.id)
+        // console.log('Socket authenticated for user:', authStore.user.id)
 
         // Listen for new notifications
         socket.on('newNotification', (data) => {

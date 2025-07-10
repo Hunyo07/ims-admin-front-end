@@ -162,7 +162,8 @@ export const useAuthStore = defineStore('auth', {
         'reports': ['view_reports', 'generate_reports'],
         'settings': ['view_settings', 'manage_settings'],
         'pos': ['use_pos'],
-        'barcodes': ['view_barcodes', 'manage_barcodes']
+        'barcodes': ['view_barcodes', 'manage_barcodes'],
+        'activity_logs': ['view_activity_logs']
       }
 
       const requiredPermissions = featurePermissions[feature] || []
@@ -187,7 +188,11 @@ export const useAuthStore = defineStore('auth', {
         'approve_order': ['approve_orders', 'manage_orders'],
         'export_data': ['export_reports', 'export_sales_data'],
         'manage_settings': ['manage_settings'],
-        'assign_roles': ['assign_roles', 'manage_users']
+        'assign_roles': ['assign_roles', 'manage_users'],
+        'create_customer': ['create_customers', 'manage_customers'],
+        'edit_customer': ['edit_customers', 'manage_customers'],
+        'delete_customer': ['delete_customers', 'manage_customers'],
+        'deactivate_customer': ['deactivate_customers', 'manage_customers']
       }
 
       const requiredPermissions = actionPermissions[action] || []

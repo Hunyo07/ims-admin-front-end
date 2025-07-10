@@ -1,8 +1,7 @@
 <script setup>
 import { ref } from 'vue';
-import emailjs from 'emailjs-com';
+import emailjs from '@emailjs/browser';
 import axios from '@/utils/axios';
-
 const email = ref('');
 const loading = ref(false);
 const error = ref('');
@@ -13,11 +12,6 @@ const EMAILJS_SERVICE_ID = 'service_5b24ron';
 const EMAILJS_TEMPLATE_ID = 'template_rz90ybf';
 const EMAILJS_USER_ID = '2ek36LtfO7AEau2wp'; // public key
 const FRONTEND_URL = 'http://localhost:5173'; // or your deployed frontend URL
-
-// For demo: generate a random token (in production, the backend should generate the token and send the email)
-function generateToken() {
-  return Math.random().toString(36).substr(2) + Date.now().toString(36);
-}
 
 const handleSubmit = async () => {
   loading.value = true;

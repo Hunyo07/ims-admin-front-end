@@ -482,7 +482,7 @@ const generateFromReorderPoints = async () => {
     })
 
     const response = await axios.post(
-      'http://localhost:5000/api/reorder-points/auto-reorder',
+      'http://localhost:5000/api/reorder/auto-reorder',
       {},
       {
         headers: {

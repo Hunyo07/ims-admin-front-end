@@ -175,7 +175,6 @@ const saveReorderSettings = async () => {
         reorderQuantity: editForm.value.reorderQuantity,
         supplierId: selectedProduct.value.supplier?._id
       }
-      console.log('Sending data to create reorder point:', requestData)
 
       response = await axios.post('http://localhost:5000/api/reorder', requestData, {
         headers: {

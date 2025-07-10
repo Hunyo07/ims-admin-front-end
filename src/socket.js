@@ -10,7 +10,6 @@ export const socket = io('http://localhost:5000', {
 
 // Add connection event listeners
 socket.on('connect', () => {
-  console.log('Socket connected:', socket.id)
 })
 
 socket.on('connect_error', (error) => {
@@ -18,5 +17,11 @@ socket.on('connect_error', (error) => {
 })
 
 socket.on('disconnect', (reason) => {
-  console.log('Socket disconnected:', reason)
 })
+
+// Test socket connection
+setTimeout(() => {
+  if (socket.connected) {
+  } else {
+  }
+}, 2000)

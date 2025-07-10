@@ -6,6 +6,7 @@ import Swal from 'sweetalert2'
 import { ref, onMounted, computed, watch } from 'vue'
 
 const authStore = useAuthStore()
+const userInfoLoaded = ref(false)
 
 interface Address {
   street: string
@@ -42,6 +43,15 @@ interface User {
   lastLogin: string
   createdAt: string
   updatedAt: string
+  createdBy?: {
+    user: {
+      _id: string
+      firstName: string
+      lastName: string
+      email: string
+    }
+    role: string
+  }
 }
 
 const selectedBranch = ref('all')
@@ -165,18 +175,23 @@ const fetchRoles = async () => {
 }
 const fetchUsers = async () => {
   try {
+
+    
     const response = await axios.get('http://localhost:5000/api/superadmin/users', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
     })
+    
+    
+    
     // Check if response.data has the users array in a nested property
     users.value = response.data.users || response.data.data || response.data
+    
+    
+    
   } catch (error) {
     console.error('Error fetching users:', error)
-    if (error.response?.status === 401) {
-      console.error('Unauthorized access')
-    }
   } finally {
     isLoading.value = false
   }
@@ -303,10 +318,14 @@ const handleUpdateUser = async () => {
     editingUser.value = null
     resetForm()
   } catch (error) {
+    const errorMessage = error.response?.data?.message || 'Error updating user'
     Swal.fire({
       icon: 'error',
       title: 'Error',
-      text: error.response?.data?.message || 'Error updating user'
+      text: errorMessage,
+      customClass: {
+        confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
+      }
     })
   } finally {
     isSubmitting.value = false
@@ -437,7 +456,11 @@ const handleDeleteUser = async (userId) => {
     showCancelButton: true,
     confirmButtonColor: '#3085d6',
     cancelButtonColor: '#d33',
-    confirmButtonText: 'Yes, delete it!'
+    confirmButtonText: 'Yes, delete it!',
+    customClass: {
+      confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90',
+      cancelButton: 'swal2-cancel bg-danger text-white px-4 py-2 rounded-lg hover:bg-opacity-90 ml-3'
+    }
   })
 
   if (result.isConfirmed) {
@@ -451,10 +474,14 @@ const handleDeleteUser = async (userId) => {
       socket.emit('deleteUser', userId)
       Swal.fire('Deleted!', 'User has been deleted.', 'success')
     } catch (error) {
+      const errorMessage = error.response?.data?.message || 'Error deleting user'
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: error.response?.data?.message || 'Error deleting user'
+        text: errorMessage,
+        customClass: {
+          confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
+        }
       })
     } finally {
       isDeleting.value = false
@@ -472,7 +499,13 @@ const handleToggleStatus = async (userId, currentStatus) => {
       showCancelButton: true,
       confirmButtonColor: currentStatus ? '#d33' : '#3085d6',
       cancelButtonColor: '#6B7280',
-      confirmButtonText: `Yes, ${currentStatus ? 'deactivate' : 'activate'} it!`
+      confirmButtonText: `Yes, ${currentStatus ? 'deactivate' : 'activate'} it!`,
+      customClass: {
+        confirmButton: currentStatus 
+          ? 'swal2-confirm bg-danger text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
+          : 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90',
+        cancelButton: 'swal2-cancel bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-opacity-90 ml-3'
+      }
     })
 
     if (result.isConfirmed) {
@@ -503,40 +536,49 @@ const handleToggleStatus = async (userId, currentStatus) => {
       })
     }
   } catch (error) {
+    const errorMessage = error.response?.data?.message || 'Error toggling user status'
     Swal.fire({
       icon: 'error',
       title: 'Error',
-      text: error.response?.data?.message || 'Error toggling user status'
+      text: errorMessage,
+      customClass: {
+        confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
+      }
     })
   }
 }
-onMounted(() => {
+onMounted(async () => {
+  
+  
+  if (!authStore.user || !authStore.user.id) {
+    
+    await authStore.fetchCurrentUser();
+          await authStore.fetchCurrentUser();
+    }
+    
+    userInfoLoaded.value = true;
+  
   fetchUsers()
   fetchRoles()
   fetchBranches()
 
   // Socket listeners for real-time updates
   socket.on('userCreated', (newUserData) => {
-    // console.log('Received new user:', newUserData)
     if (newUserData && newUserData._id) {
-      // Check if user already exists
       const exists = users.value.some((user) => user._id === newUserData._id)
       if (!exists) {
-        // Add new user to the beginning of the array for immediate visibility
         users.value = [newUserData, ...users.value]
       }
     }
   })
 
   socket.on('userUpdated', (updatedUser) => {
-    // console.log('Received updated user:', updatedUser)
     if (updatedUser && updatedUser._id) {
       users.value = users.value.map((user) => (user._id === updatedUser._id ? updatedUser : user))
     }
   })
 
   socket.on('userDeleted', (userId) => {
-    // console.log('Received deleted user ID:', userId)
     if (userId) {
       users.value = users.value.filter((user) => user._id !== userId)
     }
@@ -570,6 +612,64 @@ const filteredRoles = computed(() => {
   }
   return [];
 });
+
+// Check if current user can edit a specific user
+const canEditUser = (user: User) => {
+  const currentUserRole = authStore.getUserRole();
+  const currentUserId = authStore.user?.id; // Changed from _id to id
+  const userCreatedById = user.createdBy?.user?._id;
+  
+
+  
+  if (currentUserRole === 'superadmin') {
+    return true;
+  } else if (currentUserRole === 'admin') {
+    // Admin can only edit users they created
+    // Convert both to strings for comparison to handle ObjectId vs string issues
+    const canEdit = String(userCreatedById) === String(currentUserId);
+    return canEdit;
+  }
+  return false;
+};
+
+// Check if current user can delete a specific user
+const canDeleteUser = (user: User) => {
+  const currentUserRole = authStore.getUserRole();
+  const currentUserId = authStore.user?.id; // Changed from _id to id
+  const userCreatedById = user.createdBy?.user?._id;
+  
+
+  
+  if (currentUserRole === 'superadmin') {
+    return true;
+  } else if (currentUserRole === 'admin') {
+    // Admin can only delete users they created
+    const canDelete = String(userCreatedById) === String(currentUserId);
+    return canDelete;
+  }
+  return false;
+};
+
+// Check if current user can toggle status of a specific user
+const canToggleUserStatus = (user: User) => {
+  const currentUserRole = authStore.getUserRole();
+  const currentUserId = authStore.user?.id; // Changed from _id to id
+  const userCreatedById = user.createdBy?.user?._id;
+  
+
+  
+  if (currentUserRole === 'superadmin') {
+    return true;
+  } else if (currentUserRole === 'admin') {
+    // Admin can only toggle status of users they created
+    const canToggle = String(userCreatedById) === String(currentUserId);
+    return canToggle;
+  }
+  return false;
+};
+
+
+
 </script>
 
 <template>
@@ -610,15 +710,6 @@ const filteredRoles = computed(() => {
             <option value="admin">Admin</option>
             <option value="staff">Staff</option>
           </select>
-          <!-- <select
-            v-model="selectedBranch"
-            class="rounded-lg border border-stroke bg-transparent px-4 py-2 outline-none focus:border-primary dark:border-strokedark"
-          >
-            <option value="all">All Branches</option>
-            <option v-for="branch in branches" :key="branch._id" :value="branch._id">
-              {{ branch.name }}
-            </option>
-          </select> -->
           <button
             v-if="canCreateUser"
             @click="showModal = true"
@@ -626,178 +717,216 @@ const filteredRoles = computed(() => {
           >
             Create User
           </button>
+        
         </div>
       </div>
     </div>
 
-    <!-- Table -->
-    <div class="max-w-full overflow-x-auto">
-      <table class="w-full table-auto">
-        <thead>
-          <tr class="bg-gray-2 text-left dark:bg-meta-4">
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Name</th>
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Email</th>
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Role</th>
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Status</th>
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="isLoading">
-            <td colspan="6" class="text-center py-4">Loading...</td>
-          </tr>
-          <tr v-else-if="filteredUsers.length === 0">
-            <td colspan="6" class="text-center py-4">No users found</td>
-          </tr>
-          <tr
-            v-for="user in paginatedUsers"
-            :key="user._id"
-            class="border-b border-stroke dark:border-strokedark"
-          >
-            <td class="py-4.5 px-4">
-              <div class="flex items-center gap-3">
-                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-meta-2">
-                  {{ user.firstName.charAt(0).toUpperCase() }}
+    <!-- Loading state for user info -->
+    <div v-if="!userInfoLoaded" class="text-center py-8">
+      <span class="text-lg text-gray-500">Loading user info...</span>
+    </div>
+    <div v-else>
+      <!-- Table -->
+      <div class="max-w-full overflow-x-auto">
+        <table class="w-full table-auto">
+          <thead>
+            <tr class="bg-gray-2 text-left dark:bg-meta-4">
+              <th class="py-4.5 px-4 font-medium text-black dark:text-white">Name</th>
+              <th class="py-4.5 px-4 font-medium text-black dark:text-white">Email</th>
+              <th class="py-4.5 px-4 font-medium text-black dark:text-white">Role</th>
+              <th class="py-4.5 px-4 font-medium text-black dark:text-white">Status</th>
+              <th class="py-4.5 px-4 font-medium text-black dark:text-white">Created By</th>
+              <th class="py-4.5 px-4 font-medium text-black dark:text-white">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="isLoading">
+              <td colspan="7" class="text-center py-4">Loading...</td>
+            </tr>
+            <tr v-else-if="filteredUsers.length === 0">
+              <td colspan="7" class="text-center py-4">No users found</td>
+            </tr>
+            <tr
+              v-for="user in paginatedUsers"
+              :key="user._id"
+              class="border-b border-stroke dark:border-strokedark"
+            >
+              <td class="py-4.5 px-4">
+                <div class="flex items-center gap-3">
+                  <div class="flex h-10 w-10 items-center justify-center rounded-full bg-meta-2">
+                    {{ user.firstName.charAt(0).toUpperCase() }}
+                  </div>
+                  <p class="text-black dark:text-white">{{ user.firstName }} {{ user.lastName }}</p>
                 </div>
-                <p class="text-black dark:text-white">{{ user.firstName }} {{ user.lastName }}</p>
-              </div>
-            </td>
-            <td class="py-4.5 px-4">{{ user.email }}</td>
-            <td class="py-4.5 px-4">
-              <span
-                :class="`inline-block rounded px-2.5 py-0.5 text-sm font-medium ${
-                  user.role.name === 'superadmin'
-                    ? 'bg-meta-3 text-white'
-                    : user.role.name === 'admin'
-                      ? 'bg-meta-5 text-white'
-                      : 'bg-meta-8 text-white'
-                }`"
-              >
-                {{ user.role.name }}
-              </span>
-            </td>
-            <td class="py-4.5 px-4">
-              <div class="flex items-center space-x-2">
-                <div
-                  :class="`h-3 w-3 rounded-full ${
-                    user.isActive ? 'bg-success animate-pulse' : 'bg-danger'
-                  }`"
-                ></div>
-                <button
-                  @click="handleToggleStatus(user._id, user.isActive)"
-                  :class="`text-sm font-medium ${
-                    user.isActive
-                      ? 'text-success hover:text-meta-5'
-                      : 'text-danger hover:text-meta-8'
+              </td>
+              <td class="py-4.5 px-4">{{ user.email }}</td>
+              <td class="py-4.5 px-4">
+                <span
+                  :class="`inline-block rounded px-2.5 py-0.5 text-sm font-medium ${
+                    user.role.name === 'superadmin'
+                      ? 'bg-meta-3 text-white'
+                      : user.role.name === 'admin'
+                        ? 'bg-meta-5 text-white'
+                        : 'bg-meta-8 text-white'
                   }`"
                 >
-                  {{ user.isActive ? 'Active' : 'Inactive' }}
-                </button>
-              </div>
-            </td>
-            <!-- <td class="py-4.5 px-4">{{ user.branch?.name || 'Not Assigned' }}</td> -->
-            <td class="py-4.5 px-4">
-              <div class="flex items-center space-x-2">
-                <button @click="handleEditUser(user)" class="hover:text-primary">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    class="h-5 w-5"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
+                  {{ user.role.name }}
+                </span>
+              </td>
+              <td class="py-4.5 px-4">
+                <div class="flex items-center space-x-2">
+                  <div
+                    :class="`h-3 w-3 rounded-full ${
+                      user.isActive ? 'bg-success animate-pulse' : 'bg-danger'
+                    }`"
+                  ></div>
+                  <button
+                    v-if="canToggleUserStatus(user)"
+                    @click="handleToggleStatus(user._id, user.isActive)"
+                    :class="`text-sm font-medium ${
+                      user.isActive
+                        ? 'text-success hover:text-meta-5'
+                        : 'text-danger hover:text-meta-8'
+                    }`"
                   >
-                    <path
-                      d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"
-                    />
-                  </svg>
-                </button>
-                <button
-                  @click="handleToggleStatus(user._id, user.isActive)"
-                  :class="`hover:${user.isActive ? 'text-danger' : 'text-success'}`"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    class="h-5 w-5"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
+                    {{ user.isActive ? 'Active' : 'Inactive' }}
+                  </button>
+                  <span v-else :class="`text-sm font-medium ${
+                    user.isActive ? 'text-success' : 'text-danger'
+                  }`">
+                    {{ user.isActive ? 'Active' : 'Inactive' }}
+                  </span>
+                </div>
+              </td>
+              <td class="py-4.5 px-4">
+                <div class="flex items-center gap-2">
+                  <span v-if="user.createdBy?.user" class="text-sm">
+                    {{ user.createdBy.user.firstName }} {{ user.createdBy.user.lastName }}
+                    <span v-if="user.createdBy.user._id === authStore.user?.id" 
+                          class="ml-1 px-2 py-0.5 text-xs bg-primary text-white rounded">
+                      You
+                    </span>
+                  </span>
+                  <span v-else class="text-sm text-gray-500">System</span>
+                </div>
+              </td>
+              <td class="py-4.5 px-4">
+                <div class="flex items-center space-x-2">
+                  <button 
+                    v-if="canEditUser(user)"
+                    @click="handleEditUser(user)" 
+                    class="hover:text-primary"
+                    title="Edit User"
                   >
-                    <path
-                      d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"
-                    />
-                  </svg>
-                </button>
-                <button
-                  @click="handleDeleteUser(user._id)"
-                  class="hover:text-danger"
-                  :disabled="isDeleting && selectedUserId === user._id"
-                >
-                  <svg
-                    v-if="!(isDeleting && selectedUserId === user._id)"
-                    xmlns="http://www.w3.org/2000/svg"
-                    class="h-5 w-5"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fill-rule="evenodd"
-                      d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
-                      clip-rule="evenodd"
-                    />
-                  </svg>
-                  <svg
-                    v-else
-                    class="animate-spin h-5 w-5"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      class="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      stroke-width="4"
-                    ></circle>
-                    <path
-                      class="opacity-75"
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="h-5 w-5"
+                      viewBox="0 0 20 20"
                       fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div class="flex items-center justify-between p-4">
-        <div class="flex items-center gap-2">
-          <select
-            v-model="itemsPerPage"
-            class="rounded border border-stroke bg-transparent px-2 py-1"
-          >
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="20">20</option>
-          </select>
-          <span>Items per page</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <button
-            @click="currentPage--"
-            :disabled="currentPage === 1"
-            class="rounded px-3 py-1 disabled:opacity-50"
-          >
-            Previous
-          </button>
-          <span>Page {{ currentPage }} of {{ totalPages }}</span>
-          <button
-            @click="currentPage++"
-            :disabled="currentPage === totalPages"
-            class="rounded px-3 py-1 disabled:opacity-50"
-          >
-            Next
-          </button>
+                    >
+                      <path
+                        d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    v-if="canToggleUserStatus(user)"
+                    @click="handleToggleStatus(user._id, user.isActive)"
+                    :class="`hover:${user.isActive ? 'text-danger' : 'text-success'}`"
+                    :title="user.isActive ? 'Deactivate User' : 'Activate User'"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="h-5 w-5"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    v-if="canDeleteUser(user)"
+                    @click="handleDeleteUser(user._id)"
+                    class="hover:text-danger"
+                    :disabled="isDeleting && selectedUserId === user._id"
+                    title="Delete User"
+                  >
+                    <svg
+                      v-if="!(isDeleting && selectedUserId === user._id)"
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="h-5 w-5"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                    <svg
+                      v-else
+                      class="animate-spin h-5 w-5"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        class="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        stroke-width="4"
+                      ></circle>
+                      <path
+                        class="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                  </button>
+                  <span v-if="!canEditUser(user) && !canDeleteUser(user) && !canToggleUserStatus(user)" 
+                        class="text-sm text-gray-500">
+                    No actions available
+                  </span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="flex items-center justify-between p-4">
+          <div class="flex items-center gap-2">
+            <select
+              v-model="itemsPerPage"
+              class="rounded border border-stroke bg-transparent px-2 py-1"
+            >
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="20">20</option>
+            </select>
+            <span>Items per page</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              @click="currentPage--"
+              :disabled="currentPage === 1"
+              class="rounded px-3 py-1 disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <span>Page {{ currentPage }} of {{ totalPages }}</span>
+            <button
+              @click="currentPage++"
+              :disabled="currentPage === totalPages"
+              class="rounded px-3 py-1 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
     </div>

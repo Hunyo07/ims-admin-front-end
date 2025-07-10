@@ -47,6 +47,23 @@ interface LastSale {
   notes?: string;
 }
 
+// Add a type for customers returned from the backend
+interface BackendCustomer {
+  _id: string;
+  name: string;
+  phone: string;
+  email: string;
+  address: {
+    street: string;
+    barangay: string;
+    city: string;
+    province: string;
+    zipCode: string;
+    deliveryInstructions?: string;
+    landmarkNotes?: string;
+  };
+}
+
 // State
 const products = ref<Product[]>([])
 const filteredProducts = ref<Product[]>([])
@@ -449,43 +466,50 @@ onMounted(() => {
   // Remove fetchBranches() call
 })
 // Add these to your state variables
-const customers = ref([])
-const selectedCustomer = ref(null)
+const customers = ref<BackendCustomer[]>([])
+const selectedCustomer = ref<BackendCustomer | null>(null)
 const isLoadingCustomers = ref(false)
 const customerSearchQuery = ref('')
 const showCustomerDropdown = ref(false)
-const filteredCustomers = ref([])
+const filteredCustomers = ref<BackendCustomer[]>([])
 
 // Add this method to fetch customers
 // Update the fetchCustomers method to use a different endpoint if needed
 const fetchCustomers = async (query = '') => {
   try {
-    isLoadingCustomers.value = true
-    // Use the main customers endpoint with search parameter instead
-    const response = await axios.get(`http://localhost:5000/api/customers?search=${query}&limit=10`, {
+    isLoadingCustomers.value = true;
+    const response = await axios.get(`http://localhost:5000/api/customers/pos-search?search=${query}&limit=10`, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
-    })
-    
-    // Transform the data to match the expected format
-    const customerData = response.data.customers || []
-    customers.value = customerData.map(customer => ({
+    });
+
+    const customerData: BackendCustomer[] = response.data.customers || [];
+    customers.value = customerData.map((customer: BackendCustomer) => ({
       _id: customer._id,
-      name: `${customer.firstName} ${customer.lastName}`,
-      phone: customer.phoneNumber,
+      name: customer.name,
+      phone: customer.phone,
       email: customer.email,
       address: customer.address
-    }))
-    
-    filteredCustomers.value = [...customers.value]
-  } catch (error) {
-    console.error('Error fetching customers:', error)
-    // Fallback to local filtering if API fails
-    customers.value = []
-    filteredCustomers.value = []
+    }));
+
+    filteredCustomers.value = [...customers.value];
+  } catch (error: unknown) {
+    let message = 'Failed to fetch customers.';
+    if (axios.isAxiosError(error)) {
+      message = error.response?.data?.message || error.message;
+    } else if (error instanceof Error) {
+      message = error.message;
+    }
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: message
+    });
+    customers.value = [];
+    filteredCustomers.value = [];
   } finally {
-    isLoadingCustomers.value = false
+    isLoadingCustomers.value = false;
   }
 }
 
@@ -497,14 +521,14 @@ const filterCustomers = () => {
   }
   
   const query = customerSearchQuery.value.toLowerCase()
-  filteredCustomers.value = customers.value.filter(customer => 
+  filteredCustomers.value = customers.value.filter((customer: BackendCustomer) => 
     customer.name.toLowerCase().includes(query) || 
     (customer.phone && customer.phone.includes(query))
   )
 }
 
 // Update the selectCustomer method to also populate the delivery address
-const selectCustomer = (customer) => {
+const selectCustomer = (customer: BackendCustomer) => {
   selectedCustomer.value = customer
   customerName.value = customer.name
   customerPhone.value = customer.phone || ''
@@ -581,7 +605,7 @@ watch(customerSearchQuery, () => {
           <div class="flex flex-col h-full">
             <div class="mb-3 h-28 overflow-hidden rounded-lg relative">
               <img
-                :src="product.images[0].url || placeholderImage"
+                :src="Array.isArray((product as any).images) && (product as any).images.length > 0 ? (product as any).images[0].url : placeholderImage"
                 :alt="product.name"
                 class="h-full w-full object-cover"
               />
@@ -654,7 +678,7 @@ watch(customerSearchQuery, () => {
             <input
               type="number"
               :value="item.quantity"
-              @input="updateQuantity(index, parseInt($event.target.value) || 0)"
+              @input="updateQuantity(index, $event.target && ($event.target as HTMLInputElement).value ? parseInt(($event.target as HTMLInputElement).value) || 0 : 0)"
               class="h-7 w-12 rounded border border-stroke bg-transparent text-center text-xs outline-none dark:border-strokedark"
               min="1"
               :max="item.maxQuantity"
@@ -895,33 +919,33 @@ watch(customerSearchQuery, () => {
       <button @click="closeReceipt" class="absolute top-2 right-2 text-gray-400 hover:text-danger">&times;</button>
       <div id="receipt-section">
         <h2 class="text-lg font-bold text-center mb-2">Books & Clothes House</h2>
-        <div class="text-xs text-center mb-2">{{ lastSale.date }}</div>
-        <div class="mb-2">Customer: {{ lastSale.customerName }}</div>
+        <div class="text-xs text-center mb-2">{{ lastSale?.date }}</div>
+        <div class="mb-2">Customer: {{ lastSale?.customerName }}</div>
         <div class="border-t border-b py-2 my-2">
-          <div v-for="item in lastSale.cart" :key="item.productId" class="flex justify-between text-sm">
+          <div v-for="item in lastSale?.cart" :key="item.productId" class="flex justify-between text-sm">
             <span>{{ item.name }} x{{ item.quantity }}</span>
             <span>₱{{ item.price.toFixed(2) }}</span>
           </div>
         </div>
         <div class="flex justify-between text-sm">
           <span>Subtotal:</span>
-          <span>₱{{ lastSale.subtotal.toFixed(2) }}</span>
+          <span>₱{{ lastSale?.subtotal.toFixed(2) }}</span>
         </div>
-        <div v-if="lastSale.deliveryMode === 'delivery'" class="flex justify-between text-sm">
+        <div v-if="lastSale?.deliveryMode === 'delivery'" class="flex justify-between text-sm">
           <span>Delivery Fee:</span>
-          <span>₱{{ lastSale.deliveryFee.toFixed(2) }}</span>
+          <span>₱{{ lastSale?.deliveryFee.toFixed(2) }}</span>
         </div>
         <div class="flex justify-between text-sm font-bold">
           <span>Total:</span>
-          <span>₱{{ lastSale.total.toFixed(2) }}</span>
+          <span>₱{{ lastSale?.total.toFixed(2) }}</span>
         </div>
         <div class="flex justify-between text-sm">
           <span>Payment:</span>
-          <span>₱{{ lastSale.paymentAmount.toFixed(2) }}</span>
+          <span>₱{{ lastSale?.paymentAmount.toFixed(2) }}</span>
         </div>
         <div class="flex justify-between text-sm">
           <span>Change:</span>
-          <span>₱{{ lastSale.change.toFixed(2) }}</span>
+          <span>₱{{ lastSale?.change.toFixed(2) }}</span>
         </div>
         <div class="text-center mt-4 text-xs">Thank you for your purchase!</div>
       </div>

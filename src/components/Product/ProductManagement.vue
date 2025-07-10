@@ -25,6 +25,15 @@ interface Product {
   isActive: boolean
   createdAt: string
   updatedAt: string
+  createdBy?: {
+    user: string | {
+      _id: string
+      firstName: string
+      lastName: string
+      email: string
+    }
+    role: string
+  }
 }
 // Update refs
 const imagePreview = ref(null)
@@ -349,19 +358,6 @@ const exportProductsPDF = () => {
     })
   }
 }
-const fetchBranches = async () => {
-  try {
-    const response = await axios.get('http://localhost:5000/api/superadmin/branches', {
-      headers: {
-        Authorization: `Bearer ${authStore.token}`
-      }
-    })
-    branches.value = response.data?.filter((branch) => branch?.isActive) || []
-  } catch (error) {
-    console.error('Error fetching branches:', error)
-    branches.value = [] // Set empty array on error
-  }
-}
 const fetchProducts = async () => {
   try {
     isLoading.value = true
@@ -491,6 +487,56 @@ const paginatedProducts = computed(() => {
   return filteredProducts.value.slice(start, end)
 })
 
+// Check if user can edit a specific product
+const canEditProduct = (product: Product) => {
+  // Get user ID (handle both id and _id)
+  const userId = authStore.user?.id || authStore.user?._id
+  
+  // If no user is logged in, can't edit
+  if (!authStore.user || !userId) {
+    return false
+  }
+  
+  // Superadmins can edit any product
+  if (authStore.isSuperAdmin()) {
+    return true
+  }
+
+  // Check if user is the creator of the product
+  if (product.createdBy && product.createdBy.user) {
+    const creatorId = typeof product.createdBy.user === 'object' 
+      ? product.createdBy.user._id 
+      : product.createdBy.user
+    if (creatorId === userId) {
+      return true
+    }
+  }
+  
+  return false
+}
+
+// Check if user can delete a specific product
+const canDeleteProduct = (product: Product) => {
+  // Get user ID (handle both id and _id)
+  const userId = authStore.user?.id || authStore.user?._id
+  
+  // If no user is logged in, can't delete
+  if (!authStore.user || !userId) return false
+  
+  // Superadmins can delete any product
+  if (authStore.isSuperAdmin()) return true
+  
+  // Check if user is the creator of the product
+  if (product.createdBy && product.createdBy.user) {
+    const creatorId = typeof product.createdBy.user === 'object' 
+      ? product.createdBy.user._id 
+      : product.createdBy.user
+    if (creatorId === userId) return true
+  }
+  
+  return false
+}
+
 const resetForm = () => {
   newProduct.value = {
     name: '',
@@ -524,6 +570,7 @@ const handleEditProduct = (product) => {
     costPrice: product.costPrice,
     unit: product.unit,
     currentStock: product.currentStock,
+    images: null, // Set to null for editing since we don't handle image updates in edit mode
     sku: product.sku || '',
     barcodeText: product.barcode?.text || ''
   }
@@ -561,10 +608,21 @@ const handleUpdateProduct = async () => {
       timer: 1500
     })
   } catch (error) {
+    let errorMessage = 'Error updating product'
+    
+    if (error.response?.status === 403) {
+      errorMessage = error.response.data.message
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    }
+    
     Swal.fire({
       icon: 'error',
       title: 'Error',
-      text: error.response?.data?.message || 'Error updating product'
+      text: errorMessage,
+      customClass: {
+        confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
+      }
     })
   } finally {
     isSubmitting.value = false
@@ -603,10 +661,21 @@ const handleDeleteProduct = async (productId) => {
         showConfirmButton: false
       })
     } catch (error) {
+      let errorMessage = 'Error deleting product'
+      
+      if (error.response?.status === 403) {
+        errorMessage = error.response.data.message
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message
+      }
+      
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: error.response?.data?.message || 'Error deleting product'
+        text: errorMessage,
+        customClass: {
+          confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
+        }
       })
     } finally {
       isDeleting.value = false
@@ -718,18 +787,9 @@ const handleAddProduct = async () => {
 onMounted(() => {
   fetchProducts()
   fetchCategories()
-  fetchBranches()
   fetchSuppliers()
   fetchSubCategories()
 
-  // socket.on('productCreated', (newProduct) => {
-  //   if (newProduct && newProduct._id) {
-  //     const exists = products.value.some((product) => product._id === newProduct._id)
-  //     if (!exists) {
-  //       products.value = [newProduct, ...products.value]
-  //     }
-  //   }
-  // })
 
   socket.on('productUpdated', (updatedProduct) => {
     if (updatedProduct && updatedProduct._id) {
@@ -919,15 +979,16 @@ watch(
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Price</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Stock</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Status</th>
+            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Created By</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="isLoading">
-            <td colspan="8" class="text-center py-4">Loading...</td>
+            <td colspan="9" class="text-center py-4">Loading...</td>
           </tr>
           <tr v-else-if="paginatedProducts.length === 0">
-            <td colspan="8" class="text-center py-4">No products found</td>
+            <td colspan="9" class="text-center py-4">No products found</td>
           </tr>
           <tr
             v-for="product in paginatedProducts"
@@ -960,7 +1021,6 @@ watch(
                   }`"
                 ></div>
                 <button
-                  @click="handleToggleStatus(product._id, product.isActive)"
                   :class="`text-sm font-medium ${
                     product.isActive
                       ? 'text-success hover:text-meta-5'
@@ -972,8 +1032,36 @@ watch(
               </div>
             </td>
             <td class="py-4.5 px-4">
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-gray-600 dark:text-gray-400">
+                  {{ 
+                    product.createdBy?.user && typeof product.createdBy.user === 'object' 
+                      ? `${product.createdBy.user.firstName} ${product.createdBy.user.lastName}`
+                      : product.createdBy?.role || 'Unknown'
+                  }}
+                </span>
+                <span 
+                  v-if="authStore.user && (authStore.user.id || authStore.user._id) && product.createdBy && product.createdBy.user && (
+                    (typeof product.createdBy.user === 'object' && product.createdBy.user._id === (authStore.user.id || authStore.user._id)) ||
+                    (typeof product.createdBy.user === 'string' && product.createdBy.user === (authStore.user.id || authStore.user._id))
+                  )"
+                  class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary bg-opacity-10 text-primary"
+                >
+                  You
+                </span>
+              </div>
+            </td>
+            <td class="py-4.5 px-4">
               <div class="flex items-center space-x-2">
-                <button v-if="authStore.hasPermission('edit_products')" @click="handleEditProduct(product)" class="hover:text-primary">
+                <button 
+                  v-if="authStore.hasPermission('manage_products') && canEditProduct(product)" 
+                  @click="handleEditProduct(product)" 
+                  class="hover:text-primary"
+                  :title="authStore.user && (authStore.user.id || authStore.user._id) && product.createdBy && product.createdBy.user && (
+                    (typeof product.createdBy.user === 'object' && product.createdBy.user._id === (authStore.user.id || authStore.user._id)) ||
+                    (typeof product.createdBy.user === 'string' && product.createdBy.user === (authStore.user.id || authStore.user._id))
+                  ) ? 'Edit your product' : 'Edit product (Super Admin)'"
+                >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     class="h-5 w-5"
@@ -985,11 +1073,31 @@ watch(
                     />
                   </svg>
                 </button>
+                <span 
+                  v-else-if="authStore.hasPermission('manage_products') && !canEditProduct(product)" 
+                  class="text-gray-400 cursor-not-allowed"
+                  title="You can only edit products that you created"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"
+                    />
+                  </svg>
+                </span> 
                 <button
-                  v-if="authStore.hasPermission('delete_products')"
+                  v-if="authStore.hasPermission('delete_products') && canDeleteProduct(product)"
                   @click="handleDeleteProduct(product._id)"
                   class="hover:text-danger"
                   :disabled="isDeleting && selectedProductId === product._id"
+                  :title="authStore.user && (authStore.user.id || authStore.user._id) && product.createdBy && product.createdBy.user && (
+                    (typeof product.createdBy.user === 'object' && product.createdBy.user._id === (authStore.user.id || authStore.user._id)) ||
+                    (typeof product.createdBy.user === 'string' && product.createdBy.user === (authStore.user.id || authStore.user._id))
+                  ) ? 'Delete your product' : 'Delete product (Super Admin)'"
                 >
                   <svg
                     v-if="!(isDeleting && selectedProductId === product._id)"
@@ -1026,6 +1134,24 @@ watch(
                     ></path>
                   </svg>
                 </button>
+                <span 
+                  v-else-if="authStore.hasPermission('delete_products') && !canDeleteProduct(product)" 
+                  class="text-gray-400 cursor-not-allowed"
+                  title="You can only delete products that you created"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fill-rule="evenodd"
+                      d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                      clip-rule="evenodd"
+                    />
+                  </svg>
+                </span>
               </div>
             </td>
           </tr>

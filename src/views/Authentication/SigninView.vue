@@ -35,7 +35,7 @@ const handleSubmit = async (e: Event) => {
     authStore.setUser(user)
 
     // Redirect based on role\
-    console.log('User role:', user.role.name)
+    
     switch (user.role.name) {
       case 'superadmin':
         router.push('/eCommerce')

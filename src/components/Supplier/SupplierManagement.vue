@@ -334,7 +334,6 @@ onMounted(() => {
   })
 
   socket.on('supplierUpdated', (updatedSupplier) => {
-    // console.log('Received updated supplier:', updatedSupplier)
     if (updatedSupplier && updatedSupplier._id) {
       suppliers.value = suppliers.value.map((supplier) =>
         supplier._id === updatedSupplier._id ? updatedSupplier : supplier
@@ -343,7 +342,6 @@ onMounted(() => {
   })
 
   socket.on('supplierDeleted', (supplierId) => {
-    // console.log('Received deleted supplier ID:', supplierId)
     if (supplierId) {
       suppliers.value = suppliers.value.filter((supplier) => supplier._id !== supplierId)
     }

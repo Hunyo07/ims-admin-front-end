@@ -47,7 +47,6 @@ const fetchCategories = async () => {
     })
     categories.value = response.data || []
   } catch (error) {
-    console.error('Error fetching categories:', error)
     categories.value = [] // Set empty array on error
     Swal.fire({
       icon: 'error',

@@ -301,7 +301,6 @@ onMounted(() => {
 
   // Socket listeners for real-time updates
   socket.on('branchCreated', (newBranch) => {
-    // console.log('Received new branch:', newBranch)
     if (newBranch && newBranch._id) {
       // Remove the local addition of the branch since it will come through the socket
       const exists = branches.value.some((branch) => branch._id === newBranch._id)
@@ -311,7 +310,6 @@ onMounted(() => {
     }
   })
   socket.on('branchUpdated', (updatedBranch) => {
-    // console.log('Received updated branch:', updatedBranch)
     if (updatedBranch && updatedBranch._id) {
       branches.value = branches.value.map((branch) =>
         branch._id === updatedBranch._id ? updatedBranch : branch
@@ -320,7 +318,6 @@ onMounted(() => {
   })
 
   socket.on('branchDeleted', (branchId) => {
-    // console.log('Received deleted branch ID:', branchId)
     if (branchId) {
       branches.value = branches.value.filter((branch) => branch._id !== branchId)
     }
