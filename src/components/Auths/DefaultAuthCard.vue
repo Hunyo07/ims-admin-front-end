@@ -12,7 +12,7 @@
           </p>
 
           <span class="inline-block">
-            <img :src="logo" alt="illustration" />
+            <img src="/src/assets/images/logo.png" alt="illustration" />
           </span>
         </div>
       </div>
@@ -36,7 +36,6 @@
 </template>
 
 <script setup>
-import logo from '../../assets/images/logo.png'
 const props = defineProps({
   subtitle: String,
   title: String,
