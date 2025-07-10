@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import axios from 'axios'
-import { useAuthStore } from '@/stores/auth'
-import { socket } from '@/socket'
+import { useAuthStore } from '../../stores/auth'
+import { socket } from '../../socket'
 import Swal from 'sweetalert2'
 import { ref, onMounted, computed, watch } from 'vue'
 
@@ -52,6 +52,29 @@ interface User {
     }
     role: string
   }
+  // Added fields for user profile
+  birthDate?: string
+  age?: number | null
+  gender?: string
+  nationality?: string
+  civilStatus?: string
+  emergencyContact?: {
+    name: string
+    relationship: string
+    phone: string
+  }
+  employmentDate?: string
+  employmentStatus?: string
+  schedule?: {
+    startTime: string
+    endTime: string
+    workDays: string[]
+  }
+  branch?: {
+    _id: string
+    name: string
+  }
+  // branchId?: string
 }
 
 const selectedBranch = ref('all')
@@ -64,11 +87,11 @@ const searchQuery = ref('')
 const selectedRole = ref('all')
 const showModal = ref(false)
 const isDeleting = ref(false)
-const selectedUserId = ref(null)
+const selectedUserId = ref<string | null>(null)
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
 const isEditing = ref(false)
-const editingUser = ref(null)
+const editingUser = ref<User | null>(null)
 
 const newUser = ref({
   firstName: '',
@@ -77,7 +100,7 @@ const newUser = ref({
   password: '',
   phoneNumber: '',
   birthDate: '',
-  age: null,
+  age: null as string | number | null,
   gender: '',
   nationality: '',
   civilStatus: '',
@@ -95,12 +118,11 @@ const newUser = ref({
   },
   role: '',
   employmentDate: new Date().toISOString().split('T')[0], // Today's date
-
   employmentStatus: '',
   schedule: {
     startTime: '08:00',
     endTime: '17:00',
-    workDays: []
+    workDays: [] as string[]
   },
   governmentIds: {
     sss: '',
@@ -117,8 +139,9 @@ const paginatedUsers = computed(() => {
 })
 const hasUnsavedChanges = computed(() => {
   if (!showModal.value) return false
-  return Object.keys(newUser.value).some((key) => newUser.value[key] !== '')
-})
+  return (Object.keys(newUser.value) as Array<keyof typeof newUser.value>).some(
+  (key) => newUser.value[key] !== ''
+)})
 const handleCloseModal = async () => {
   if (hasUnsavedChanges.value) {
     const result = await Swal.fire({
@@ -156,7 +179,7 @@ const calculateAge = (birthDate: string) => {
   }
   return age
 }
-const formatDate = (dateString) => {
+const formatDate = (dateString:string) => {
   if (!dateString) return ''
   const date = new Date(dateString)
   return date.toISOString().split('T')[0]
@@ -208,7 +231,7 @@ const fetchBranches = async () => {
     console.error('Error fetching branches:', error)
   }
 }
-const handleEditUser = (user) => {
+const handleEditUser = (user:User) => {
   editingUser.value = { ...user }
   // Map the user data to newUser format
   newUser.value = {
@@ -217,8 +240,8 @@ const handleEditUser = (user) => {
     email: user.email,
     password: '', // Leave password empty for security
     phoneNumber: user.phoneNumber || '',
-    birthDate: formatDate(user.birthDate), // Format the date properly
-    age: user.age || null,
+    birthDate: formatDate(user.birthDate || ''), // Format the date properly
+    age: user.age ?? null,
     gender: user.gender || '',
     nationality: user.nationality || '',
     civilStatus: user.civilStatus || '',
@@ -229,13 +252,13 @@ const handleEditUser = (user) => {
     },
     address: {
       street: user.address?.street || '',
-      barangay: user.address?.barangay || '',
+      barangay: (user.address as any)?.barangay || '',
       city: user.address?.city || '',
       province: user.address?.province || '',
       zipCode: user.address?.zipCode || ''
     },
     role: user.role?._id || '',
-    employmentDate: formatDate(user.employmentDate),
+    employmentDate: formatDate(user.employmentDate || ''),
     employmentStatus: user.employmentStatus || '',
     schedule: {
       startTime: user.schedule?.startTime || '08:00',
@@ -277,6 +300,7 @@ const filteredUsers = computed(() => {
 })
 
 const handleUpdateUser = async () => {
+  if (!editingUser.value) return;
   try {
     if (!validateForm()) {
       Swal.fire({
@@ -317,7 +341,7 @@ const handleUpdateUser = async () => {
     isEditing.value = false
     editingUser.value = null
     resetForm()
-  } catch (error) {
+  } catch (error: any) {
     const errorMessage = error.response?.data?.message || 'Error updating user'
     Swal.fire({
       icon: 'error',
@@ -435,7 +459,7 @@ const handleAddUser = async () => {
       timerProgressBar: true
     })
     await fetchUsers()
-  } catch (error) {
+  } catch (error:any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -447,7 +471,7 @@ const handleAddUser = async () => {
 }
 
 // Update handleDeleteUser function
-const handleDeleteUser = async (userId) => {
+const handleDeleteUser = async (userId: string) => {
   selectedUserId.value = userId
   const result = await Swal.fire({
     title: 'Are you sure?',
@@ -473,8 +497,8 @@ const handleDeleteUser = async (userId) => {
       })
       socket.emit('deleteUser', userId)
       Swal.fire('Deleted!', 'User has been deleted.', 'success')
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Error deleting user'
+    } catch (error: any) {
+      const errorMessage = (error as any).response?.data?.message || 'Error deleting user'
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -485,12 +509,12 @@ const handleDeleteUser = async (userId) => {
       })
     } finally {
       isDeleting.value = false
-      selectedUserId.value = null
+      selectedUserId.value = null as any
     }
   }
 }
 
-const handleToggleStatus = async (userId, currentStatus) => {
+const handleToggleStatus = async (userId: string, currentStatus: boolean) => {
   try {
     const result = await Swal.fire({
       title: `${currentStatus ? 'Deactivate' : 'Activate'} User?`,
@@ -535,7 +559,7 @@ const handleToggleStatus = async (userId, currentStatus) => {
         showConfirmButton: false
       })
     }
-  } catch (error) {
+  } catch (error: any) {
     const errorMessage = error.response?.data?.message || 'Error toggling user status'
     Swal.fire({
       icon: 'error',
@@ -602,13 +626,14 @@ watch(
 // Place these after all imports and before the export
 const canAssignRole = computed(() => authStore.hasPermission('assign_roles') || authStore.hasPermission('manage_users'));
 const canCreateUser = computed(() => authStore.hasPermission('manage_users'));
-const filteredRoles = computed(() => {
+const filteredRoles = computed<Role[]>(() => {
   const userRole = authStore.getUserRole();
+  const allRoles = roles.value as Role[];
   if (userRole === 'superadmin') {
     // Exclude superadmin and customer from the dropdown
-    return roles.value.filter(role => role.name !== 'superadmin' && role.name !== 'customer');
+    return allRoles.filter(role => role.name !== 'superadmin' && role.name !== 'customer');
   } else if (userRole === 'admin') {
-    return roles.value.filter(role => role.name === 'staff');
+    return allRoles.filter(role => role.name === 'staff');
   }
   return [];
 });

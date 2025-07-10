@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
-import { useAuthStore } from '@/stores/auth'
-import { socket } from '@/socket'
+import { useAuthStore } from '../../stores/auth'
+import { socket } from '../../socket'
 import Swal from 'sweetalert2'
 import { jsPDF } from 'jspdf'
 import 'jspdf-autotable'
@@ -21,7 +21,7 @@ interface Product {
   costPrice: number
   unit: string
   currentStock: number
-  images: string
+  images: Array<{ url: string }> | string | null
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -34,15 +34,17 @@ interface Product {
     }
     role: string
   }
+  sku?: string
+  barcode?: { text: string }
 }
 // Update refs
-const imagePreview = ref(null)
+const imagePreview = ref<string | null>(null)
 const isFetchingCategories = ref(false)
 const isFetchingSuppliers = ref(false)
 const isFetchingSubCategories = ref(false)
-const suppliers = ref([])
-const subCategories = ref([])
-const categories = ref([])
+const suppliers = ref<any[]>([])
+const subCategories = ref<any[]>([])
+const categories = ref<any[]>([])
 const searchQuery = ref('')
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
@@ -52,8 +54,8 @@ const isEditing = ref(false)
 const isSubmitting = ref(false)
 const isDeleting = ref(false)
 const products = ref<Product[]>([])
-const selectedProductId = ref(null)
-const editingProduct = ref(null)
+const selectedProductId = ref<string | null>(null)
+const editingProduct = ref<Product | null>(null)
 const branches = ref([])
 // Add these refs
 const filters = ref({
@@ -63,7 +65,21 @@ const filters = ref({
   minPrice: 0,
   maxPrice: 0
 })
-const newProduct = ref({
+interface ProductForm {
+  name: string;
+  description: string;
+  categoryId: string;
+  subCategoryId: string;
+  supplierId: string;
+  price: string;
+  costPrice: string;
+  unit: string;
+  currentStock: string;
+  images: File | null;
+  sku: string;
+  barcodeText: string;
+}
+const newProduct = ref<ProductForm>({
   name: '',
   description: '',
   categoryId: '',
@@ -76,39 +92,56 @@ const newProduct = ref({
   images: null,
   sku: '',
   barcodeText: ''
-})
-const handleImageChange = (event) => {
-  const file = event.target.files[0]
-  const maxSize = 5 * 1024 * 1024 // 5MB
+});
+const handleImageChange = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  const maxSize = 5 * 1024 * 1024; // 5MB
+
+  if (!file) return;
 
   if (file.size > maxSize) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
       text: 'Image size should not exceed 5MB'
-    })
-    event.target.value = ''
-    return
+    });
+    target.value = '';
+    return;
   }
 
-  const validTypes = ['image/jpeg', 'image/png', 'image/gif']
+  const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
   if (!validTypes.includes(file.type)) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
       text: 'Please upload a valid image file (JPEG, PNG, or GIF)'
-    })
-    event.target.value = ''
-    return
+    });
+    target.value = '';
+    return;
   }
 
-  newProduct.value.images = file
-  imagePreview.value = URL.createObjectURL(file)
-}
+  newProduct.value.images = file;
+  imagePreview.value = URL.createObjectURL(file);
+};
 const hasUnsavedChanges = computed(() => {
-  if (!showModal.value) return false
-  return Object.keys(newProduct.value).some((key) => newProduct.value[key] !== '')
-})
+  if (!showModal.value) return false;
+  const np = newProduct.value;
+  return (
+    np.name !== '' ||
+    np.description !== '' ||
+    np.categoryId !== '' ||
+    np.subCategoryId !== '' ||
+    np.supplierId !== '' ||
+    np.price !== '' ||
+    np.costPrice !== '' ||
+    np.unit !== '' ||
+    np.currentStock !== '' ||
+    np.images !== null ||
+    np.sku !== '' ||
+    np.barcodeText !== ''
+  );
+});
 const handleCloseModal = async () => {
   if (hasUnsavedChanges.value) {
     const result = await Swal.fire({
@@ -139,7 +172,7 @@ const handleCloseModal = async () => {
   showModal.value = false
   resetForm()
 }
-const formatPrice = (price) => {
+const formatPrice = (price: number) => {
   return new Intl.NumberFormat('en-PH', {
     style: 'currency',
     currency: 'PHP'
@@ -147,7 +180,7 @@ const formatPrice = (price) => {
 }
 
 // Format currency for PDF to avoid the '+' sign issue
-const formatCurrencyForPDF = (amount) => {
+const formatCurrencyForPDF = (amount: number) => {
   // Format without using Intl.NumberFormat to avoid compatibility issues with jsPDF
   return 'PHP ' + amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
@@ -234,7 +267,7 @@ const exportProductsPDF = () => {
     const colWidths = [50, 35, 25, 25, 20, 25]
     
     // Calculate positions for columns
-    const positions = []
+    const positions: number[] = []
     let currentX = marginLeft
     for (let i = 0; i < colWidths.length; i++) {
       positions.push(currentX)
@@ -251,7 +284,7 @@ const exportProductsPDF = () => {
     doc.setTextColor(0, 0, 0)
     
     for (let i = 0; i < headers.length; i++) {
-      doc.text(headers[i], positions[i] + 2, currentY + 5)
+      doc.text(headers[i], positions[i] + 2, currentY + 5);
     }
     
     currentY += lineHeight + 2
@@ -285,7 +318,7 @@ const exportProductsPDF = () => {
       doc.setFont('helvetica', 'bold')
       
       for (let i = 0; i < headers.length; i++) {
-        doc.text(headers[i], positions[i] + 2, currentY + 5)
+        doc.text(headers[i], positions[i] + 2, currentY + 5);
       }
       
       currentY += lineHeight + 2
@@ -321,7 +354,7 @@ const exportProductsPDF = () => {
       
       // Draw row data
       for (let i = 0; i < rowData.length; i++) {
-        doc.text(rowData[i], positions[i] + 2, currentY + 4)
+        doc.text(rowData[i], positions[i] + 2, currentY + 4);
       }
       
       currentY += lineHeight
@@ -368,7 +401,7 @@ const fetchProducts = async () => {
     })
     // Make sure we're setting an array
     products.value = response.data.products || []
-  } catch (error) {
+  } catch (error:any) {
     console.error('Error fetching products:', error)
     products.value = []
     Swal.fire({
@@ -387,42 +420,42 @@ const fetchSuppliers = async () => {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
-    })
-    suppliers.value = response.data?.filter((supplier) => supplier?.isActive) || []
+    });
+    suppliers.value = response.data?.filter((supplier: any) => supplier?.isActive) || [];
   } catch (error) {
-    console.error('Error fetching suppliers:', error)
-    suppliers.value = []
+    console.error('Error fetching suppliers:', error);
+    suppliers.value = [];
   }
-}
+};
 const fetchSubCategories = async () => {
   try {
     const response = await axios.get('https://ims-api-id38.onrender.com/api/subcategories', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
-    })
-    subCategories.value = response.data?.filter((subCategory) => subCategory?.isActive) || []
-  } catch (error) {
-    console.error('Error fetching subcategories:', error)
-    subCategories.value = []
+    });
+    subCategories.value = response.data?.filter((subCategory: any) => subCategory?.isActive) || [];
+  } catch (error: any) {
+    console.error('Error fetching subcategories:', error);
+    subCategories.value = [];
   }
-}
+};
 // Update fetch function
 const fetchCategories = async () => {
-  isFetchingCategories.value = true
+  isFetchingCategories.value = true;
 
   try {
-    isLoading.value = true
+    isLoading.value = true;
     const response = await axios.get('https://ims-api-id38.onrender.com/api/categories', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
     })
-    categories.value = (response.data || []).map((category) => ({
+    categories.value = (response.data || []).map((category: any) => ({
       ...category,
       branch: category.branch || { name: 'Not Assigned' }
     }))
-  } catch (error) {
+  } catch (error:any) {
     console.error('Error fetching categories:', error)
     categories.value = [] // Set empty array on error
     Swal.fire({
@@ -457,7 +490,7 @@ const filteredProducts = computed(() => {
     return matchesSearch && matchesCategory && matchesStatus && matchesPrice
   })
 })
-const matchPriceRange = (price, range) => {
+const matchPriceRange = (price: number, range: string) => {
   switch (range) {
     case 'under1000':
       return price < 1000
@@ -479,7 +512,7 @@ const isPriceValid = computed(() => {
 })
 const filteredSubCategories = computed(() => {
   if (!newProduct.value.categoryId) return []
-  return subCategories.value.filter((sub) => sub.category._id === newProduct.value.categoryId)
+  return (subCategories.value as any[]).filter((sub: any) => sub.category && sub.category._id === newProduct.value.categoryId)
 })
 const paginatedProducts = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value
@@ -557,31 +590,31 @@ const resetForm = () => {
 }
 // Update CRUD functions
 
-const handleEditProduct = (product) => {
-  isEditing.value = true
-  editingProduct.value = product
+const handleEditProduct = (product: Product) => {
+  isEditing.value = true;
+  editingProduct.value = product;
   newProduct.value = {
     name: product.name,
     description: product.description,
     categoryId: product.category?._id || '',
     subCategoryId: product.subCategory?._id || '',
     supplierId: product.supplier?._id || '',
-    price: product.price,
-    costPrice: product.costPrice,
+    price: product.price !== undefined && product.price !== null ? String(product.price) : '',
+    costPrice: product.costPrice !== undefined && product.costPrice !== null ? String(product.costPrice) : '',
     unit: product.unit,
-    currentStock: product.currentStock,
+    currentStock: product.currentStock !== undefined && product.currentStock !== null ? String(product.currentStock) : '',
     images: null, // Set to null for editing since we don't handle image updates in edit mode
     sku: product.sku || '',
     barcodeText: product.barcode?.text || ''
-  }
-  showModal.value = true
-}
+  };
+  showModal.value = true;
+};
 const handleUpdateProduct = async () => {
   try {
     isSubmitting.value = true
     // Don't use FormData since we're not handling files
     const response = await axios.put(
-      `https://ims-api-id38.onrender.com/api/products/${editingProduct.value._id}`,
+      `https://ims-api-id38.onrender.com/api/products/${editingProduct.value!._id}`,
       newProduct.value,
       {
         headers: {
@@ -593,7 +626,7 @@ const handleUpdateProduct = async () => {
 
     // Update local state
     products.value = products.value.map((product) =>
-      product._id === editingProduct.value._id ? response.data.product : product
+      product._id === editingProduct.value!._id ? response.data.product : product
     )
 
     // Emit socket event
@@ -607,7 +640,7 @@ const handleUpdateProduct = async () => {
       text: 'Product updated successfully',
       timer: 1500
     })
-  } catch (error) {
+  } catch (error: any) {
     let errorMessage = 'Error updating product'
     
     if (error.response?.status === 403) {
@@ -628,7 +661,7 @@ const handleUpdateProduct = async () => {
     isSubmitting.value = false
   }
 }
-const handleDeleteProduct = async (productId) => {
+const handleDeleteProduct = async (productId: string) => {
   const result = await Swal.fire({
     title: 'Are you sure?',
     text: "You won't be able to revert this!",
@@ -660,7 +693,7 @@ const handleDeleteProduct = async (productId) => {
         timer: 1500,
         showConfirmButton: false
       })
-    } catch (error) {
+    } catch (error: any) {
       let errorMessage = 'Error deleting product'
       
       if (error.response?.status === 403) {
@@ -684,7 +717,7 @@ const handleDeleteProduct = async (productId) => {
   }
 }
 
-const handleToggleStatus = async (productId, currentStatus) => {
+const handleToggleStatus = async (productId: string, currentStatus: boolean) => {
   try {
     const result = await Swal.fire({
       title: `${currentStatus ? 'Deactivate' : 'Activate'} Product?`,
@@ -723,7 +756,7 @@ const handleToggleStatus = async (productId, currentStatus) => {
         showConfirmButton: false
       })
     }
-  } catch (error) {
+  } catch (error: any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -738,14 +771,15 @@ const handleAddProduct = async () => {
 
     // Add all product data to formData, excluding null/undefined values
     Object.keys(newProduct.value).forEach((key) => {
+      const typedKey = key as keyof ProductForm;
       if (
-        newProduct.value[key] !== null &&
-        newProduct.value[key] !== undefined &&
-        newProduct.value[key] !== ''
+        newProduct.value[typedKey] !== null &&
+        newProduct.value[typedKey] !== undefined &&
+        newProduct.value[typedKey] !== ''
       ) {
-        formData.append(key, newProduct.value[key])
+        formData.append(key, newProduct.value[typedKey] as any);
       }
-    })
+    });
 
     // Add stock value
     formData.append('stock', newProduct.value.currentStock)
@@ -771,7 +805,7 @@ const handleAddProduct = async () => {
       text: 'Product created successfully',
       timer: 1500
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Product creation error:', error)
     Swal.fire({
       icon: 'error',
@@ -999,8 +1033,13 @@ watch(
               <div class="flex items-center gap-3">
                 <div class="flex h-10 w-10 items-center justify-center rounded-full bg-meta-2">
                   <img
-                    v-if="product.images && product.images.length"
+                    v-if="Array.isArray(product.images) && product.images.length && product.images[0].url"
                     :src="product.images[0].url"
+                    class="h-10 w-10 rounded-full object-cover"
+                  />
+                  <img
+                    v-else-if="typeof product.images === 'string' && product.images"
+                    :src="product.images"
                     class="h-10 w-10 rounded-full object-cover"
                   />
                   <span v-else>{{ product.name.charAt(0).toUpperCase() }}</span>
@@ -1008,7 +1047,7 @@ watch(
                 <p class="text-black dark:text-white">{{ product.name }}</p>
               </div>
             </td>
-            <td class="py-4.5 px-4">{{ product.barcode.text }}</td>
+            <td class="py-4.5 px-4">{{ product.barcode?.text }}</td>
             <td class="py-4.5 px-4">{{ product.category?.name || 'Not Assigned' }}</td>
             <td class="py-4.5 px-4">{{ product.subCategory?.name || 'Not Assigned' }}</td>
             <td class="py-4.5 px-4">{{ formatPrice(product.price) }}</td>

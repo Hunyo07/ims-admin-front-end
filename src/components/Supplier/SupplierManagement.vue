@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
-import { useAuthStore } from '@/stores/auth'
-import { socket } from '@/socket'
+import { useAuthStore } from '../../stores/auth'
+import { socket } from '../../socket'
 import Swal from 'sweetalert2'
 
 const authStore = useAuthStore()
@@ -36,11 +36,11 @@ const isLoading = ref(true)
 const searchQuery = ref('')
 const showModal = ref(false)
 const isDeleting = ref(false)
-const selectedSupplierId = ref(null)
+const selectedSupplierId = ref<string | null>(null)
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
 const isEditing = ref(false)
-const editingSupplier = ref(null)
+const editingSupplier = ref<Supplier | null>(null)
 const isSubmitting = ref(false)
 const newSupplier = ref({
   name: '',
@@ -80,7 +80,7 @@ const fetchSuppliers = async () => {
       }
     })
     suppliers.value = response.data.suppliers || response.data
-  } catch (error) {
+  } catch (error:any) {
     console.error('Error fetching suppliers:', error)
     Swal.fire({
       icon: 'error',
@@ -103,7 +103,7 @@ const totalPages = computed(() => {
   return Math.ceil(filteredSuppliers.value.length / itemsPerPage.value)
 })
 // Update CRUD functions
-const handleEditSupplier = (supplier) => {
+const handleEditSupplier = (supplier:Supplier) => {
   isEditing.value = true
   editingSupplier.value = supplier
   newSupplier.value = {
@@ -113,7 +113,7 @@ const handleEditSupplier = (supplier) => {
   showModal.value = true
 }
 
-const handleDeleteSupplier = async (supplierId) => {
+const handleDeleteSupplier = async (supplierId:string) => {
   selectedSupplierId.value = supplierId
   const result = await Swal.fire({
     title: 'Are you sure?',
@@ -141,7 +141,7 @@ const handleDeleteSupplier = async (supplierId) => {
       socket.emit('deleteSupplier', supplierId)
 
       Swal.fire('Deleted!', 'Supplier has been deleted.', 'success')
-    } catch (error) {
+    } catch (error:any) {
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -153,8 +153,8 @@ const handleDeleteSupplier = async (supplierId) => {
     }
   }
 }
-const handleToggleStatus = async (supplierId, currentStatus) => {
-  try {
+const handleToggleStatus = async (supplierId:string, currentStatus:boolean) => {
+  try { 
     const result = await Swal.fire({
       title: `${currentStatus ? 'Deactivate' : 'Activate'} Supplier?`,
       text: `Are you sure you want to ${currentStatus ? 'deactivate' : 'activate'} this supplier?`,
@@ -190,7 +190,7 @@ const handleToggleStatus = async (supplierId, currentStatus) => {
         showConfirmButton: false
       })
     }
-  } catch (error) {
+  } catch (error:any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -221,7 +221,7 @@ const handleAddSupplier = async () => {
       text: 'Supplier created successfully',
       timer: 1500
     })
-  } catch (error) {
+  } catch (error:any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -236,9 +236,9 @@ const handleUpdateSupplier = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.put(
-      `https://ims-api-id38.onrender.com/api/suppliers/${editingSupplier.value._id}`,
+      `https://ims-api-id38.onrender.com/api/suppliers/${editingSupplier.value!._id}`,
       newSupplier.value,
-      {
+      { 
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -261,7 +261,7 @@ const handleUpdateSupplier = async () => {
       text: 'Supplier updated successfully',
       timer: 1500
     })
-  } catch (error) {
+  } catch (error:any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -293,8 +293,9 @@ const resetForm = () => {
 }
 const hasUnsavedChanges = computed(() => {
   if (!showModal.value) return false
-  return Object.keys(newSupplier.value).some((key) => newSupplier.value[key] !== '')
-})
+  return (Object.keys(newSupplier.value) as Array<keyof typeof newSupplier.value>).some(
+  (key) => newSupplier.value[key] !== ''
+)})
 const handleCloseModal = async () => {
   if (hasUnsavedChanges.value) {
     const result = await Swal.fire({

@@ -622,229 +622,44 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div
-    class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark"
-  >
-    <!-- Header -->
-    <div class="border-b border-stroke py-4 px-6.5 dark:border-strokedark">
-      <div class="flex flex-wrap items-center justify-between gap-4">
-        <h3 class="text-xl font-semibold text-black dark:text-white">Inventory Counts</h3>
-        <div class="flex items-center gap-3">
-          <button
-            v-if="authStore.hasRole(['admin', 'superadmin'])"
-            @click="exportInventoryCountsPDF"
-            class="inline-flex items-center justify-center rounded-md bg-success py-2 px-4 text-white hover:bg-opacity-90"
-          >
-            <svg
-              class="mr-2 h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              ></path>
-            </svg>
-            Export PDF
-          </button>
-          <button
-            @click="showCreateModal = true"
-            class="inline-flex items-center justify-center rounded-md bg-primary py-2 px-4 text-white hover:bg-opacity-90"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-5 w-5 mr-1"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fill-rule="evenodd"
-                d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-                clip-rule="evenodd"
-              />
-            </svg>
-            New Inventory Count
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Filter and Search -->
-    <div class="p-4 border-b border-stroke dark:border-strokedark">
-      <div class="flex flex-wrap items-center gap-4">
-        <div class="flex-1">
-          <input
-            type="text"
-            v-model="searchQuery"
-            placeholder="Search by count number or product..."
-            class="w-full rounded-lg border border-stroke bg-transparent py-2 pl-4 pr-4 outline-none focus:border-primary dark:border-strokedark"
-          />
-        </div>
-      </div>
-    </div>
-
-    <!-- Inventory Counts Table -->
-    <div class="p-4">
-      <div v-if="isLoading" class="flex justify-center items-center py-10">
-        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
-      </div>
-
-      <div v-else-if="filteredInventoryCounts.length === 0" class="text-center py-10">
-        <p class="text-lg text-gray-500 dark:text-gray-400">No inventory counts found</p>
-      </div>
-
-      <div v-else class="overflow-x-auto">
-        <table class="w-full table-auto">
-          <thead>
-            <tr class="bg-gray-2 text-left dark:bg-meta-4">
-              <th class="py-4 px-4 font-medium text-black dark:text-white">Count #</th>
-              <th class="py-4 px-4 font-medium text-black dark:text-white">Date</th>
-              <th class="py-4 px-4 font-medium text-black dark:text-white">Items Count</th>
-              <th class="py-4 px-4 font-medium text-black dark:text-white">Created By</th>
-              <th class="py-4 px-4 font-medium text-black dark:text-white">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="count in paginatedCounts"
-              :key="count._id"
-              class="border-b border-stroke dark:border-strokedark"
-            >
-              <td class="py-3 px-4">{{ count.countNumber }}</td>
-              <td class="py-3 px-4">{{ formatDate(count.countDate) }}</td>
-              <td class="py-3 px-4">
-                <span v-if="Array.isArray(count.products)">
-                  {{ count.products.length }}
-                </span>
-              </td>
-              <td class="py-3 px-4">{{ count.createdBy?.user.firstName || 'Unknown' }}</td>
-              <td class="py-3 px-4">
-                <button
-                  @click="viewCountDetails(count._id)"
-                  class="hover:text-primary"
-                  title="View Details"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    class="h-5 w-5"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                    <path
-                      fill-rule="evenodd"
-                      d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
-                      clip-rule="evenodd"
-                    />
-                  </svg>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div class="flex items-center justify-between p-4">
-          <div class="flex items-center gap-2">
-            <select
-              v-model="itemsPerPage"
-              class="rounded border border-stroke bg-transparent px-2 py-1"
-            >
-              <option value="5">5</option>
-              <option value="10">10</option>
-              <option value="20">20</option>
-            </select>
-            <span>Items per page</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <button
-              @click="prevPage"
-              :disabled="currentPage === 1"
-              class="rounded px-3 py-1 disabled:opacity-50"
-            >
-              Previous
-            </button>
-            <span>Page {{ currentPage }} of {{ totalPages }}</span>
-            <button
-              @click="nextPage"
-              :disabled="currentPage === totalPages"
-              class="rounded px-3 py-1 disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Create Inventory Count Modal -->
-  <div
-    v-if="showCreateModal"
-    class="fixed inset-0 z-999 flex items-center justify-center bg-black bg-opacity-50"
-  >
+  <div>
+    <!-- Main Inventory Counts Card -->
     <div
-      class="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-boxdark rounded-lg shadow-lg"
+      class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark"
     >
-      <div class="border-b border-stroke px-6.5 py-4 dark:border-strokedark">
-        <div class="flex items-center justify-between">
-          <h3 class="text-xl font-semibold text-black dark:text-white">New Inventory Count</h3>
-          <button @click="showCreateModal = false" class="text-gray-500 hover:text-red-500">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <div class="p-6.5">
-        <div class="mb-4.5">
-          <label class="mb-2.5 block text-black dark:text-white">Count Date</label>
-          <Datepicker
-            v-model="newCount.countDate"
-            class="w-full"
-            :enable-time-picker="false"
-            :max-date="new Date()"
-            placeholder="Select count date"
-          />
-        </div>
-
-        <div class="mb-4.5">
-          <label class="mb-2.5 block text-black dark:text-white">Notes</label>
-          <textarea
-            v-model="newCount.notes"
-            rows="3"
-            class="w-full rounded border-[1.5px] border-stroke bg-transparent py-3 px-5 font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
-            placeholder="Add notes about this count"
-          ></textarea>
-        </div>
-
-        <div class="mb-4.5">
-          <div class="flex items-center justify-between mb-2.5">
-            <label class="block text-black dark:text-white">
-              Count Items <span class="text-meta-1">*</span>
-            </label>
+      <!-- Header -->
+      <div class="border-b border-stroke py-4 px-6.5 dark:border-strokedark">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <h3 class="text-xl font-semibold text-black dark:text-white">Inventory Counts</h3>
+          <div class="flex items-center gap-3">
             <button
-              @click="addItem"
-              class="inline-flex items-center justify-center rounded-md bg-primary py-1 px-3 text-white hover:bg-opacity-90"
+              v-if="authStore.hasRole(['admin', 'superadmin'])"
+              @click="exportInventoryCountsPDF"
+              class="inline-flex items-center justify-center rounded-md bg-success py-2 px-4 text-white hover:bg-opacity-90"
+            >
+              <svg
+                class="mr-2 h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                ></path>
+              </svg>
+              Export PDF
+            </button>
+            <button
+              @click="showCreateModal = true"
+              class="inline-flex items-center justify-center rounded-md bg-primary py-2 px-4 text-white hover:bg-opacity-90"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4 mr-1"
+                class="h-5 w-5 mr-1"
                 viewBox="0 0 20 20"
                 fill="currentColor"
               >
@@ -854,242 +669,430 @@ onMounted(async () => {
                   clip-rule="evenodd"
                 />
               </svg>
-              Add Item
+              New Inventory Count
             </button>
           </div>
+        </div>
+      </div>
 
-          <div
-            v-for="(item, index) in newCount.items"
-            :key="index"
-            class="mb-3 p-3 border border-stroke rounded-md dark:border-strokedark"
-          >
-            <div class="grid grid-cols-12 gap-3">
-              <div class="col-span-4">
-                <label class="mb-1 block text-sm text-black dark:text-white">
-                  Product <span class="text-meta-1">*</span>
-                </label>
-                <select
-                  v-model="item.productId"
-                  @change="setExpectedQuantity(index)"
-                  class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
-                >
-                  <option value="" disabled>Select Product</option>
-                  <option v-for="product in products" :key="product._id" :value="product._id">
-                    {{ product.name }} ({{ product.sku }})
-                  </option>
-                </select>
-              </div>
-
-              <div class="col-span-2">
-                <label class="mb-1 block text-sm text-black dark:text-white">Expected Qty</label>
-                <input
-                  type="number"
-                  v-model.number="item.expectedQuantity"
-                  readonly
-                  class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
-                />
-              </div>
-
-              <div class="col-span-2">
-                <label class="mb-1 block text-sm text-black dark:text-white">
-                  Actual Qty <span class="text-meta-1">*</span>
-                </label>
-                <input
-                  type="number"
-                  v-model.number="item.actualQuantity"
-                  min="0"
-                  class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
-                />
-              </div>
-
-              <div class="col-span-2">
-                <label class="mb-1 block text-sm text-black dark:text-white">Variance</label>
-                <div
-                  class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 font-medium dark:border-form-strokedark dark:bg-form-input"
-                >
-                  {{ calculateVariance(item.expectedQuantity, item.actualQuantity) }}
-                </div>
-              </div>
-
-              <div class="col-span-1 flex items-end justify-center">
-                <button
-                  @click="removeItem(index)"
-                  class="text-danger hover:text-meta-1"
-                  :disabled="newCount.items.length === 1"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    class="h-5 w-5"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fill-rule="evenodd"
-                      d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
-                      clip-rule="evenodd"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <div class="mt-2">
-              <label class="mb-1 block text-sm text-black dark:text-white">Item Notes</label>
-              <input
-                type="text"
-                v-model="item.notes"
-                class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
-                placeholder="Add notes about this item"
-              />
-            </div>
+      <!-- Filter and Search -->
+      <div class="p-4 border-b border-stroke dark:border-strokedark">
+        <div class="flex flex-wrap items-center gap-4">
+          <div class="flex-1">
+            <input
+              type="text"
+              v-model="searchQuery"
+              placeholder="Search by count number or product..."
+              class="w-full rounded-lg border border-stroke bg-transparent py-2 pl-4 pr-4 outline-none focus:border-primary dark:border-strokedark"
+            />
           </div>
         </div>
+      </div>
 
-        <div class="flex items-center justify-end gap-4">
-          <button
-            @click="showCreateModal = false"
-            class="inline-flex items-center justify-center rounded-md border border-stroke py-2 px-6 text-center font-medium text-black hover:border-primary hover:bg-primary hover:text-white dark:border-strokedark dark:text-white"
-          >
-            Cancel
-          </button>
-          <button
-            @click="createInventoryCount"
-            class="inline-flex items-center justify-center rounded-md bg-primary py-2 px-6 text-center font-medium text-white hover:bg-opacity-90"
-            :disabled="isLoading"
-          >
-            <span v-if="isLoading" class="mr-2">
-              <svg
-                class="animate-spin h-5 w-5 text-white"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
+      <!-- Inventory Counts Table -->
+      <div class="p-4">
+        <div v-if="isLoading" class="flex justify-center items-center py-10">
+          <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
+        </div>
+
+        <div v-else-if="filteredInventoryCounts.length === 0" class="text-center py-10">
+          <p class="text-lg text-gray-500 dark:text-gray-400">No inventory counts found</p>
+        </div>
+
+        <div v-else class="overflow-x-auto">
+          <table class="w-full table-auto">
+            <thead>
+              <tr class="bg-gray-2 text-left dark:bg-meta-4">
+                <th class="py-4 px-4 font-medium text-black dark:text-white">Count #</th>
+                <th class="py-4 px-4 font-medium text-black dark:text-white">Date</th>
+                <th class="py-4 px-4 font-medium text-black dark:text-white">Items Count</th>
+                <th class="py-4 px-4 font-medium text-black dark:text-white">Created By</th>
+                <th class="py-4 px-4 font-medium text-black dark:text-white">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="count in paginatedCounts"
+                :key="count._id"
+                class="border-b border-stroke dark:border-strokedark"
               >
-                <circle
-                  class="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  stroke-width="4"
-                ></circle>
-                <path
-                  class="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
-            </span>
-            Create Inventory Count
-          </button>
+                <td class="py-3 px-4">{{ count.countNumber }}</td>
+                <td class="py-3 px-4">{{ formatDate(count.countDate) }}</td>
+                <td class="py-3 px-4">
+                  <span v-if="Array.isArray(count.products)">
+                    {{ count.products.length }}
+                  </span>
+                </td>
+                <td class="py-3 px-4">{{ count.createdBy?.user.firstName || 'Unknown' }}</td>
+                <td class="py-3 px-4">
+                  <button
+                    @click="viewCountDetails(count._id)"
+                    class="hover:text-primary"
+                    title="View Details"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="h-5 w-5"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                      <path
+                        fill-rule="evenodd"
+                        d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="flex items-center justify-between p-4">
+            <div class="flex items-center gap-2">
+              <select
+                v-model="itemsPerPage"
+                class="rounded border border-stroke bg-transparent px-2 py-1"
+              >
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="20">20</option>
+              </select>
+              <span>Items per page</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button
+                @click="prevPage"
+                :disabled="currentPage === 1"
+                class="rounded px-3 py-1 disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span>Page {{ currentPage }} of {{ totalPages }}</span>
+              <button
+                @click="nextPage"
+                :disabled="currentPage === totalPages"
+                class="rounded px-3 py-1 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Inventory Count Details Modal -->
-  <div
-    v-if="showDetailsModal && selectedCount"
-    class="fixed inset-0 z-999 flex items-center justify-center bg-black bg-opacity-50"
-  >
+    <!-- Create Inventory Count Modal -->
     <div
-      class="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-boxdark rounded-lg shadow-lg"
+      v-if="showCreateModal"
+      class="fixed inset-0 z-999 flex items-center justify-center bg-black bg-opacity-50"
     >
-      <div class="border-b border-stroke px-6.5 py-4 dark:border-strokedark">
-        <div class="flex items-center justify-between">
-          <h3 class="text-xl font-semibold text-black dark:text-white">Inventory Count Details</h3>
-          <button @click="showDetailsModal = false" class="text-gray-500 hover:text-red-500">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
+      <div
+        class="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-boxdark rounded-lg shadow-lg"
+      >
+        <div class="border-b border-stroke px-6.5 py-4 dark:border-strokedark">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xl font-semibold text-black dark:text-white">New Inventory Count</h3>
+            <button @click="showCreateModal = false" class="text-gray-500 hover:text-red-500">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
-      </div>
-      <div class="p-6.5">
-     
-        <div class="grid grid-cols-2 gap-6 mb-6">
-          <div class="col-span-1">
-            <h4 class="text-lg font-semibold mb-3">Count Information</h4>
-            <div class="space-y-2">
-              <p>
-                <span class="font-medium">Count Number:</span>
-                {{ selectedCount.inventoryCount.countNumber }}
-              </p>
-              <p>
-                <span class="font-medium">Count Date:</span>
-                {{ formatDate(selectedCount.inventoryCount.countDate) }}
-              </p>
-              <p>
-                <span class="font-medium">Created:</span>
-                {{ formatDate(selectedCount.inventoryCount.createdAt) }}
-              </p>
-              <p>
-                <span class="font-medium">Created By:</span>
-                {{ selectedCount.inventoryCount.createdBy?.user.firstName || 'Unknown' }}
-              </p>
+
+        <div class="p-6.5">
+          <div class="mb-4.5">
+            <label class="mb-2.5 block text-black dark:text-white">Count Date</label>
+            <Datepicker
+              v-model="newCount.countDate"
+              class="w-full"
+              :enable-time-picker="false"
+              :max-date="new Date()"
+              placeholder="Select count date"
+            />
+          </div>
+
+          <div class="mb-4.5">
+            <label class="mb-2.5 block text-black dark:text-white">Notes</label>
+            <textarea
+              v-model="newCount.notes"
+              rows="3"
+              class="w-full rounded border-[1.5px] border-stroke bg-transparent py-3 px-5 font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
+              placeholder="Add notes about this count"
+            ></textarea>
+          </div>
+
+          <div class="mb-4.5">
+            <div class="flex items-center justify-between mb-2.5">
+              <label class="block text-black dark:text-white">
+                Count Items <span class="text-meta-1">*</span>
+              </label>
+              <button
+                @click="addItem"
+                class="inline-flex items-center justify-center rounded-md bg-primary py-1 px-3 text-white hover:bg-opacity-90"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4 mr-1"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fill-rule="evenodd"
+                    d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+                    clip-rule="evenodd"
+                  />
+                </svg>
+                Add Item
+              </button>
+            </div>
+
+            <div
+              v-for="(item, index) in newCount.items"
+              :key="index"
+              class="mb-3 p-3 border border-stroke rounded-md dark:border-strokedark"
+            >
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-4">
+                  <label class="mb-1 block text-sm text-black dark:text-white">
+                    Product <span class="text-meta-1">*</span>
+                  </label>
+                  <select
+                    v-model="item.productId"
+                    @change="setExpectedQuantity(index)"
+                    class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
+                  >
+                    <option value="" disabled>Select Product</option>
+                    <option v-for="product in products" :key="product._id" :value="product._id">
+                      {{ product.name }} ({{ product.sku }})
+                    </option>
+                  </select>
+                </div>
+
+                <div class="col-span-2">
+                  <label class="mb-1 block text-sm text-black dark:text-white">Expected Qty</label>
+                  <input
+                    type="number"
+                    v-model.number="item.expectedQuantity"
+                    readonly
+                    class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
+                  />
+                </div>
+
+                <div class="col-span-2">
+                  <label class="mb-1 block text-sm text-black dark:text-white">
+                    Actual Qty <span class="text-meta-1">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    v-model.number="item.actualQuantity"
+                    min="0"
+                    class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
+                  />
+                </div>
+
+                <div class="col-span-2">
+                  <label class="mb-1 block text-sm text-black dark:text-white">Variance</label>
+                  <div
+                    class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 font-medium dark:border-form-strokedark dark:bg-form-input"
+                  >
+                    {{ calculateVariance(item.expectedQuantity, item.actualQuantity) }}
+                  </div>
+                </div>
+
+                <div class="col-span-1 flex items-end justify-center">
+                  <button
+                    @click="removeItem(index)"
+                    class="text-danger hover:text-meta-1"
+                    :disabled="newCount.items.length === 1"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="h-5 w-5"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="mt-2">
+                <label class="mb-1 block text-sm text-black dark:text-white">Item Notes</label>
+                <input
+                  type="text"
+                  v-model="item.notes"
+                  class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
+                  placeholder="Add notes about this item"
+                />
+              </div>
             </div>
           </div>
-        </div>
 
-        <div class="mb-6">
-          <h4 class="text-lg font-semibold mb-3">Count Items</h4>
-          <div class="overflow-x-auto">
-            <table class="w-full table-auto">
-              <thead>
-                <tr class="bg-gray-2 text-left dark:bg-meta-4">
-                  <th class="py-3 px-4 font-medium text-black dark:text-white">Product Name</th>
-                  <th class="py-3 px-4 font-medium text-black dark:text-white">SKU</th>
-                  <th class="py-3 px-4 font-medium text-black dark:text-white">Expected Qty</th>
-                  <th class="py-3 px-4 font-medium text-black dark:text-white">Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="item in selectedCount.inventoryCount.products"
-                  :key="item._id"
-                  class="border-b border-stroke dark:border-strokedark"
+          <div class="flex items-center justify-end gap-4">
+            <button
+              @click="showCreateModal = false"
+              class="inline-flex items-center justify-center rounded-md border border-stroke py-2 px-6 text-center font-medium text-black hover:border-primary hover:bg-primary hover:text-white dark:border-strokedark dark:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              @click="createInventoryCount"
+              class="inline-flex items-center justify-center rounded-md bg-primary py-2 px-6 text-center font-medium text-white hover:bg-opacity-90"
+              :disabled="isLoading"
+            >
+              <span v-if="isLoading" class="mr-2">
+                <svg
+                  class="animate-spin h-5 w-5 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
                 >
-                  <td class="py-3 px-4">{{ item.product.name }}</td>
-                  <td class="py-3 px-4">{{ item.product.sku }}</td>
-                  <td class="py-3 px-4">{{ item.expectedQuantity }}</td>
-                  <td class="py-3 px-4">{{ item.notes || '-' }}</td>
-                </tr>
-              </tbody>
-            </table>
+                  <circle
+                    class="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    stroke-width="4"
+                  ></circle>
+                  <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+              </span>
+              Create Inventory Count
+            </button>
           </div>
         </div>
+      </div>
+    </div>
 
-        <div v-if="selectedCount.notes" class="mb-6">
-          <h4 class="text-lg font-semibold mb-2">Notes</h4>
-          <div class="p-4 bg-gray-1 dark:bg-meta-4 rounded-md">
-            {{ selectedCount.notes }}
+    <!-- Inventory Count Details Modal -->
+    <div
+      v-if="showDetailsModal && selectedCount"
+      class="fixed inset-0 z-999 flex items-center justify-center bg-black bg-opacity-50"
+    >
+      <div
+        class="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-boxdark rounded-lg shadow-lg"
+      >
+        <div class="border-b border-stroke px-6.5 py-4 dark:border-strokedark">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xl font-semibold text-black dark:text-white">Inventory Count Details</h3>
+            <button @click="showDetailsModal = false" class="text-gray-500 hover:text-red-500">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
           </div>
         </div>
-        <div class="flex items-center justify-end mb-4">
-          <button
-            v-if="authStore.hasPermission('generate_reports')"
-            @click="exportInventoryCountDetailsPDF"
-            class="inline-flex items-center justify-center rounded-md bg-success py-2 px-4 mr-4 text-center font-medium text-white hover:bg-opacity-90"
-          >
-            Export PDF
-          </button>
+        <div class="p-6.5">
+       
+          <div class="grid grid-cols-2 gap-6 mb-6">
+            <div class="col-span-1">
+              <h4 class="text-lg font-semibold mb-3">Count Information</h4>
+              <div class="space-y-2">
+                <p>
+                  <span class="font-medium">Count Number:</span>
+                  {{ selectedCount.inventoryCount.countNumber }}
+                </p>
+                <p>
+                  <span class="font-medium">Count Date:</span>
+                  {{ formatDate(selectedCount.inventoryCount.countDate) }}
+                </p>
+                <p>
+                  <span class="font-medium">Created:</span>
+                  {{ formatDate(selectedCount.inventoryCount.createdAt) }}
+                </p>
+                <p>
+                  <span class="font-medium">Created By:</span>
+                  {{ selectedCount.inventoryCount.createdBy?.user.firstName || 'Unknown' }}
+                </p>
+              </div>
+            </div>
+          </div>
 
-          <button
-            @click="showDetailsModal = false"
-            class="inline-flex items-center justify-center rounded-md border border-stroke py-2 px-4 text-center font-medium text-black hover:border-primary hover:bg-primary hover:text-white dark:border-strokedark dark:text-white"
-          >
-            Close
-          </button>
+          <div class="mb-6">
+            <h4 class="text-lg font-semibold mb-3">Count Items</h4>
+            <div class="overflow-x-auto">
+              <table class="w-full table-auto">
+                <thead>
+                  <tr class="bg-gray-2 text-left dark:bg-meta-4">
+                    <th class="py-3 px-4 font-medium text-black dark:text-white">Product Name</th>
+                    <th class="py-3 px-4 font-medium text-black dark:text-white">SKU</th>
+                    <th class="py-3 px-4 font-medium text-black dark:text-white">Expected Qty</th>
+                    <th class="py-3 px-4 font-medium text-black dark:text-white">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="item in selectedCount.inventoryCount.products"
+                    :key="item._id"
+                    class="border-b border-stroke dark:border-strokedark"
+                  >
+                    <td class="py-3 px-4">{{ item.product.name }}</td>
+                    <td class="py-3 px-4">{{ item.product.sku }}</td>
+                    <td class="py-3 px-4">{{ item.expectedQuantity }}</td>
+                    <td class="py-3 px-4">{{ item.notes || '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div v-if="selectedCount.notes" class="mb-6">
+            <h4 class="text-lg font-semibold mb-2">Notes</h4>
+            <div class="p-4 bg-gray-1 dark:bg-meta-4 rounded-md">
+              {{ selectedCount.notes }}
+            </div>
+          </div>
+          <div class="flex items-center justify-end mb-4">
+            <button
+              v-if="authStore.hasPermission('generate_reports')"
+              @click="exportInventoryCountDetailsPDF"
+              class="inline-flex items-center justify-center rounded-md bg-success py-2 px-4 mr-4 text-center font-medium text-white hover:bg-opacity-90"
+            >
+              Export PDF
+            </button>
+
+            <button
+              @click="showDetailsModal = false"
+              class="inline-flex items-center justify-center rounded-md border border-stroke py-2 px-4 text-center font-medium text-black hover:border-primary hover:bg-primary hover:text-white dark:border-strokedark dark:text-white"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </div>

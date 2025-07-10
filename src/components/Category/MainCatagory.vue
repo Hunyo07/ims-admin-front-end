@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
-import { useAuthStore } from '@/stores/auth'
-import { socket } from '@/socket'
+import { useAuthStore } from '../../stores/auth'
+import { socket } from '../../socket'
 import Swal from 'sweetalert2'
 
 const authStore = useAuthStore()
@@ -28,8 +28,7 @@ const isEditing = ref(false)
 const isSubmitting = ref(false)
 const isDeleting = ref(false)
 const selectedCategoryId = ref(null)
-const editingCategory = ref(null)
-
+const editingCategory = ref<Category | null>(null)
 const newCategory = ref({
   name: '',
   description: '',
@@ -51,7 +50,7 @@ const fetchCategories = async () => {
     Swal.fire({
       icon: 'error',
       title: 'Error',
-      text: error.response?.data?.message || 'Error fetching categories'
+      text: (error as any)?.response?.data?.message || 'Error fetching categories'
     })
   } finally {
     isLoading.value = false
@@ -79,7 +78,7 @@ const paginatedCategories = computed(() => {
 })
 const hasUnsavedChanges = computed(() => {
   if (!showModal.value) return false
-  return Object.keys(newCategory.value).some((key) => newCategory.value[key] !== '')
+  return Object.keys(newCategory.value).some((key) => newCategory.value[key as keyof typeof newCategory.value] !== '')
 })
 const handleCloseModal = async () => {
   if (hasUnsavedChanges.value) {
@@ -127,8 +126,6 @@ const handleAddCategory = async () => {
         }
       }
     )
-
-    // Don't add to local state here, let the socket handle it
     socket.emit('createCategory', response.data.category)
     showModal.value = false
     resetForm()
@@ -138,18 +135,18 @@ const handleAddCategory = async () => {
       text: 'Category created successfully',
       timer: 1500
     })
-  } catch (error) {
+  } catch (error: any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
-      text: error.response?.data?.message || 'Error creating category'
+      text: error?.response?.data?.message || 'Error creating category'
     })
   } finally {
     isSubmitting.value = false
   }
 }
 
-const handleEditCategory = (category) => {
+const handleEditCategory = (category: any) => {
   isEditing.value = true
   editingCategory.value = category
   newCategory.value = {
@@ -163,6 +160,7 @@ const handleEditCategory = (category) => {
 const handleUpdateCategory = async () => {
   try {
     isSubmitting.value = true
+    if (!editingCategory.value || !editingCategory.value._id) return
     const response = await axios.put(
       `https://ims-api-id38.onrender.com/api/categories/${editingCategory.value._id}`,
       newCategory.value,
@@ -173,7 +171,7 @@ const handleUpdateCategory = async () => {
       }
     )
     categories.value = categories.value.map((category) =>
-      category._id === editingCategory.value._id ? response.data.category : category
+      category._id === editingCategory.value!._id ? response.data.category : category
     )
     socket.emit('updateCategory', response.data.category)
     showModal.value = false
@@ -184,18 +182,18 @@ const handleUpdateCategory = async () => {
       text: 'Category updated successfully',
       timer: 1500
     })
-  } catch (error) {
+  } catch (error: any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
-      text: error.response?.data?.message || 'Error updating category'
+      text: error?.response?.data?.message || 'Error updating category'
     })
   } finally {
     isSubmitting.value = false
   }
 }
 
-const handleDeleteCategory = async (categoryId) => {
+const handleDeleteCategory = async (categoryId: any) => {
   const result = await Swal.fire({
     title: 'Are you sure?',
     text: "You won't be able to revert this!",
@@ -215,11 +213,8 @@ const handleDeleteCategory = async (categoryId) => {
           Authorization: `Bearer ${authStore.token}`
         }
       })
-
-      // Update local state immediately
       categories.value = categories.value.filter((category) => category._id !== categoryId)
       socket.emit('deleteCategory', categoryId)
-
       Swal.fire({
         icon: 'success',
         title: 'Deleted!',
@@ -227,11 +222,11 @@ const handleDeleteCategory = async (categoryId) => {
         timer: 1500,
         showConfirmButton: false
       })
-    } catch (error) {
+    } catch (error: any) {
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: error.response?.data?.message || 'Error deleting category'
+        text: error?.response?.data?.message || 'Error deleting category'
       })
     } finally {
       isDeleting.value = false
@@ -240,7 +235,7 @@ const handleDeleteCategory = async (categoryId) => {
   }
 }
 
-const handleToggleStatus = async (categoryId, currentStatus) => {
+const handleToggleStatus = async (categoryId: any, currentStatus: any) => {
   try {
     const result = await Swal.fire({
       title: `${currentStatus ? 'Deactivate' : 'Activate'} Category?`,
@@ -262,13 +257,10 @@ const handleToggleStatus = async (categoryId, currentStatus) => {
           }
         }
       )
-
       categories.value = categories.value.map((category) =>
         category._id === categoryId ? { ...category, isActive: !currentStatus } : category
       )
-
       socket.emit('updateCategory', response.data.category)
-
       Swal.fire({
         icon: 'success',
         title: 'Success!',
@@ -277,11 +269,11 @@ const handleToggleStatus = async (categoryId, currentStatus) => {
         showConfirmButton: false
       })
     }
-  } catch (error) {
+  } catch (error: any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
-      text: error.response?.data?.message || 'Error toggling category status'
+      text: error?.response?.data?.message || 'Error toggling category status'
     })
   }
 }

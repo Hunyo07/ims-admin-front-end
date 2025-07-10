@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
-import { useAuthStore } from '@/stores/auth'
-import { socket } from '@/socket'
+import { useAuthStore } from '../../stores/auth'
+import { socket } from '../../socket'
 import Swal from 'sweetalert2'
 
 const authStore = useAuthStore()
@@ -35,6 +35,17 @@ interface Customer {
   updatedAt: string
 }
 
+// Form type for new/edit customer
+interface CustomerForm {
+  firstName: string
+  lastName: string
+  email: string
+  phoneNumber: string
+  address: Address
+  gcashDetails: GcashDetails
+  preferredDeliveryTime: string
+}
+
 // Update refs
 const customers = ref<Customer[]>([])
 const isLoading = ref(true)
@@ -42,13 +53,13 @@ const searchQuery = ref('')
 const showModal = ref(false)
 const isDeleting = ref(false)
 const isTogglingStatus = ref(false)
-const selectedCustomerId = ref(null)
+const selectedCustomerId = ref<string | null>(null)
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
 const isEditing = ref(false)
-const editingCustomer = ref(null)
+const editingCustomer = ref<Customer | null>(null)
 const isSubmitting = ref(false)
-const newCustomer = ref({
+const newCustomer = ref<CustomerForm>({
   firstName: '',
   lastName: '',
   email: '',
@@ -88,7 +99,7 @@ const fetchCustomers = async () => {
       }
     })
     customers.value = response.data.customers || response.data
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching customers:', error)
     Swal.fire({
       icon: 'error',
@@ -108,9 +119,23 @@ const paginatedCustomers = computed(() => {
 
 const totalPages = computed(() => Math.ceil(filteredCustomers.value.length / itemsPerPage.value))
 const hasUnsavedChanges = computed(() => {
-  if (!showModal.value) return false
-  return Object.keys(newCustomer.value).some((key) => newCustomer.value[key] !== '')
-})
+  if (!showModal.value) return false;
+  const nc = newCustomer.value;
+  return (
+    nc.firstName !== '' ||
+    nc.lastName !== '' ||
+    nc.email !== '' ||
+    nc.phoneNumber !== '' ||
+    nc.address.street !== '' ||
+    nc.address.barangay !== '' ||
+    nc.address.city !== '' ||
+    nc.address.province !== '' ||
+    nc.address.zipCode !== '' ||
+    nc.gcashDetails.accountName !== '' ||
+    nc.gcashDetails.accountNumber !== '' ||
+    nc.preferredDeliveryTime !== ''
+  );
+});
 
 const handleCloseModal = async () => {
   if (hasUnsavedChanges.value) {
@@ -138,14 +163,31 @@ const handleCloseModal = async () => {
 }
 
 // Edit and delete functions
-const handleEditCustomer = (customer) => {
-  isEditing.value = true
-  editingCustomer.value = customer
-  newCustomer.value = { ...customer }
-  showModal.value = true
-}
+const handleEditCustomer = (customer: Customer) => {
+  isEditing.value = true;
+  editingCustomer.value = customer;
+  newCustomer.value = {
+    firstName: customer.firstName || '',
+    lastName: customer.lastName || '',
+    email: customer.email || '',
+    phoneNumber: customer.phoneNumber || '',
+    address: {
+      street: customer.address?.street || '',
+      barangay: customer.address?.barangay || '',
+      city: customer.address?.city || '',
+      province: customer.address?.province || '',
+      zipCode: customer.address?.zipCode || ''
+    },
+    gcashDetails: {
+      accountName: customer.gcashDetails?.accountName || '',
+      accountNumber: customer.gcashDetails?.accountNumber || ''
+    },
+    preferredDeliveryTime: customer.preferredDeliveryTime || ''
+  };
+  showModal.value = true;
+};
 
-const handleToggleCustomerStatus = async (customer) => {
+const handleToggleCustomerStatus = async (customer: Customer) => {
   const action = customer.isActive ? 'deactivate' : 'activate'
   const result = await Swal.fire({
     title: `Are you sure?`,
@@ -185,7 +227,7 @@ const handleToggleCustomerStatus = async (customer) => {
         `Customer has been ${action}d.`, 
         'success'
       )
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error toggling customer status:', error)
       Swal.fire({
         icon: 'error',
@@ -199,7 +241,7 @@ const handleToggleCustomerStatus = async (customer) => {
   }
 }
 
-const handleDeleteCustomer = async (customerId) => {
+const handleDeleteCustomer = async (customerId: string) => {
   selectedCustomerId.value = customerId
   const result = await Swal.fire({
     title: 'Are you sure?',
@@ -226,7 +268,7 @@ const handleDeleteCustomer = async (customerId) => {
       socket.emit('deleteCustomer', customerId)
       Swal.fire('Deleted!', 'Customer has been deleted.', 'success')
       customers.value = customers.value.filter(customer => customer._id !== customerId)
-    } catch (error) {
+    } catch (error: any) {
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -262,7 +304,7 @@ const handleAddCustomer = async () => {
       text: 'Customer created successfully',
       timer: 1500
     })
-  } catch (error) {
+  } catch (error: any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -276,6 +318,9 @@ const handleAddCustomer = async () => {
 const handleUpdateCustomer = async () => {
   try {
     isSubmitting.value = true
+    if (!editingCustomer.value) {
+      throw new Error('No customer selected for editing.')
+    }
     const response = await axios.put(
       `https://ims-api-id38.onrender.com/api/customers/${editingCustomer.value._id}`,
       newCustomer.value,
@@ -301,7 +346,7 @@ const handleUpdateCustomer = async () => {
       text: 'Customer updated successfully',
       timer: 1500
     })
-  } catch (error) {
+  } catch (error: any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -330,9 +375,10 @@ const resetForm = () => {
       accountNumber: ''
     },
     preferredDeliveryTime: ''
-  }
-  isEditing.value = false
-}
+  };
+  isEditing.value = false;
+  editingCustomer.value = null;
+};
 
 onMounted(() => {
   fetchCustomers()

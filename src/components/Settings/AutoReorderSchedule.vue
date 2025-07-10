@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '../../stores/auth'
 import Swal from 'sweetalert2'
 
 const authStore = useAuthStore()
@@ -103,7 +103,7 @@ const saveSettings = async () => {
       showConfirmButton: false,
       timer: 3000
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error saving settings:', error)
     Swal.fire({
       icon: 'error',

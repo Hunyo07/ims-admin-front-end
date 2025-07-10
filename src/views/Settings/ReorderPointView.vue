@@ -1,9 +1,9 @@
-<script setup lang="ts">
+<script setup >
 import { ref } from 'vue'
-import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import ReorderPoint from '@/components/Reorder/ReorderPoint.vue'
-import AutoReorderSchedule from '@/components/Settings/AutoReorderSchedule.vue'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
+import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
+import ReorderPoint from '../../components/Reorder/ReorderPoint.vue'
+import AutoReorderSchedule from '../../components/Settings/AutoReorderSchedule.vue'
+import DefaultLayout from '../../layouts/DefaultLayout.vue'
 
 const pageTitle = ref('Reorder Management')
 </script>

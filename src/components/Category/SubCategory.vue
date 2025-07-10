@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
-import { useAuthStore } from '@/stores/auth'
-import { socket } from '@/socket'
+import { useAuthStore } from '../../stores/auth'
+import { socket } from '../../socket'
 import Swal from 'sweetalert2'
 
 const authStore = useAuthStore()
@@ -18,6 +18,12 @@ interface SubCategory {
   updatedAt: string
 }
 
+interface Category {
+  _id: string;
+  name: string;
+  // Add other fields as needed
+}
+
 // refs
 const selectedCategoryFilter = ref('')
 const searchQuery = ref('')
@@ -29,9 +35,9 @@ const isEditing = ref(false)
 const isSubmitting = ref(false)
 const isDeleting = ref(false)
 const selectedSubCategoryId = ref(null)
-const editingSubCategory = ref(null)
+const editingSubCategory = ref<SubCategory | null>(null)
 const subCategories = ref<SubCategory[]>([])
-const categories = ref([])
+const categories = ref<Category[]>([])
 const newSubCategory = ref({
   name: '',
   description: '',
@@ -53,7 +59,7 @@ const fetchSubCategories = async () => {
       }
     })
     subCategories.value = response.data
-  } catch (error) {
+  } catch (error: any) {
     subCategories.value = []
     Swal.fire({
       icon: 'error',
@@ -72,8 +78,8 @@ const fetchCategories = async () => {
       }
     })
     categories.value = (response.data || [])
-      .filter((category) => category && typeof category === 'object')
-  } catch (error) {
+      .filter((category: any) => category && typeof category === 'object')
+  } catch (error: any) {
     categories.value = []
     Swal.fire({
       icon: 'error',
@@ -106,7 +112,12 @@ const paginatedSubCategories = computed(() => {
 })
 const hasUnsavedChanges = computed(() => {
   if (!showModal.value) return false
-  return Object.keys(newSubCategory.value).some((key) => newSubCategory.value[key] !== '')
+  // Only check string fields for unsaved changes
+  return (
+    newSubCategory.value.name !== '' ||
+    newSubCategory.value.description !== '' ||
+    newSubCategory.value.categoryId !== ''
+  )
 })
 const handleCloseModal = async () => {
   if (hasUnsavedChanges.value) {
@@ -166,7 +177,7 @@ const handleAddSubCategory = async () => {
       text: 'Subcategory created successfully',
       timer: 1500
     })
-  } catch (error) {
+  } catch (error: any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -177,7 +188,7 @@ const handleAddSubCategory = async () => {
   }
 }
 
-const handleEditSubCategory = async (subCategory) => {
+const handleEditSubCategory = async (subCategory: any) => {
   isEditing.value = true
   editingSubCategory.value = subCategory
 
@@ -194,7 +205,7 @@ const handleEditSubCategory = async (subCategory) => {
     }
 
     showModal.value = true
-  } catch (error) {
+  } catch (error: any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -206,6 +217,7 @@ const handleEditSubCategory = async (subCategory) => {
 const handleUpdateSubCategory = async () => {
   try {
     isSubmitting.value = true
+    if (!editingSubCategory.value) return
     const response = await axios.put(
       `https://ims-api-id38.onrender.com/api/subcategories/${editingSubCategory.value._id}`,
       newSubCategory.value,
@@ -227,7 +239,7 @@ const handleUpdateSubCategory = async () => {
       text: 'Subcategory updated successfully',
       timer: 1500
     })
-  } catch (error) {
+  } catch (error: any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -238,7 +250,7 @@ const handleUpdateSubCategory = async () => {
   }
 }
 
-const handleDeleteSubCategory = async (subCategoryId) => {
+const handleDeleteSubCategory = async (subCategoryId: any) => {
   const result = await Swal.fire({
     title: 'Are you sure?',
     text: "You won't be able to revert this!",
@@ -266,7 +278,7 @@ const handleDeleteSubCategory = async (subCategoryId) => {
         timer: 1500,
         showConfirmButton: false
       })
-    } catch (error) {
+    } catch (error: any) {
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -279,7 +291,7 @@ const handleDeleteSubCategory = async (subCategoryId) => {
   }
 }
 
-const handleToggleStatus = async (subCategoryId, currentStatus) => {
+const handleToggleStatus = async (subCategoryId: any, currentStatus: any) => {
   try {
     const result = await Swal.fire({
       title: `${currentStatus ? 'Deactivate' : 'Activate'} Subcategory?`,
@@ -315,7 +327,7 @@ const handleToggleStatus = async (subCategoryId, currentStatus) => {
         showConfirmButton: false
       })
     }
-  } catch (error) {
+  } catch (error: any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',

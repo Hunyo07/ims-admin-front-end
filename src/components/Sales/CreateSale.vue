@@ -424,22 +424,15 @@ const processSale = async () => {
     // Refresh product list to get updated stock levels
     fetchProducts()
     
-    // After successful sale:
-    // showReceipt.value = true // This line is now moved up
-    // lastSale.value = { // This line is now moved up
-    //   cart: JSON.parse(JSON.stringify(cart.value)),
-    //   subtotal: subtotal.value,
-    //   total: total.value,
-    //   paymentAmount: paymentAmount.value,
-    //   change: change.value,
-    //   customerName: customerName.value,
-    //   deliveryFee: deliveryFee.value,
-    //   deliveryMode: deliveryMode.value,
-    //   date: new Date().toLocaleString()
-    // }
     
   } catch (error) {
     console.error('Error processing sale:', error)
+    let message = 'Failed to process sale'
+  if (axios.isAxiosError && axios.isAxiosError(error)) {
+    message = error.response?.data?.message || error.message
+  } else if (error instanceof Error) {
+    message = error.message
+  }
     Swal.fire({
       icon: 'error',
       title: 'Error',
