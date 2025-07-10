@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onClickOutside } from '@vueuse/core'
 import { ref, computed } from 'vue'
-import { useAuthStore } from '../../stores/auth'
+import { useAuthStore } from '../../stores'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()

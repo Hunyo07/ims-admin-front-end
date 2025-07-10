@@ -1,6 +1,5 @@
 <script setup >
-import { useSidebarStore } from '../../stores/sidebar'
-import { useAuthStore } from '../../stores/auth'
+import { useAuthStore, useSidebarStore } from '@/stores'
 import { useRoute } from 'vue-router'
 import { computed } from 'vue'
 import SidebarDropdown from './SidebarDropdown.vue'

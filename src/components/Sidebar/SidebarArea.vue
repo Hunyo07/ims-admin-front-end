@@ -1,6 +1,5 @@
 <script setup >
-import { useSidebarStore } from '../../stores/sidebar'
-import { useAuthStore } from '../../stores/auth'
+import { useAuthStore, useSidebarStore } from '@/stores'
 import { onClickOutside } from '@vueuse/core'
 import { ref, computed } from 'vue'
 import SidebarItem from './SidebarItem.vue'

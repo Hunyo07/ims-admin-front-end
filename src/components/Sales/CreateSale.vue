@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
-import { useAuthStore } from '../../stores/auth'
+import { useAuthStore } from '../../stores'
 import Swal from 'sweetalert2'
 import { inject } from 'vue'
 import { jsPDF } from 'jspdf'

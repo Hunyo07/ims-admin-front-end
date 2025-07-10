@@ -2,7 +2,7 @@
 import { RouterView } from 'vue-router'
 import { onMounted } from 'vue'
 // import { useNotificationStore } from './stores/notification'
-import { useAuthStore } from './stores/auth'
+import { useAuthStore } from '@/stores'
 
 // const notificationStore = useNotificationStore()
 const authStore = useAuthStore()

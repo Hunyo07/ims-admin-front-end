@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
-import { useAuthStore } from '../../stores/auth'
+import { useAuthStore } from '../../stores'
 import { socket } from '../../socket'
 import Swal from 'sweetalert2'
 

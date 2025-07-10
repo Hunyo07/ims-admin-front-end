@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { useSidebarStore } from '../../stores/sidebar'
-import { useAuthStore } from '../../stores/auth'
+import { useAuthStore, useSidebarStore } from '../../stores'
 import { ref, computed } from 'vue'
 
 const sidebarStore = useSidebarStore()

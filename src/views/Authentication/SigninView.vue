@@ -8,7 +8,7 @@ import DefaultLayout from '../../layouts/DefaultLayout.vue'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
-import { useAuthStore } from '../../stores/auth'
+import { useAuthStore } from '@/stores'
 
 const router = useRouter()
 const authStore = useAuthStore()
