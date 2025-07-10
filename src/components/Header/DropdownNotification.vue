@@ -1,7 +1,7 @@
 <script setup >
 import { onClickOutside } from '@vueuse/core'
 import { ref, computed, onMounted } from 'vue'
-import { useNotificationStore } from '../../stores'
+import { useNotificationStore } from '../../stores/notification'
 import { useRouter } from 'vue-router'
 import { formatDistanceToNow } from 'date-fns'
 
