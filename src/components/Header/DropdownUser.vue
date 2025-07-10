@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onClickOutside } from '@vueuse/core'
 import { ref, computed } from 'vue'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '../../stores/auth'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -34,7 +34,7 @@ const user = computed(() => authStore.user)
       </span>
 
       <span class="h-12 w-12 rounded-full">
-        <img class="rounded-full" src="@/assets/images/user/user-.png" alt="User" />
+        <img class="rounded-full" src="../../assets/images/user/user-.png" alt="User" />
       </span>
 
       <svg

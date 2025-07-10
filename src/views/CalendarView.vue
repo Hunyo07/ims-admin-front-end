@@ -1,8 +1,8 @@
-<script setup lang="ts">
+<script setup >
 import { ref } from 'vue'
-import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import CalendarCard from '@/components/CalendarCard.vue'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
+import BreadcrumbDefault from '../components/Breadcrumbs/BreadcrumbDefault.vue'
+import CalendarCard from '../components/CalendarCard.vue'
+import DefaultLayout from '../layouts/DefaultLayout.vue'
 
 const pageTitle = ref('Calender')
 </script>

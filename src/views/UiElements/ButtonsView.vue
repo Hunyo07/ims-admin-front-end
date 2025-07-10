@@ -1,8 +1,8 @@
-<script setup lang="ts">
-import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import ButtonDefault from '@/components/Buttons/ButtonDefault.vue'
-import ButtonsCard from '@/components/Buttons/ButtonsCard.vue'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
+<script setup >
+import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
+import ButtonDefault from '../../components/Buttons/ButtonDefault.vue'
+import ButtonsCard from '../../components/Buttons/ButtonsCard.vue'
+import DefaultLayout from '../../layouts/DefaultLayout.vue'
 
 import { ref } from 'vue'
 

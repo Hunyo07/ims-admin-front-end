@@ -1,8 +1,8 @@
-<script setup lang="ts">
+<script setup>
 import { ref } from 'vue'
-import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import BarcodeManagement from '@/components/Barcodes/BarcodesManagement.vue'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
+import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
+import BarcodeManagement from '../../components/Barcodes/BarcodesManagement.vue'
+import DefaultLayout from '../../layouts/DefaultLayout.vue'
 
 const pageTitle = ref('Barcode Management')
 </script>

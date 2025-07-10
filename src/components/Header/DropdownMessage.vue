@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup >
 import { onClickOutside } from '@vueuse/core'
 import { ref } from 'vue'
 
@@ -10,10 +10,10 @@ onClickOutside(target, () => {
   dropdownOpen.value = false
 })
 
-import userOne from '@/assets/images/user/user-01.png'
-import userTwo from '@/assets/images/user/user-02.png'
-import userThree from '@/assets/images/user/user-03.png'
-import userFour from '@/assets/images/user/user-04.png'
+import userOne from '../../assets/images/user/user-01.png'
+import userTwo from '../../assets/images/user/user-02.png'
+import userThree from '../../assets/images/user/user-03.png'
+import userFour from '../../assets/images/user/user-04.png'
 
 const messagesList = ref([
   {
@@ -107,7 +107,6 @@ const messagesList = ref([
       </div>
 
       <ul class="flex h-auto flex-col overflow-y-auto">
-        <template v-for="(item, index) in messagesList" :key="index">
           <li>
             <router-link
               class="flex gap-4.5 border-t border-stroke px-4.5 py-3 hover:bg-gray-2 dark:border-strokedark dark:hover:bg-meta-4"
@@ -124,7 +123,6 @@ const messagesList = ref([
               </div>
             </router-link>
           </li>
-        </template>
       </ul>
     </div>
     <!-- Dropdown End -->

@@ -312,8 +312,8 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-import axios from '@/utils/axios'
+import { useAuthStore } from '../../stores/auth'
+import axios from '../../utils/axios'
 import Swal from 'sweetalert2'
 
 const authStore = useAuthStore()

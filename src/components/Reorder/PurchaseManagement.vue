@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '../../stores/auth'
 import Swal from 'sweetalert2'
 import Datepicker from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
@@ -813,6 +813,9 @@ const canExportPDF = computed(() => authStore.hasRole(['admin', 'superadmin']));
 </script>
 
 <template>
+  <div>
+    
+  
   <div
     class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark"
   >
@@ -1457,4 +1460,5 @@ const canExportPDF = computed(() => authStore.hasRole(['admin', 'superadmin']));
       </div>
     </div>
   </div>
+</div>
 </template>

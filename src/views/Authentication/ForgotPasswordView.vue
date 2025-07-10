@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import emailjs from '@emailjs/browser';
-import axios from '@/utils/axios';
+import axios from '../../utils/axios';
 const email = ref('');
 const loading = ref(false);
 const error = ref('');

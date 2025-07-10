@@ -1,12 +1,12 @@
-<script setup lang="ts">
+<script setup >
 import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
-import UserOne from '@/assets/images/user/user-01.png'
-import UserTwo from '@/assets/images/user/user-02.png'
-import UserThree from '@/assets/images/user/user-03.png'
-import UserFour from '@/assets/images/user/user-04.png'
-import UserFive from '@/assets/images/user/user-05.png'
+import UserOne from '../assets/images/user/user-01.png'
+import UserTwo from '../assets/images/user/user-02.png'
+import UserThree from '../assets/images/user/user-03.png'
+import UserFour from '../assets/images/user/user-04.png'
+import UserFive from '../assets/images/user/user-05.png'
 
 const chatData = ref([
   {
@@ -67,7 +67,6 @@ const chatData = ref([
     <h4 class="mb-6 px-7.5 text-xl font-semibold text-black dark:text-white">Chats</h4>
 
     <div>
-      <template v-for="(chat, index) in chatData" :key="index">
         <RouterLink
           to="/"
           class="flex items-center gap-5 py-3 px-7.5 hover:bg-gray-3 dark:hover:bg-meta-4"
@@ -96,7 +95,6 @@ const chatData = ref([
             </div>
           </div>
         </RouterLink>
-      </template>
     </div>
   </div>
 </template>

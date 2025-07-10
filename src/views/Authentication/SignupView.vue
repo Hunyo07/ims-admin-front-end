@@ -1,8 +1,8 @@
-<script setup lang="ts">
-import DefaultAuthCard from '@/components/Auths/DefaultAuthCard.vue'
-import InputGroup from '@/components/Auths/InputGroup.vue'
-import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
+<script setup >
+import DefaultAuthCard from '../../components/Auths/DefaultAuthCard.vue'
+import InputGroup from '../../components/Auths/InputGroup.vue'
+import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
+import DefaultLayout from '../../layouts/DefaultLayout.vue'
 
 import { ref } from 'vue'
 

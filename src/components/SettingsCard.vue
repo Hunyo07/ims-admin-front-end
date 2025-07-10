@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import api from '@/utils/axios.js';
+import api from '../utils/axios.js';
 
 const loading = ref(false);
 const error = ref('');

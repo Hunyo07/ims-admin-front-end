@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
-import { useAuthStore } from '@/stores/auth'
-import { socket } from '@/socket'
+import { useAuthStore } from '../../stores/auth'
+import { socket } from '../../socket'
 import Swal from 'sweetalert2'
 import { format } from 'date-fns'
 import { jsPDF } from 'jspdf'
@@ -591,6 +591,8 @@ onMounted(() => {
 
 <template>
   <div>
+    
+  <div>
     <div v-if="authStore.getUserRole && authStore.getUserRole() === 'staff'" class="mb-2 text-sm text-info">
       These statistics reflect only your own sales.
     </div>
@@ -1079,4 +1081,6 @@ onMounted(() => {
       </div>
     </div>
   </div>
+</div>  
+
 </template>

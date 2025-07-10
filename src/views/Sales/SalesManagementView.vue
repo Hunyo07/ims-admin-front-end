@@ -1,8 +1,8 @@
-<script setup lang="ts">
+<script setup >
 import { ref } from 'vue'
-import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import SalesManagement from '@/components/Sales/SalesManagement.vue'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
+import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
+import SalesManagement from '../../components/Sales/SalesManagement.vue'
+import DefaultLayout from '../../layouts/DefaultLayout.vue'
 
 const pageTitle = ref('Sales Management')
 </script>

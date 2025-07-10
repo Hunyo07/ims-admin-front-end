@@ -1,6 +1,6 @@
 import axios from 'axios'
-import { useAuthStore } from '@/stores/auth'
-import router from '@/router'
+import { useAuthStore } from '../stores/auth'
+import router from '../router'
 
 const axiosInstance = axios.create({
   baseURL: 'https://ims-api-id38.onrender.com/api'

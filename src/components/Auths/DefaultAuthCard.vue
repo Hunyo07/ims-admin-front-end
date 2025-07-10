@@ -12,7 +12,7 @@
           </p>
 
           <span class="inline-block">
-            <img src="@/assets/images/logo.png" alt="illustration" />
+            <img :src="logo" alt="illustration" />
           </span>
         </div>
       </div>
@@ -35,7 +35,8 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script setup>
+import logo from '../../assets/images/logo.png'
 const props = defineProps({
   subtitle: String,
   title: String,
@@ -50,15 +51,5 @@ const props = defineProps({
 <style>
 /* Move styles to InputGroup component where they belong */
 /* Remove the scoped attribute to allow proper CSS inheritance */
-.auth-form {
-  @apply w-full max-w-md space-y-6;
-}
 
-.auth-card {
-  @apply flex min-h-full flex-col justify-center py-12 sm:px-6 lg:px-8;
-}
-
-.auth-title {
-  @apply -mx-4 mb-8 border-b border-stroke px-4 pb-4 dark:border-strokedark;
-}
 </style>

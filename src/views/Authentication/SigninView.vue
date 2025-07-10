@@ -1,14 +1,14 @@
-<script setup lang="ts">
-import DefaultAuthCard from '@/components/Auths/DefaultAuthCard.vue'
-import InputGroup from '@/components/Auths/InputGroup.vue'
-import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
+<script setup >
+import DefaultAuthCard from '../../components/Auths/DefaultAuthCard.vue'
+import InputGroup from '../../components/Auths/InputGroup.vue'
+import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
+import DefaultLayout from '../../layouts/DefaultLayout.vue'
 
 
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '../../stores/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -19,7 +19,7 @@ const password = ref('')
 const errorMessage = ref('')
 const isLoading = ref(false)
 
-const handleSubmit = async (e: Event) => {
+const handleSubmit = async (e) => {
   e.preventDefault()
   errorMessage.value = ''
   isLoading.value = true
@@ -51,7 +51,7 @@ const handleSubmit = async (e: Event) => {
       default:
         router.push('/')
     }
-  } catch (error: any) {
+  } catch (error) {
     errorMessage.value = error.response?.data?.message || 'Login failed. Please try again.'
   } finally {
     isLoading.value = false

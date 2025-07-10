@@ -1,9 +1,9 @@
-<script setup lang="ts">
-import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import AlertWarning from '@/components/Alerts/AlertWarning.vue'
-import AlertSuccess from '@/components/Alerts/AlertSuccess.vue'
-import AlertError from '@/components/Alerts/AlertError.vue'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
+<script setup >
+import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
+import AlertWarning from '../../components/Alerts/AlertWarning.vue'
+import AlertSuccess from '../../components/Alerts/AlertSuccess.vue'
+import AlertError from '../../components/Alerts/AlertError.vue'
+import DefaultLayout from '../../layouts/DefaultLayout.vue'
 
 import { ref } from 'vue'
 

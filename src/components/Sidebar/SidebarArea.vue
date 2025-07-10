@@ -1,5 +1,5 @@
 <script setup >
-import { useSidebarStore } from '@/stores/sidebar'
+import { useSidebarStore } from '../../stores/sidebar'
 import { useAuthStore } from '../../stores/auth'
 import { onClickOutside } from '@vueuse/core'
 import { ref, computed } from 'vue'

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // @ts-ignore
 import jsVectorMap from 'jsvectormap'
-import '@/assets/js/us-aea-en'
+import '../../assets/js/us-aea-en'
 import { onMounted } from 'vue'
 
 onMounted(() => {

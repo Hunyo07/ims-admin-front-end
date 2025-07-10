@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import api from '@/utils/axios.js';
+import api from '../../utils/axios.js';
 
 const route = useRoute();
 const router = useRouter();

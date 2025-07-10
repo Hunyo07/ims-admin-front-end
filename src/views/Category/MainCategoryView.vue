@@ -1,8 +1,8 @@
-<script setup lang="ts">
+<script setup >
 import { ref } from 'vue'
-import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import CategoryManagement from '@/components/Category/MainCatagory.vue'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
+import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
+import CategoryManagement from '../../components/Category/MainCatagory.vue'
+import DefaultLayout from '../../layouts/DefaultLayout.vue'
 
 const pageTitle = ref('Main Category Management')
 </script>

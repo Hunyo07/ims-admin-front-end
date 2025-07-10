@@ -1,9 +1,9 @@
-<script setup lang="ts">
-import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import DefaultCard from '@/components/Forms/DefaultCard.vue'
-import InputGroup from '@/components/Forms/InputGroup.vue'
-import SelectGroupTwo from '@/components/Forms/SelectGroup/SelectGroupTwo.vue'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
+<script setup >
+import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
+import DefaultCard from '../../components/Forms/DefaultCard.vue'
+import InputGroup from '../../components/Forms/InputGroup.vue'
+import SelectGroupTwo from '../../components/Forms/SelectGroup/SelectGroupTwo.vue'
+import DefaultLayout from '../../layouts/DefaultLayout.vue'
 import { ref } from 'vue'
 
 const pageTitle = ref('Form Layout')
