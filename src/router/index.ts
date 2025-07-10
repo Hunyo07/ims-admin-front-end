@@ -28,9 +28,6 @@ import ForgotPasswordView from '../views/Authentication/ForgotPasswordView.vue';
 import ResetPasswordView from '../views/Authentication/ResetPasswordView.vue';
 import ActivityLogView from '../views/ActivityLog/ActivityLogView.vue';
 
-// Add this to your imports
-import { useAuthStore } from '../stores/auth'
-
 const routes = [
   {
     path: '/',
@@ -340,9 +337,10 @@ const router = createRouter({
 })
 
 // Authentication Guard
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   document.title = `Books & Clothes House ${to.meta.title} | Cloud-Based IMS - Books & Clothes House`
 
+  const { useAuthStore } = await import('../stores/auth')
   const authStore = useAuthStore()
   const isAuthenticated = authStore.isAuthenticated
 
