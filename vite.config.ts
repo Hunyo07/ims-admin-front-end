@@ -16,6 +16,21 @@ export default defineConfig({
     }
   },
   build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
+          if (id.includes('/src/views/')) {
+            return 'views';
+          }
+          if (id.includes('/src/components/')) {
+            return 'components';
+          }
+        }
+      }
+    },
     chunkSizeWarningLimit: 1500 // (in KB, e.g., 1500 = 1.5MB)
   }
 })
