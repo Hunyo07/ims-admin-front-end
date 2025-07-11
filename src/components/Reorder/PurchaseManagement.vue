@@ -23,13 +23,13 @@ const userLoading = ref(true);
 // Pagination variables
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
-const totalItems = computed(() => filteredPurchaseOrders.value.length)
-const totalPages = computed(() => Math.ceil(totalItems.value / itemsPerPage.value))
+const totalItems = ref(0)
+const totalPages = ref(0)
 
 // Function to handle changing items per page
-const changeItemsPerPage = (newValue) => {
-  itemsPerPage.value = parseInt(newValue)
+const changeItemsPerPage = () => {
   currentPage.value = 1 // Reset to first page when changing items per page
+  fetchPurchaseOrders() // Refetch data with new pagination
 }
 // Form data for creating a new purchase order
 const newOrder = ref({
@@ -44,11 +44,21 @@ const fetchPurchaseOrders = async () => {
   try {
     isLoading.value = true
     const response = await axios.get('https://ims-api-id38.onrender.com/api/purchase-orders', {
+      params: {
+        page: currentPage.value,
+        limit: itemsPerPage.value,
+        status: statusFilter.value !== 'all' ? statusFilter.value : undefined,
+        search: searchQuery.value || undefined
+      },
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
     })
-    purchaseOrders.value = response.data
+    
+    const data = response.data
+    purchaseOrders.value = data.purchaseOrders || []
+    totalItems.value = data.total || 0
+    totalPages.value = data.pages || 0
   } catch (error) {
     console.error('Error fetching purchase orders:', error)
     Swal.fire({
@@ -144,11 +154,6 @@ const createPurchaseOrder = async () => {
     }
 
     isLoading.value = true
-    const response = await axios.post('https://ims-api-id38.onrender.com/api/purchase-orders', newOrder.value, {
-      headers: {
-        Authorization: `Bearer ${authStore.token}`
-      }
-    })
 
     Swal.fire({
       icon: 'success',
@@ -291,7 +296,7 @@ const exportPurchaseOrderDetailsPDF = () => {
     doc.setFontSize(9)
     doc.setFont('helvetica', 'normal')
     
-    doc.text(`Supplier: ${selectedOrder.value.supplier.name}`, marginLeft + contentWidth / 2 + 10, currentY)
+    doc.text(`Supplier: ${selectedOrder.value.supplier?.name || 'N/A'}`, marginLeft + contentWidth / 2 + 10, currentY)
     currentY += lineHeight - 2
     
     doc.text(`Contact: ${selectedOrder.value.supplier.contactPerson || 'N/A'}`, marginLeft + contentWidth / 2 + 10, currentY)
@@ -514,31 +519,9 @@ const generateFromReorderPoints = async () => {
   }
 }
 
-// Filter purchase orders by status and search query
-const filteredPurchaseOrders = computed(() => {
-  let filtered = purchaseOrders.value
-
-  // Filter by status
-  if (statusFilter.value !== 'all') {
-    filtered = filtered.filter((order) => order.status === statusFilter.value)
-  }
-
-  // Filter by search query
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(
-      (order) =>
-        order.orderNumber.toLowerCase().includes(query) ||
-        order.supplier.name.toLowerCase().includes(query)
-    )
-  }
-
-  return filtered
-})
+// For now, we'll use the purchase orders directly since pagination is handled server-side
 const paginatedPurchaseOrders = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage.value
-  const end = start + itemsPerPage.value
-  return filteredPurchaseOrders.value.slice(start, end)
+  return purchaseOrders.value || []
 })
 
 // Format date
@@ -638,10 +621,10 @@ const exportPurchaseOrdersPDF = () => {
     currentY += 10
 
     // Calculate statistics
-    const totalOrders = filteredPurchaseOrders.value.length
-    const totalAmount = filteredPurchaseOrders.value.reduce((sum, order) => sum + order.totalAmount, 0)
-    const pendingOrders = filteredPurchaseOrders.value.filter(order => order.status === 'pending').length
-    const receivedOrders = filteredPurchaseOrders.value.filter(order => order.status === 'received').length
+    const totalOrders = paginatedPurchaseOrders.value.length
+    const totalAmount = paginatedPurchaseOrders.value.reduce((sum, order) => sum + order.totalAmount, 0)
+    const pendingOrders = paginatedPurchaseOrders.value.filter(order => order.status === 'pending').length
+    const receivedOrders = paginatedPurchaseOrders.value.filter(order => order.status === 'received').length
     
     doc.setFontSize(10)
     doc.setFont('helvetica', 'normal')
@@ -702,7 +685,6 @@ const exportPurchaseOrdersPDF = () => {
     // Track items per page for pagination
     const itemsPerPage = 20
     let itemsOnCurrentPage = 0
-    let totalPages = Math.ceil(filteredPurchaseOrders.value.length / itemsPerPage)
     let currentPageNum = 1
     
     // Function to add header to new pages
@@ -733,7 +715,7 @@ const exportPurchaseOrdersPDF = () => {
     }
 
     // Draw alternating row backgrounds and data
-    filteredPurchaseOrders.value.forEach((order, index) => {
+    paginatedPurchaseOrders.value.forEach((order, index) => {
       // Check if we need a new page
       if (itemsOnCurrentPage >= itemsPerPage) {
         doc.addPage()
@@ -751,7 +733,7 @@ const exportPurchaseOrdersPDF = () => {
       // Format data
       const rowData = [
         order.orderNumber,
-        order.supplier.name.length > 25 ? order.supplier.name.substring(0, 25) + '...' : order.supplier.name,
+        order.supplier?.name && order.supplier.name.length > 25 ? order.supplier.name.substring(0, 25) + '...' : (order.supplier?.name || 'N/A'),
         formatCurrencyForPDF(order.totalAmount),
         order.status.charAt(0).toUpperCase() + order.status.slice(1),
         format(new Date(order.createdAt), 'MMM dd, yyyy')
@@ -810,6 +792,61 @@ const canApproveOrder = computed(() => {
 });
 const canCreateOrder = computed(() => authStore.hasRole(['admin', 'superadmin']));
 const canExportPDF = computed(() => authStore.hasRole(['admin', 'superadmin']));
+
+// Function to handle status filter changes
+const handleStatusFilterChange = () => {
+  currentPage.value = 1 // Reset to first page when filter changes
+  fetchPurchaseOrders()
+}
+
+// Function to handle search
+const handleSearch = () => {
+  currentPage.value = 1 // Reset to first page when searching
+  fetchPurchaseOrders()
+}
+
+// Function to handle pagination navigation
+const goToPage = (page) => {
+  currentPage.value = page;
+  fetchPurchaseOrders();
+}
+
+const goToPreviousPage = () => {
+  if (currentPage.value > 1) {
+    currentPage.value = currentPage.value - 1;
+    fetchPurchaseOrders();
+  }
+}
+
+const goToNextPage = () => {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value = currentPage.value + 1;
+    fetchPurchaseOrders();
+  }
+}
+
+// Function to get visible page numbers for pagination
+const getVisiblePages = () => {
+  const pages = [];
+  const maxVisible = 5;
+  const start = Math.max(1, currentPage.value - Math.floor(maxVisible / 2));
+  const end = Math.min(totalPages.value, start + maxVisible - 1);
+  
+  for (let i = start; i <= end; i++) {
+    pages.push(i);
+  }
+  
+  return pages;
+};
+
+// Computed properties for pagination display
+const paginationStart = computed(() => {
+  return (currentPage.value - 1) * itemsPerPage.value + 1;
+});
+
+const paginationEnd = computed(() => {
+  return Math.min(currentPage.value * itemsPerPage.value, totalItems.value);
+});
 </script>
 
 <template>
@@ -890,6 +927,7 @@ const canExportPDF = computed(() => authStore.hasRole(['admin', 'superadmin']));
           <input
             type="text"
             v-model="searchQuery"
+            @input="handleSearch"
             placeholder="Search by order number or supplier..."
             class="w-full rounded-lg border border-stroke bg-transparent py-2 pl-4 pr-4 outline-none focus:border-primary dark:border-strokedark"
           />
@@ -897,6 +935,7 @@ const canExportPDF = computed(() => authStore.hasRole(['admin', 'superadmin']));
         <div>
           <select
             v-model="statusFilter"
+            @change="handleStatusFilterChange"
             class="rounded-lg border border-stroke bg-transparent py-2 px-4 outline-none focus:border-primary dark:border-strokedark"
           >
             <option value="all">All Statuses</option>
@@ -920,7 +959,7 @@ const canExportPDF = computed(() => authStore.hasRole(['admin', 'superadmin']));
           <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
         </div>
 
-        <div v-else-if="filteredPurchaseOrders.length === 0" class="text-center py-10">
+        <div v-else-if="paginatedPurchaseOrders.length === 0" class="text-center py-10">
           <p class="text-lg text-gray-500 dark:text-gray-400">No purchase orders found</p>
         </div>
 
@@ -938,12 +977,12 @@ const canExportPDF = computed(() => authStore.hasRole(['admin', 'superadmin']));
             </thead>
             <tbody>
               <tr
-                v-for="order in filteredPurchaseOrders"
+                v-for="order in paginatedPurchaseOrders"
                 :key="order._id"
                 class="border-b border-stroke dark:border-strokedark"
               >
                 <td class="py-3 px-4">{{ order.orderNumber }}</td>
-                <td class="py-3 px-4">{{ order.supplier.name }}</td>
+                <td class="py-3 px-4">{{ order.supplier?.name || 'N/A' }}</td>
                 <td class="py-3 px-4">{{ formatCurrency(order.totalAmount) }}</td>
                 <td class="py-3 px-4">
                   <span
@@ -1040,6 +1079,65 @@ const canExportPDF = computed(() => authStore.hasRole(['admin', 'superadmin']));
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+      
+      <!-- Pagination Controls -->
+      <div v-if="totalItems > 0" class="flex items-center justify-between px-4 py-3 bg-white dark:bg-boxdark border-t border-stroke dark:border-strokedark">
+        <div class="flex items-center space-x-2">
+          <span class="text-sm text-gray-700 dark:text-gray-300">
+            Showing {{ paginationStart }} to {{ paginationEnd }} of {{ totalItems }} results
+          </span>
+        </div>
+        
+        <div class="flex items-center space-x-2">
+          <select
+            v-model="itemsPerPage"
+            @change="changeItemsPerPage"
+            class="rounded border border-stroke bg-transparent py-1 px-2 text-sm dark:border-strokedark dark:bg-form-input"
+          >
+            <option value="5">5 per page</option>
+            <option value="10">10 per page</option>
+            <option value="20">20 per page</option>
+            <option value="50">50 per page</option>
+          </select>
+          
+          <div v-if="totalPages > 1" class="flex items-center space-x-2">
+            <button
+              @click="goToPreviousPage"
+              :disabled="currentPage === 1"
+              class="px-3 py-1 text-sm border border-stroke rounded hover:bg-gray-50 dark:border-strokedark dark:hover:bg-meta-4 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            
+            <div class="flex items-center space-x-1">
+              <button
+                v-for="page in getVisiblePages()"
+                :key="page"
+                @click="goToPage(page)"
+                :class="`px-3 py-1 text-sm rounded ${
+                  currentPage === page
+                    ? 'bg-primary text-white'
+                    : 'border border-stroke hover:bg-gray-50 dark:border-strokedark dark:hover:bg-meta-4'
+                }`"
+              >
+                {{ page }}
+              </button>
+            </div>
+            
+            <button
+              @click="goToNextPage"
+              :disabled="currentPage === totalPages"
+              class="px-3 py-1 text-sm border border-stroke rounded hover:bg-gray-50 dark:border-strokedark dark:hover:bg-meta-4 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+          
+          <div v-else class="text-sm text-gray-500 dark:text-gray-400">
+            All {{ totalItems }} results shown
+          </div>
         </div>
       </div>
     </div>
@@ -1330,7 +1428,7 @@ const canExportPDF = computed(() => authStore.hasRole(['admin', 'superadmin']));
           <div class="col-span-1">
             <h4 class="text-lg font-semibold mb-3">Supplier & Branch</h4>
             <div class="space-y-2">
-              <p><span class="font-medium">Supplier:</span> {{ selectedOrder.supplier.name }}</p>
+              <p><span class="font-medium">Supplier:</span> {{ selectedOrder.supplier?.name || 'N/A' }}</p>
               <p>
                 <span class="font-medium">Contact:</span>
                 {{ selectedOrder.supplier.contactPerson || 'N/A' }}

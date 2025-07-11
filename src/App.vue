@@ -10,7 +10,7 @@ const authStore = useAuthStore()
 onMounted(() => {
   // Initialize notifications if user is authenticated
   if (authStore.isAuthenticated) {
-    console.log('User is authenticated')
+    // console.log('User is authenticated')
   }
 })
 </script>

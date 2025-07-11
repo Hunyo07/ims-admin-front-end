@@ -12,7 +12,7 @@
           </p>
 
           <span class="inline-block">
-            <!-- <img src="/src/assets/images/logo.png" alt="illustration" /> -->
+            <img src="/src/assets/images/logo.png" alt="illustration" />
           </span>
         </div>
       </div>
