@@ -39,6 +39,14 @@ const newOrder = ref({
   notes: ''
 })
 
+// Computed property to filter products by selected supplier
+const filteredProducts = computed(() => {
+  if (!newOrder.value.supplierId) return []
+  return products.value.filter(
+    p => p.supplier && p.supplier._id === newOrder.value.supplierId
+  )
+})
+
 // Fetch all purchase orders
 const fetchPurchaseOrders = async () => {
   try {
@@ -154,6 +162,23 @@ const createPurchaseOrder = async () => {
     }
 
     isLoading.value = true
+
+    // --- ADD THIS: Actually create the purchase order ---
+    await axios.post(
+      'https://ims-api-id38.onrender.com/api/purchase-orders',
+      {
+        supplierId: newOrder.value.supplierId,
+        items: newOrder.value.items,
+        expectedDeliveryDate: newOrder.value.expectedDeliveryDate,
+        notes: newOrder.value.notes
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${authStore.token}`
+        }
+      }
+    )
+    // --- END ADD ---
 
     Swal.fire({
       icon: 'success',
@@ -1252,7 +1277,7 @@ const paginationEnd = computed(() => {
                   class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
                 >
                   <option value="" disabled>Select Product</option>
-                  <option v-for="product in products" :key="product._id" :value="product._id">
+                  <option v-for="product in filteredProducts" :key="product._id" :value="product._id">
                     {{ product.name }} ({{ product.sku }})
                   </option>
                 </select>
