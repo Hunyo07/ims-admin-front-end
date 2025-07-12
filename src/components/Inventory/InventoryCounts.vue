@@ -361,7 +361,7 @@ const prevPage = () => {
 const fetchInventoryCounts = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/inventory/counts', {
+    const response = await axios.get('http://localhost:5000/api/inventory/counts', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -383,7 +383,7 @@ const fetchInventoryCounts = async () => {
 // Fetch products
 const fetchProducts = async () => {
   try {
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/products', {
+    const response = await axios.get('http://localhost:5000/api/products', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -409,7 +409,7 @@ const setExpectedQuantity = async (index) => {
   const productId = newCount.value.items[index].productId
   if (productId) {
     try {
-      const response = await axios.get(`https://ims-api-id38.onrender.com/api/products/${productId}`, {
+      const response = await axios.get(`http://localhost:5000/api/products/${productId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -459,7 +459,7 @@ const createInventoryCount = async () => {
     }
 
     // Create the inventory count
-    const response = await axios.post('https://ims-api-id38.onrender.com/api/inventory/counts', payload, {
+    const response = await axios.post('http://localhost:5000/api/inventory/counts', payload, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -470,7 +470,7 @@ const createInventoryCount = async () => {
 
     // Update product counts
     await axios.patch(
-      `https://ims-api-id38.onrender.com/api/inventory/counts/${countId}/products`,
+      `http://localhost:5000/api/inventory/counts/${countId}/products`,
       {
         products: newCount.value.items.map((item) => ({
           productId: item.productId,
@@ -487,7 +487,7 @@ const createInventoryCount = async () => {
 
     // Update status to completed
     await axios.patch(
-      `https://ims-api-id38.onrender.com/api/inventory/counts/${countId}/status`,
+      `http://localhost:5000/api/inventory/counts/${countId}/status`,
       {
         status: 'completed'
       },
@@ -500,7 +500,7 @@ const createInventoryCount = async () => {
 
     // Apply the inventory count to update stock levels
     await axios.post(
-      `https://ims-api-id38.onrender.com/api/inventory/counts/${countId}/apply`,
+      `http://localhost:5000/api/inventory/counts/${countId}/apply`,
       {},
       {
         headers: {
@@ -555,7 +555,7 @@ const viewCountDetails = async (countId) => {
   }
   try {
     isLoading.value = true
-    const response = await axios.get(`https://ims-api-id38.onrender.com/api/inventory/counts/${countId}`, {
+    const response = await axios.get(`http://localhost:5000/api/inventory/counts/${countId}`, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }

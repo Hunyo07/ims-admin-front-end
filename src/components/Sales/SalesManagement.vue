@@ -78,7 +78,7 @@ const fetchSales = async () => {
       queryParams.append('deliveryMode', filters.value.deliveryMode)
     }
     
-    const response = await axios.get(`https://ims-api-id38.onrender.com/api/sales?${queryParams.toString()}`, {
+    const response = await axios.get(`http://localhost:5000/api/sales?${queryParams.toString()}`, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -132,7 +132,7 @@ const fetchSalesStats = async () => {
       queryParams.append('deliveryMode', filters.value.deliveryMode)
     }
     
-    const response = await axios.get(`https://ims-api-id38.onrender.com/api/sales/stats?${queryParams.toString()}`, {
+    const response = await axios.get(`http://localhost:5000/api/sales/stats?${queryParams.toString()}`, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }

@@ -33,7 +33,7 @@ export const useAuthStore = defineStore('auth', {
       try {
         if (!this.token) return null
 
-        const response = await axios.get('https://ims-api-id38.onrender.com/api/auth/me', {
+        const response = await axios.get('http://localhost:5000/api/auth/me', {
           headers: {
             Authorization: `Bearer ${this.token}`
           }

@@ -22,7 +22,7 @@ const isPrinting = ref(false)
 const fetchProducts = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/products/', {
+    const response = await axios.get('http://localhost:5000/api/products/', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -75,7 +75,7 @@ const selectAllProducts = () => {
 const generateBarcode = async (productId) => {
   try {
     isGenerating.value = true
-    const response = await axios.get(`https://ims-api-id38.onrender.com/api/barcodes/generate/${productId}`, {
+    const response = await axios.get(`http://localhost:5000/api/barcodes/generate/${productId}`, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       },
@@ -126,7 +126,7 @@ const batchGenerateBarcodes = async () => {
   try {
     isGenerating.value = true
     const response = await axios.post(
-      'https://ims-api-id38.onrender.com/api/barcodes/batch',
+      'http://localhost:5000/api/barcodes/batch',
       { productIds: selectedProducts.value },
       {
         headers: {
@@ -159,7 +159,7 @@ const batchGenerateBarcodes = async () => {
   const printBarcode = async (productId) => {
     try {
       isPrinting.value = true
-      const response = await axios.get(`https://ims-api-id38.onrender.com/api/barcodes/product/${productId}`, {
+      const response = await axios.get(`http://localhost:5000/api/barcodes/product/${productId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -257,7 +257,7 @@ const printBarcodeWithQuantity = async (productId) => {
     
     if (quantity) {
       isPrinting.value = true
-      const response = await axios.get(`https://ims-api-id38.onrender.com/api/barcodes/product/${productId}`, {
+      const response = await axios.get(`http://localhost:5000/api/barcodes/product/${productId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -364,7 +364,7 @@ const printBarcodeWithQuantity = async (productId) => {
 const exportBarcode = async (productId) => {
   try {
     isPrinting.value = true
-    const response = await axios.get(`https://ims-api-id38.onrender.com/api/barcodes/product/${productId}`, {
+    const response = await axios.get(`http://localhost:5000/api/barcodes/product/${productId}`, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -418,7 +418,7 @@ const exportMultipleBarcodes = async () => {
 
     // Fetch all barcode data first
     const barcodeDataPromises = selectedProducts.value.map(productId => 
-      axios.get(`https://ims-api-id38.onrender.com/api/barcodes/product/${productId}`, {
+      axios.get(`http://localhost:5000/api/barcodes/product/${productId}`, {
         headers: { Authorization: `Bearer ${authStore.token}` }
       })
     );
@@ -551,7 +551,7 @@ const exportMultipleBarcodes = async () => {
 // Print barcode for a single product
 const previewBarcode = async (productId) => {
   try {
-    const response = await axios.get(`https://ims-api-id38.onrender.com/api/barcodes/product/${productId}`, {
+    const response = await axios.get(`http://localhost:5000/api/barcodes/product/${productId}`, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
