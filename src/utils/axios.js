@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api'
+  baseURL: 'https://ims-api-id38.onrender.com/api'
 })
 
 // Add request interceptor to include auth token
