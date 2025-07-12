@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
-import { useAuthStore } from '../../stores'
+import { useAuthStore, useSidebarStore } from '../../stores'
 import Swal from 'sweetalert2'
 import { inject } from 'vue'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 const placeholderImage = inject('placeholderImage', '/images/no-image.png')
 const authStore = useAuthStore()
+const sidebarStore = useSidebarStore()
 
 // Interfaces
 interface Product {
@@ -84,6 +85,24 @@ const lastSale = ref<LastSale | null>(null)
 const closeReceipt = () => {
   showReceipt.value = false
   lastSale.value = null
+}
+
+const toggleFullScreen = () => {
+  const newFullScreenState = !sidebarStore.isFullScreen
+  sidebarStore.setFullScreen(newFullScreenState)
+  
+  if (newFullScreenState) {
+    document.documentElement.requestFullscreen().catch(err => {
+      console.log('Error attempting to enable fullscreen:', err)
+      sidebarStore.setFullScreen(false)
+    })
+  } else {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(err => {
+        console.log('Error attempting to exit fullscreen:', err)
+      })
+    }
+  }
 }
 
 // Computed properties
@@ -459,6 +478,11 @@ watch(searchQuery, filterProducts)
 onMounted(() => {
   fetchProducts()
   // Remove fetchBranches() call
+  
+  // Add fullscreen change event listener
+  document.addEventListener('fullscreenchange', () => {
+    sidebarStore.setFullScreen(!!document.fullscreenElement)
+  })
 })
 // Add these to your state variables
 const customers = ref<BackendCustomer[]>([])
@@ -570,6 +594,23 @@ function handleQuantityInput(index: number, event: Event) {
 
 <template>
   <div>
+  <!-- Full Screen Toggle Button -->
+  <div class="mb-4 flex justify-end">
+          <button
+        @click="toggleFullScreen"
+        class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all"
+        :title="sidebarStore.isFullScreen ? 'Exit Full Screen' : 'Enter Full Screen'"
+      >
+        <svg v-if="!sidebarStore.isFullScreen" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+        </svg>
+        <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18L6 6l12 12" />
+        </svg>
+        {{ sidebarStore.isFullScreen ? 'Exit Full Screen' : 'Full Screen' }}
+      </button>
+  </div>
+  
   <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
     <!-- Product Selection -->
     <div class="md:col-span-2 rounded-sm border border-stroke bg-white p-5 shadow-default dark:border-strokedark dark:bg-boxdark">
