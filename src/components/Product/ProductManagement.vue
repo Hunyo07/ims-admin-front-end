@@ -1431,9 +1431,10 @@ watch(
               </label>
               <input
                 v-model="newProduct.sku"
-                type="text"
+                type="number"
                 :required="!isEditing"
-                placeholder="Enter product SKU (numeric only)"
+
+                placeholder="Enter product SKU"
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               />
               <div v-if="skuError" class="text-danger text-xs mt-1">{{ skuError }}</div>
@@ -1446,8 +1447,8 @@ watch(
               </label>
               <input
                 v-model="newProduct.barcodeText"
-                type="text"
-                placeholder="Enter product barcode (numeric only)"
+                type="number"
+                placeholder="Enter product barcode"
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               />
               <div v-if="barcodeError" class="text-danger text-xs mt-1">{{ barcodeError }}</div>
