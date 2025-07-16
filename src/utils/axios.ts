@@ -2,7 +2,7 @@ import axios from 'axios'
 import router from '../router'
 
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:5000/api'
+  baseURL: 'https://ims-api-id38.onrender.com/api'
 })
 
 axiosInstance.interceptors.request.use(

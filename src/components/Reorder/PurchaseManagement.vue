@@ -52,7 +52,7 @@ const filteredProducts = computed(() => {
 const fetchPurchaseOrders = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('http://localhost:5000/api/purchase-orders', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/purchase-orders', {
       params: {
         page: currentPage.value,
         limit: itemsPerPage.value,
@@ -83,7 +83,7 @@ const fetchPurchaseOrders = async () => {
 // Fetch suppliers
 const fetchSuppliers = async () => {
   try {
-    const response = await axios.get('http://localhost:5000/api/suppliers/suppliers', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/suppliers/suppliers', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -97,7 +97,7 @@ const fetchSuppliers = async () => {
 // Fetch products
 const fetchProducts = async () => {
   try {
-    const response = await axios.get('http://localhost:5000/api/products', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/products', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -166,7 +166,7 @@ const createPurchaseOrder = async () => {
 
     // --- ADD THIS: Actually create the purchase order ---
     await axios.post(
-      'http://localhost:5000/api/purchase-orders',
+      'https://ims-api-id38.onrender.com/api/purchase-orders',
       {
         supplierId: newOrder.value.supplierId,
         items: newOrder.value.items,
@@ -219,7 +219,7 @@ const resetForm = () => {
 const viewOrderDetails = async (orderId) => {
   try {
     isLoading.value = true
-    const response = await axios.get(`http://localhost:5000/api/purchase-orders/${orderId}`, {
+    const response = await axios.get(`https://ims-api-id38.onrender.com/api/purchase-orders/${orderId}`, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -467,7 +467,7 @@ const updateOrderStatus = async (orderId, newStatus) => {
     approveLoading.value[orderId] = true;
     isLoading.value = true;
     await axios.patch(
-      `http://localhost:5000/api/purchase-orders/${orderId}/status`,
+      `https://ims-api-id38.onrender.com/api/purchase-orders/${orderId}/status`,
       { status: newStatus },
       {
         headers: {
@@ -515,7 +515,7 @@ const generateFromReorderPoints = async () => {
     })
 
     const response = await axios.post(
-      'http://localhost:5000/api/reorder/auto-reorder',
+      'https://ims-api-id38.onrender.com/api/reorder/auto-reorder',
       {},
       {
         headers: {

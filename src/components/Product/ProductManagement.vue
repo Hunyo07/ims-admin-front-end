@@ -398,7 +398,7 @@ const exportProductsPDF = () => {
 const fetchProducts = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('http://localhost:5000/api/products/', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/products/', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -420,7 +420,7 @@ const fetchProducts = async () => {
 // Add these fetch functions
 const fetchSuppliers = async () => {
   try {
-    const response = await axios.get('http://localhost:5000/api/suppliers/suppliers', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/suppliers/suppliers', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -433,7 +433,7 @@ const fetchSuppliers = async () => {
 };
 const fetchSubCategories = async () => {
   try {
-    const response = await axios.get('http://localhost:5000/api/subcategories', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/subcategories', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -450,7 +450,7 @@ const fetchCategories = async () => {
 
   try {
     isLoading.value = true;
-    const response = await axios.get('http://localhost:5000/api/categories', {
+    const response = await axios.get('https://ims-api-id38.onrender.com/api/categories', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -618,7 +618,7 @@ const handleUpdateProduct = async () => {
     isSubmitting.value = true
     // Don't use FormData since we're not handling files
     const response = await axios.put(
-      `http://localhost:5000/api/products/${editingProduct.value!._id}`,
+      `https://ims-api-id38.onrender.com/api/products/${editingProduct.value!._id}`,
       newProduct.value,
       {
         headers: {
@@ -680,7 +680,7 @@ const handleDeleteProduct = async (productId: string) => {
     try {
       isDeleting.value = true
       selectedProductId.value = productId
-      await axios.delete(`http://localhost:5000/api/products/${productId}`, {
+      await axios.delete(`https://ims-api-id38.onrender.com/api/products/${productId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -735,7 +735,7 @@ const handleToggleStatus = async (productId: string, currentStatus: boolean) => 
 
     if (result.isConfirmed) {
       const response = await axios.patch(
-        `http://localhost:5000/api/products/${productId}/toggle-status`,
+        `https://ims-api-id38.onrender.com/api/products/${productId}/toggle-status`,
         {},
         {
           headers: {
@@ -792,7 +792,7 @@ const handleAddProduct = async () => {
     // Add stock value
     formData.append('stock', newProduct.value.currentStock)
 
-    const response = await axios.post('http://localhost:5000/api/products', formData, {
+    const response = await axios.post('https://ims-api-id38.onrender.com/api/products', formData, {
       headers: {
         Authorization: `Bearer ${authStore.token}`,
         'Content-Type': 'multipart/form-data'
