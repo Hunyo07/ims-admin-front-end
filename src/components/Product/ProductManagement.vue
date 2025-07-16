@@ -57,6 +57,9 @@ const products = ref<Product[]>([])
 const selectedProductId = ref<string | null>(null)
 const editingProduct = ref<Product | null>(null)
 const branches = ref([])
+// Add these refs for validation errors (ensure not shadowed)
+const skuError = ref('');
+const barcodeError = ref('');
 // Add these refs
 const filters = ref({
   categoryId: '',
@@ -65,6 +68,7 @@ const filters = ref({
   minPrice: 0,
   maxPrice: 0
 })
+// Update ProductForm type to make sku and barcodeText optional
 interface ProductForm {
   name: string;
   description: string;
@@ -76,8 +80,8 @@ interface ProductForm {
   unit: string;
   currentStock: string;
   images: File | null;
-  sku: string;
-  barcodeText: string;
+  sku?: string;
+  barcodeText?: string;
 }
 const newProduct = ref<ProductForm>({
   name: '',
@@ -394,7 +398,7 @@ const exportProductsPDF = () => {
 const fetchProducts = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/products/', {
+    const response = await axios.get('http://localhost:5000/api/products/', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -416,7 +420,7 @@ const fetchProducts = async () => {
 // Add these fetch functions
 const fetchSuppliers = async () => {
   try {
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/suppliers/suppliers', {
+    const response = await axios.get('http://localhost:5000/api/suppliers/suppliers', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -429,7 +433,7 @@ const fetchSuppliers = async () => {
 };
 const fetchSubCategories = async () => {
   try {
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/subcategories', {
+    const response = await axios.get('http://localhost:5000/api/subcategories', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -446,7 +450,7 @@ const fetchCategories = async () => {
 
   try {
     isLoading.value = true;
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/categories', {
+    const response = await axios.get('http://localhost:5000/api/categories', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -614,7 +618,7 @@ const handleUpdateProduct = async () => {
     isSubmitting.value = true
     // Don't use FormData since we're not handling files
     const response = await axios.put(
-      `https://ims-api-id38.onrender.com/api/products/${editingProduct.value!._id}`,
+      `http://localhost:5000/api/products/${editingProduct.value!._id}`,
       newProduct.value,
       {
         headers: {
@@ -676,7 +680,7 @@ const handleDeleteProduct = async (productId: string) => {
     try {
       isDeleting.value = true
       selectedProductId.value = productId
-      await axios.delete(`https://ims-api-id38.onrender.com/api/products/${productId}`, {
+      await axios.delete(`http://localhost:5000/api/products/${productId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -731,7 +735,7 @@ const handleToggleStatus = async (productId: string, currentStatus: boolean) => 
 
     if (result.isConfirmed) {
       const response = await axios.patch(
-        `https://ims-api-id38.onrender.com/api/products/${productId}/toggle-status`,
+        `http://localhost:5000/api/products/${productId}/toggle-status`,
         {},
         {
           headers: {
@@ -769,22 +773,26 @@ const handleAddProduct = async () => {
     isSubmitting.value = true
     const formData = new FormData()
 
-    // Add all product data to formData, excluding null/undefined values
-    Object.keys(newProduct.value).forEach((key) => {
+    // Only send SKU and barcodeText if both are filled (let backend generate if either is empty)
+    const productToSend = { ...newProduct.value };
+    if (!productToSend.sku) delete productToSend.sku;
+    if (!productToSend.barcodeText) delete productToSend.barcodeText;
+
+    Object.keys(productToSend).forEach((key) => {
       const typedKey = key as keyof ProductForm;
       if (
-        newProduct.value[typedKey] !== null &&
-        newProduct.value[typedKey] !== undefined &&
-        newProduct.value[typedKey] !== ''
+        productToSend[typedKey] !== null &&
+        productToSend[typedKey] !== undefined &&
+        productToSend[typedKey] !== ''
       ) {
-        formData.append(key, newProduct.value[typedKey] as any);
+        formData.append(key, productToSend[typedKey] as any);
       }
     });
 
     // Add stock value
     formData.append('stock', newProduct.value.currentStock)
 
-    const response = await axios.post('https://ims-api-id38.onrender.com/api/products', formData, {
+    const response = await axios.post('http://localhost:5000/api/products', formData, {
       headers: {
         Authorization: `Bearer ${authStore.token}`,
         'Content-Type': 'multipart/form-data'
@@ -1425,9 +1433,10 @@ watch(
                 v-model="newProduct.sku"
                 type="text"
                 :required="!isEditing"
-                placeholder="Enter product SKU"
+                placeholder="Enter product SKU (numeric only)"
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               />
+              <div v-if="skuError" class="text-danger text-xs mt-1">{{ skuError }}</div>
             </div>
 
             <!-- Barcode -->
@@ -1438,9 +1447,10 @@ watch(
               <input
                 v-model="newProduct.barcodeText"
                 type="text"
-                placeholder="Enter product barcode"
+                placeholder="Enter product barcode (numeric only)"
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               />
+              <div v-if="barcodeError" class="text-danger text-xs mt-1">{{ barcodeError }}</div>
             </div>
             <div v-if="!isEditing" class="col-span-2">
               <label class="mb-2.5 block text-black dark:text-white">

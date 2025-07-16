@@ -127,7 +127,7 @@ const insufficientPayment = computed(() => {
 const fetchProducts = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/products', {
+    const response = await axios.get('http://localhost:5000/api/products', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -404,7 +404,7 @@ const processSale = async () => {
       deliveryFee: deliveryMode.value === 'delivery' ? deliveryFee.value : 0
     }
     
-    const response = await axios.post('https://ims-api-id38.onrender.com/api/sales', saleData, {
+    const response = await axios.post('http://localhost:5000/api/sales', saleData, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -497,7 +497,7 @@ const filteredCustomers = ref<BackendCustomer[]>([])
 const fetchCustomers = async (query = '') => {
   try {
     isLoadingCustomers.value = true;
-    const response = await axios.get(`https://ims-api-id38.onrender.com/api/customers/pos-search?search=${query}&limit=10`, {
+    const response = await axios.get(`http://localhost:5000/api/customers/pos-search?search=${query}&limit=10`, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
