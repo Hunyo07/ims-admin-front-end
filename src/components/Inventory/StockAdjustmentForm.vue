@@ -42,7 +42,7 @@ const commonFields = ref({
 const fetchProducts = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/products', {
+    const response = await axios.get('http://localhost:5000/api/products', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -101,7 +101,7 @@ const setProductDetails = async (index) => {
   const item = adjustmentItems.value[index]
   if (item.productId) {
     try {
-      const response = await axios.get(`https://ims-api-id38.onrender.com/api/products/${item.productId}`, {
+      const response = await axios.get(`http://localhost:5000/api/products/${item.productId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -187,7 +187,7 @@ const createStockAdjustment = async () => {
     // Process each adjustment item
     const adjustmentPromises = adjustmentItems.value.map((item) => {
       return axios.post(
-        'https://ims-api-id38.onrender.com/api/inventory/adjustments',
+        'http://localhost:5000/api/inventory/adjustments',
         {
           productId: item.productId,
           adjustmentType: item.adjustmentType,

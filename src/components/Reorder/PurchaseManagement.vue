@@ -19,6 +19,7 @@ const selectedOrder = ref(null)
 const searchQuery = ref('')
 const statusFilter = ref('all')
 const userLoading = ref(true);
+const approveLoading = ref({}); // Track loading state per order
 
 // Pagination variables
 const currentPage = ref(1)
@@ -51,7 +52,7 @@ const filteredProducts = computed(() => {
 const fetchPurchaseOrders = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/purchase-orders', {
+    const response = await axios.get('http://localhost:5000/api/purchase-orders', {
       params: {
         page: currentPage.value,
         limit: itemsPerPage.value,
@@ -82,7 +83,7 @@ const fetchPurchaseOrders = async () => {
 // Fetch suppliers
 const fetchSuppliers = async () => {
   try {
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/suppliers/suppliers', {
+    const response = await axios.get('http://localhost:5000/api/suppliers/suppliers', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -96,7 +97,7 @@ const fetchSuppliers = async () => {
 // Fetch products
 const fetchProducts = async () => {
   try {
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/products', {
+    const response = await axios.get('http://localhost:5000/api/products', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -165,7 +166,7 @@ const createPurchaseOrder = async () => {
 
     // --- ADD THIS: Actually create the purchase order ---
     await axios.post(
-      'https://ims-api-id38.onrender.com/api/purchase-orders',
+      'http://localhost:5000/api/purchase-orders',
       {
         supplierId: newOrder.value.supplierId,
         items: newOrder.value.items,
@@ -218,7 +219,7 @@ const resetForm = () => {
 const viewOrderDetails = async (orderId) => {
   try {
     isLoading.value = true
-    const response = await axios.get(`https://ims-api-id38.onrender.com/api/purchase-orders/${orderId}`, {
+    const response = await axios.get(`http://localhost:5000/api/purchase-orders/${orderId}`, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -463,39 +464,41 @@ const exportPurchaseOrderDetailsPDF = () => {
 // Update purchase order status
 const updateOrderStatus = async (orderId, newStatus) => {
   try {
-    isLoading.value = true
+    approveLoading.value[orderId] = true;
+    isLoading.value = true;
     await axios.patch(
-      `https://ims-api-id38.onrender.com/api/purchase-orders/${orderId}/status`,
+      `http://localhost:5000/api/purchase-orders/${orderId}/status`,
       { status: newStatus },
       {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
       }
-    )
+    );
 
     Swal.fire({
       icon: 'success',
       title: 'Success',
       text: 'Purchase order status updated successfully'
-    })
+    });
 
     // Refresh purchase orders list and details if modal is open
-    await fetchPurchaseOrders()
+    await fetchPurchaseOrders();
     if (selectedOrder.value && selectedOrder.value._id === orderId) {
-      await viewOrderDetails(orderId)
+      await viewOrderDetails(orderId);
     }
   } catch (error) {
-    console.error('Error updating purchase order status:', error)
+    console.error('Error updating purchase order status:', error);
     Swal.fire({
       icon: 'error',
       title: 'Error',
       text: 'Failed to update purchase order status'
-    })
+    });
   } finally {
-    isLoading.value = false
+    approveLoading.value[orderId] = false;
+    isLoading.value = false;
   }
-}
+};
 
 // Generate purchase orders from reorder points
 const generateFromReorderPoints = async () => {
@@ -512,7 +515,7 @@ const generateFromReorderPoints = async () => {
     })
 
     const response = await axios.post(
-      'https://ims-api-id38.onrender.com/api/reorder/auto-reorder',
+      'http://localhost:5000/api/reorder/auto-reorder',
       {},
       {
         headers: {
@@ -1544,7 +1547,14 @@ const paginationEnd = computed(() => {
               v-if="selectedOrder.status === 'pending' && canApproveOrder"
               @click="updateOrderStatus(selectedOrder._id, 'approved')"
               class="inline-flex items-center justify-center rounded-md bg-success py-2 px-4 text-white hover:bg-opacity-90"
+              :disabled="approveLoading[selectedOrder._id]"
             >
+              <span v-if="approveLoading[selectedOrder._id]" class="mr-2">
+                <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </span>
               Approve Order
             </button>
 

@@ -28,7 +28,7 @@ const itemsPerPage = ref(10) // Or any default value you prefer
 const fetchAdjustments = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/inventory/adjustments', {
+    const response = await axios.get('http://localhost:5000/api/inventory/adjustments', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -50,7 +50,7 @@ const fetchAdjustments = async () => {
 // Fetch products
 const fetchProducts = async () => {
   try {
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/products', {
+    const response = await axios.get('http://localhost:5000/api/products', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -72,7 +72,7 @@ const viewAdjustmentDetails = async (adjustmentId) => {
   try {
     isLoading.value = true
     const response = await axios.get(
-      `https://ims-api-id38.onrender.com/api/inventory/adjustments/${adjustmentId}`,
+      `http://localhost:5000/api/inventory/adjustments/${adjustmentId}`,
       {
         headers: {
           Authorization: `Bearer ${authStore.token}`

@@ -124,11 +124,11 @@ const fetchDashboardData = async () => {
 
     // Fetch all dashboard data in parallel with individual error handling
     const results = await Promise.allSettled([
-      axios.get('https://ims-api-id38.onrender.com/api/sales/stats', { headers }),
-      axios.get('https://ims-api-id38.onrender.com/api/products/stats', { headers }),
-      axios.get('https://ims-api-id38.onrender.com/api/sales?limit=5', { headers }),
-      axios.get('https://ims-api-id38.onrender.com/api/products?lowStock=true', { headers }),
-      axios.get('https://ims-api-id38.onrender.com/api/superadmin/user-stats', { headers })
+      axios.get('http://localhost:5000/api/sales/stats', { headers }),
+      axios.get('http://localhost:5000/api/products/stats', { headers }),
+      axios.get('http://localhost:5000/api/sales?limit=5', { headers }),
+      axios.get('http://localhost:5000/api/products?lowStock=true', { headers }),
+      axios.get('http://localhost:5000/api/superadmin/user-stats', { headers })
     ])
 
     // Handle individual responses
