@@ -15,7 +15,8 @@ interface Product {
   name: string
   description: string
   category: any
-  subCategory: any
+  // subCategory: any
+  brand?: any
   supplier: any
   price: number
   costPrice: number
@@ -26,12 +27,14 @@ interface Product {
   createdAt: string
   updatedAt: string
   createdBy?: {
-    user: string | {
-      _id: string
-      firstName: string
-      lastName: string
-      email: string
-    }
+    user:
+      | string
+      | {
+          _id: string
+          firstName: string
+          lastName: string
+          email: string
+        }
     role: string
   }
   sku?: string
@@ -40,11 +43,11 @@ interface Product {
 // Update refs
 const imagePreview = ref<string | null>(null)
 const isFetchingCategories = ref(false)
-const isFetchingSuppliers = ref(false)
-const isFetchingSubCategories = ref(false)
+const isFetchingBrands = ref(false)
 const suppliers = ref<any[]>([])
 const subCategories = ref<any[]>([])
 const categories = ref<any[]>([])
+const brands = ref<any[]>([])
 const searchQuery = ref('')
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
@@ -56,10 +59,9 @@ const isDeleting = ref(false)
 const products = ref<Product[]>([])
 const selectedProductId = ref<string | null>(null)
 const editingProduct = ref<Product | null>(null)
-const branches = ref([])
 // Add these refs for validation errors (ensure not shadowed)
-const skuError = ref('');
-const barcodeError = ref('');
+const skuError = ref('')
+const barcodeError = ref('')
 // Add these refs
 const filters = ref({
   categoryId: '',
@@ -70,82 +72,79 @@ const filters = ref({
 })
 // Update ProductForm type to make sku and barcodeText optional
 interface ProductForm {
-  name: string;
-  description: string;
-  categoryId: string;
-  subCategoryId: string;
-  supplierId: string;
-  price: string;
-  costPrice: string;
-  unit: string;
-  currentStock: string;
-  images: File | null;
-  sku?: string;
-  barcodeText?: string;
+  name: string
+  description: string
+  categoryId: string
+  brandId: string
+  supplierId: string
+  unit: string
+  currentStock: string
+  specifications: [{ name: ''; value: '' }]
+  images: File | null
+  sku?: string
+  barcodeText?: string
 }
 const newProduct = ref<ProductForm>({
   name: '',
   description: '',
   categoryId: '',
-  subCategoryId: '',
+  brandId: '',
   supplierId: '',
-  price: '',
-  costPrice: '',
   unit: '',
   currentStock: '',
+  specifications: [{ name: '', value: '' }],
   images: null,
   sku: '',
   barcodeText: ''
-});
+})
 const handleImageChange = (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  const file = target.files?.[0];
-  const maxSize = 5 * 1024 * 1024; // 5MB
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  const maxSize = 5 * 1024 * 1024 // 5MB
 
-  if (!file) return;
+  if (!file) return
 
   if (file.size > maxSize) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
       text: 'Image size should not exceed 5MB'
-    });
-    target.value = '';
-    return;
+    })
+    target.value = ''
+    return
   }
 
-  const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
+  const validTypes = ['image/jpeg', 'image/png', 'image/gif']
   if (!validTypes.includes(file.type)) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
       text: 'Please upload a valid image file (JPEG, PNG, or GIF)'
-    });
-    target.value = '';
-    return;
+    })
+    target.value = ''
+    return
   }
 
-  newProduct.value.images = file;
-  imagePreview.value = URL.createObjectURL(file);
-};
+  newProduct.value.images = file
+  imagePreview.value = URL.createObjectURL(file)
+}
 const hasUnsavedChanges = computed(() => {
-  if (!showModal.value) return false;
-  const np = newProduct.value;
+  if (!showModal.value) return false
+  const np = newProduct.value
   return (
     np.name !== '' ||
     np.description !== '' ||
     np.categoryId !== '' ||
-    np.subCategoryId !== '' ||
+    np.brandId !== '' ||
     np.supplierId !== '' ||
-    np.price !== '' ||
-    np.costPrice !== '' ||
     np.unit !== '' ||
     np.currentStock !== '' ||
+    (np.specifications && np.specifications.length > 0) ||
     np.images !== null ||
     np.sku !== '' ||
     np.barcodeText !== ''
-  );
-});
+  )
+})
 const handleCloseModal = async () => {
   if (hasUnsavedChanges.value) {
     const result = await Swal.fire({
@@ -176,12 +175,12 @@ const handleCloseModal = async () => {
   showModal.value = false
   resetForm()
 }
-const formatPrice = (price: number) => {
-  return new Intl.NumberFormat('en-PH', {
-    style: 'currency',
-    currency: 'PHP'
-  }).format(price)
-}
+// const formatPrice = (price: number) => {
+//   return new Intl.NumberFormat('en-PH', {
+//     style: 'currency',
+//     currency: 'PHP'
+//   }).format(price)
+// }
 
 // Format currency for PDF to avoid the '+' sign issue
 const formatCurrencyForPDF = (amount: number) => {
@@ -220,14 +219,16 @@ const exportProductsPDF = () => {
     doc.setFontSize(8)
     doc.setFont('helvetica', 'normal')
     const now = new Date()
-    doc.text(`Generated on: ${format(now, 'MMM dd, yyyy h:mm a')}`, pageWidth / 2, currentY, { align: 'center' })
+    doc.text(`Generated on: ${format(now, 'MMM dd, yyyy h:mm a')}`, pageWidth / 2, currentY, {
+      align: 'center'
+    })
     currentY += 15
 
     // Inventory Statistics in a nice box
     doc.setDrawColor(240, 240, 240)
     doc.setFillColor(250, 250, 250)
     doc.roundedRect(marginLeft, currentY, contentWidth, 40, 2, 2, 'FD')
-    
+
     currentY += 8
     doc.setFontSize(14)
     doc.setFont('helvetica', 'bold')
@@ -237,26 +238,36 @@ const exportProductsPDF = () => {
 
     // Calculate inventory statistics
     const totalProducts = filteredProducts.value.length
-    const activeProducts = filteredProducts.value.filter(p => p.isActive).length
-    const totalValue = filteredProducts.value.reduce((sum, product) => sum + (product.price * product.currentStock), 0)
-    const totalStock = filteredProducts.value.reduce((sum, product) => sum + product.currentStock, 0)
-    
+    const activeProducts = filteredProducts.value.filter((p) => p.isActive).length
+    const totalValue = filteredProducts.value.reduce(
+      (sum, product) => sum + product.price * product.currentStock,
+      0
+    )
+    const totalStock = filteredProducts.value.reduce(
+      (sum, product) => sum + product.currentStock,
+      0
+    )
+
     doc.setFontSize(10)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(0, 0, 0)
-    
+
     // Create a 2x2 grid for statistics
     const colWidth = contentWidth / 2
-    
+
     // Row 1
     doc.text(`Total Products: ${totalProducts}`, marginLeft + 10, currentY)
     doc.text(`Active Products: ${activeProducts}`, marginLeft + 10 + colWidth, currentY)
     currentY += lineHeight
-    
+
     // Row 2
-    doc.text(`Total Inventory Value: ${formatCurrencyForPDF(totalValue)}`, marginLeft + 10, currentY)
+    doc.text(
+      `Total Inventory Value: ${formatCurrencyForPDF(totalValue)}`,
+      marginLeft + 10,
+      currentY
+    )
     doc.text(`Total Stock Items: ${totalStock}`, marginLeft + 10 + colWidth, currentY)
-    
+
     currentY += 15
 
     // Products Table
@@ -269,7 +280,7 @@ const exportProductsPDF = () => {
     // Table headers with background
     const headers = ['Product Name', 'Category', 'Price', 'Cost', 'Stock', 'Status']
     const colWidths = [50, 35, 25, 25, 20, 25]
-    
+
     // Calculate positions for columns
     const positions: number[] = []
     let currentX = marginLeft
@@ -277,54 +288,54 @@ const exportProductsPDF = () => {
       positions.push(currentX)
       currentX += colWidths[i]
     }
-    
+
     // Draw header background
     doc.setFillColor(240, 240, 240)
     doc.rect(marginLeft, currentY, contentWidth, lineHeight, 'F')
-    
+
     // Draw header text
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 0, 0)
-    
+
     for (let i = 0; i < headers.length; i++) {
-      doc.text(headers[i], positions[i] + 2, currentY + 5);
+      doc.text(headers[i], positions[i] + 2, currentY + 5)
     }
-    
+
     currentY += lineHeight + 2
 
     // Table rows
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
-    
+
     // Track items per page for pagination
     const itemsPerPage = 25
     let itemsOnCurrentPage = 0
-    let totalPages = Math.ceil(filteredProducts.value.length / itemsPerPage)
+    // let totalPages = Math.ceil(filteredProducts.value.length / itemsPerPage)
     let currentPage = 1
-    
+
     // Function to add header to new pages
     const addTableHeader = () => {
       currentY = 20
-      
+
       // Add page header
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
       doc.text('Product Inventory Report - Continued', pageWidth / 2, currentY, { align: 'center' })
       currentY += 10
-      
+
       // Draw header background
       doc.setFillColor(240, 240, 240)
       doc.rect(marginLeft, currentY, contentWidth, lineHeight, 'F')
-      
+
       // Draw header text
       doc.setFontSize(9)
       doc.setFont('helvetica', 'bold')
-      
+
       for (let i = 0; i < headers.length; i++) {
-        doc.text(headers[i], positions[i] + 2, currentY + 5);
+        doc.text(headers[i], positions[i] + 2, currentY + 5)
       }
-      
+
       currentY += lineHeight + 2
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(8)
@@ -339,13 +350,13 @@ const exportProductsPDF = () => {
         itemsOnCurrentPage = 0
         addTableHeader()
       }
-      
+
       // Draw row background (alternating)
       if (index % 2 === 1) {
         doc.setFillColor(248, 248, 248)
         doc.rect(marginLeft, currentY - 1, contentWidth, lineHeight, 'F')
       }
-      
+
       // Format data
       const rowData = [
         product.name.length > 25 ? product.name.substring(0, 25) + '...' : product.name,
@@ -355,12 +366,12 @@ const exportProductsPDF = () => {
         `${product.currentStock} ${product.unit}`,
         product.isActive ? 'Active' : 'Inactive'
       ]
-      
+
       // Draw row data
       for (let i = 0; i < rowData.length; i++) {
-        doc.text(rowData[i], positions[i] + 2, currentY + 4);
+        doc.text(rowData[i], positions[i] + 2, currentY + 4)
       }
-      
+
       currentY += lineHeight
       itemsOnCurrentPage++
     })
@@ -371,7 +382,9 @@ const exportProductsPDF = () => {
       doc.setFontSize(8)
       doc.setFont('helvetica', 'italic')
       doc.setTextColor(100, 100, 100)
-      doc.text(`Page ${i} of ${currentPage}`, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' })
+      doc.text(`Page ${i} of ${currentPage}`, pageWidth / 2, doc.internal.pageSize.height - 10, {
+        align: 'center'
+      })
     }
 
     doc.save(`Product_Inventory_${format(now, 'yyyy-MM-dd')}.pdf`)
@@ -385,7 +398,6 @@ const exportProductsPDF = () => {
       showConfirmButton: false,
       timer: 3000
     })
-
   } catch (error) {
     console.error('Error exporting products to PDF:', error)
     Swal.fire({
@@ -398,14 +410,14 @@ const exportProductsPDF = () => {
 const fetchProducts = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/products/', {
+    const response = await axios.get('http://localhost:5000/api/products/', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
     })
     // Make sure we're setting an array
     products.value = response.data.products || []
-  } catch (error:any) {
+  } catch (error: any) {
     console.error('Error fetching products:', error)
     products.value = []
     Swal.fire({
@@ -420,37 +432,55 @@ const fetchProducts = async () => {
 // Add these fetch functions
 const fetchSuppliers = async () => {
   try {
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/suppliers/suppliers', {
+    const response = await axios.get('http://localhost:5000/api/suppliers/suppliers', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
-    });
-    suppliers.value = response.data?.filter((supplier: any) => supplier?.isActive) || [];
+    })
+    suppliers.value = response.data?.filter((supplier: any) => supplier?.isActive) || []
   } catch (error) {
-    console.error('Error fetching suppliers:', error);
-    suppliers.value = [];
+    console.error('Error fetching suppliers:', error)
+    suppliers.value = []
   }
-};
+}
 const fetchSubCategories = async () => {
   try {
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/subcategories', {
+    const response = await axios.get('http://localhost:5000/api/subcategories', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
-    });
-    subCategories.value = response.data?.filter((subCategory: any) => subCategory?.isActive) || [];
+    })
+    subCategories.value = response.data?.filter((subCategory: any) => subCategory?.isActive) || []
   } catch (error: any) {
-    console.error('Error fetching subcategories:', error);
-    subCategories.value = [];
+    console.error('Error fetching subcategories:', error)
+    subCategories.value = []
   }
-};
+}
+
+const fetchBrands = async () => {
+  isFetchingBrands.value = true
+  try {
+    const response = await axios.get('http://localhost:5000/api/brands/active', {
+      headers: {
+        Authorization: `Bearer ${authStore.token}`
+      }
+    })
+    brands.value = response.data || []
+  } catch (error: any) {
+    console.error('Error fetching brands:', error)
+    brands.value = []
+  } finally {
+    isFetchingBrands.value = false
+  }
+}
+
 // Update fetch function
 const fetchCategories = async () => {
-  isFetchingCategories.value = true;
+  isFetchingCategories.value = true
 
   try {
-    isLoading.value = true;
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/categories', {
+    isLoading.value = true
+    const response = await axios.get('http://localhost:5000/api/categories', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -459,7 +489,7 @@ const fetchCategories = async () => {
       ...category,
       branch: category.branch || { name: 'Not Assigned' }
     }))
-  } catch (error:any) {
+  } catch (error: any) {
     console.error('Error fetching categories:', error)
     categories.value = [] // Set empty array on error
     Swal.fire({
@@ -509,15 +539,17 @@ const matchPriceRange = (price: number, range: string) => {
 const totalPages = computed(() => {
   return Math.ceil(filteredProducts.value.length / itemsPerPage.value)
 })
-const isPriceValid = computed(() => {
-  const price = Number(newProduct.value.price)
-  const costPrice = Number(newProduct.value.costPrice)
-  return price > costPrice
-})
-const filteredSubCategories = computed(() => {
-  if (!newProduct.value.categoryId) return []
-  return (subCategories.value as any[]).filter((sub: any) => sub.category && sub.category._id === newProduct.value.categoryId)
-})
+// Brand options from brands API
+// const brandOptions = computed(() => {
+//   return brands.value.filter((brand) => brand.isActive)
+// })
+
+// const filteredSubCategories = computed(() => {
+//   if (!newProduct.value.categoryId) return []
+//   return (subCategories.value as any[]).filter(
+//     (sub: any) => sub.category && sub.category._id === newProduct.value.categoryId
+//   )
+// })
 const paginatedProducts = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value
   const end = start + itemsPerPage.value
@@ -528,12 +560,12 @@ const paginatedProducts = computed(() => {
 const canEditProduct = (product: Product) => {
   // Get user ID (handle both id and _id)
   const userId = authStore.user?.id || authStore.user?._id
-  
+
   // If no user is logged in, can't edit
   if (!authStore.user || !userId) {
     return false
   }
-  
+
   // Superadmins can edit any product
   if (authStore.isSuperAdmin()) {
     return true
@@ -541,14 +573,15 @@ const canEditProduct = (product: Product) => {
 
   // Check if user is the creator of the product
   if (product.createdBy && product.createdBy.user) {
-    const creatorId = typeof product.createdBy.user === 'object' 
-      ? product.createdBy.user._id 
-      : product.createdBy.user
+    const creatorId =
+      typeof product.createdBy.user === 'object'
+        ? product.createdBy.user._id
+        : product.createdBy.user
     if (creatorId === userId) {
       return true
     }
   }
-  
+
   return false
 }
 
@@ -556,21 +589,22 @@ const canEditProduct = (product: Product) => {
 const canDeleteProduct = (product: Product) => {
   // Get user ID (handle both id and _id)
   const userId = authStore.user?.id || authStore.user?._id
-  
+
   // If no user is logged in, can't delete
   if (!authStore.user || !userId) return false
-  
+
   // Superadmins can delete any product
   if (authStore.isSuperAdmin()) return true
-  
+
   // Check if user is the creator of the product
   if (product.createdBy && product.createdBy.user) {
-    const creatorId = typeof product.createdBy.user === 'object' 
-      ? product.createdBy.user._id 
-      : product.createdBy.user
+    const creatorId =
+      typeof product.createdBy.user === 'object'
+        ? product.createdBy.user._id
+        : product.createdBy.user
     if (creatorId === userId) return true
   }
-  
+
   return false
 }
 
@@ -579,12 +613,11 @@ const resetForm = () => {
     name: '',
     description: '',
     categoryId: '',
-    subCategoryId: '',
+    brandId: '',
     supplierId: '',
-    price: '',
-    costPrice: '',
     unit: '',
     currentStock: '',
+    specifications: [{ name: '', value: '' }],
     images: null,
     sku: '',
     barcodeText: ''
@@ -595,30 +628,32 @@ const resetForm = () => {
 // Update CRUD functions
 
 const handleEditProduct = (product: Product) => {
-  isEditing.value = true;
-  editingProduct.value = product;
+  isEditing.value = true
+  editingProduct.value = product
   newProduct.value = {
     name: product.name,
     description: product.description,
     categoryId: product.category?._id || '',
-    subCategoryId: product.subCategory?._id || '',
+    brandId: product.brand?._id || '',
     supplierId: product.supplier?._id || '',
-    price: product.price !== undefined && product.price !== null ? String(product.price) : '',
-    costPrice: product.costPrice !== undefined && product.costPrice !== null ? String(product.costPrice) : '',
     unit: product.unit,
-    currentStock: product.currentStock !== undefined && product.currentStock !== null ? String(product.currentStock) : '',
+    currentStock:
+      product.currentStock !== undefined && product.currentStock !== null
+        ? String(product.currentStock)
+        : '',
+    specifications: (product as any).specifications || [],
     images: null, // Set to null for editing since we don't handle image updates in edit mode
     sku: product.sku || '',
     barcodeText: product.barcode?.text || ''
-  };
-  showModal.value = true;
-};
+  }
+  showModal.value = true
+}
 const handleUpdateProduct = async () => {
   try {
     isSubmitting.value = true
     // Don't use FormData since we're not handling files
     const response = await axios.put(
-      `https://ims-api-id38.onrender.com/api/products/${editingProduct.value!._id}`,
+      `http://localhost:5000/api/products/${editingProduct.value!._id}`,
       newProduct.value,
       {
         headers: {
@@ -646,19 +681,20 @@ const handleUpdateProduct = async () => {
     })
   } catch (error: any) {
     let errorMessage = 'Error updating product'
-    
+
     if (error.response?.status === 403) {
       errorMessage = error.response.data.message
     } else if (error.response?.data?.message) {
       errorMessage = error.response.data.message
     }
-    
+
     Swal.fire({
       icon: 'error',
       title: 'Error',
       text: errorMessage,
       customClass: {
-        confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
+        confirmButton:
+          'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
       }
     })
   } finally {
@@ -680,7 +716,7 @@ const handleDeleteProduct = async (productId: string) => {
     try {
       isDeleting.value = true
       selectedProductId.value = productId
-      await axios.delete(`https://ims-api-id38.onrender.com/api/products/${productId}`, {
+      await axios.delete(`http://localhost:5000/api/products/${productId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -699,19 +735,20 @@ const handleDeleteProduct = async (productId: string) => {
       })
     } catch (error: any) {
       let errorMessage = 'Error deleting product'
-      
+
       if (error.response?.status === 403) {
         errorMessage = error.response.data.message
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message
       }
-      
+
       Swal.fire({
         icon: 'error',
         title: 'Error',
         text: errorMessage,
         customClass: {
-          confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
+          confirmButton:
+            'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
         }
       })
     } finally {
@@ -735,7 +772,7 @@ const handleToggleStatus = async (productId: string, currentStatus: boolean) => 
 
     if (result.isConfirmed) {
       const response = await axios.patch(
-        `https://ims-api-id38.onrender.com/api/products/${productId}/toggle-status`,
+        `http://localhost:5000/api/products/${productId}/toggle-status`,
         {},
         {
           headers: {
@@ -773,38 +810,51 @@ const handleAddProduct = async () => {
     isSubmitting.value = true
     const formData = new FormData()
 
-    // Only send SKU and barcodeText if both are filled (let backend generate if either is empty)
-    const productToSend = { ...newProduct.value };
-    if (!productToSend.sku) delete productToSend.sku;
-    if (!productToSend.barcodeText) delete productToSend.barcodeText;
+    // Clone newProduct to avoid modifying reactive state
+    const productToSend = { ...newProduct.value }
 
-    Object.keys(productToSend).forEach((key) => {
-      const typedKey = key as keyof ProductForm;
-      if (
-        productToSend[typedKey] !== null &&
-        productToSend[typedKey] !== undefined &&
-        productToSend[typedKey] !== ''
-      ) {
-        formData.append(key, productToSend[typedKey] as any);
+    // Only append SKU and barcodeText if they exist
+    if (!productToSend.sku) delete productToSend.sku
+    if (!productToSend.barcodeText)
+      delete productToSend.barcodeText
+
+      // Handle simple fields (string/number)
+    ;[
+      'name',
+      'description',
+      'categoryId',
+      'brandId',
+      'supplierId',
+      'unit',
+      'currentStock',
+      'sku',
+      'barcodeText'
+    ].forEach((key) => {
+      const value = (productToSend as any)[key]
+      if (value !== undefined && value !== null && value !== '') {
+        formData.append(key, value)
       }
-    });
+    })
 
-    // Add stock value
-    formData.append('stock', newProduct.value.currentStock)
+    // Append specifications as JSON string
+    const specs = JSON.parse(JSON.stringify(productToSend.specifications || []))
+    formData.append('specifications', JSON.stringify(specs))
 
-    const response = await axios.post('https://ims-api-id38.onrender.com/api/products', formData, {
+    // Append image if present
+    if (productToSend.images) {
+      formData.append('images', productToSend.images)
+    }
+
+    // Make POST request
+    const response = await axios.post('http://localhost:5000/api/products', formData, {
       headers: {
         Authorization: `Bearer ${authStore.token}`,
         'Content-Type': 'multipart/form-data'
       }
     })
 
-    // Update local state with new product
     products.value = [response.data.product, ...products.value]
-
-    // Emit socket event
     socket.emit('createProduct', response.data.product)
-
     showModal.value = false
     resetForm()
     Swal.fire({
@@ -831,7 +881,7 @@ onMounted(() => {
   fetchCategories()
   fetchSuppliers()
   fetchSubCategories()
-
+  fetchBrands()
 
   socket.on('productUpdated', (updatedProduct) => {
     if (updatedProduct && updatedProduct._id) {
@@ -899,7 +949,7 @@ watch(
             @click="exportProductsPDF"
             class="inline-flex items-center justify-center rounded-lg bg-success px-6 py-2 text-sm font-medium text-white hover:bg-opacity-90 mr-2"
           >
-          <svg
+            <svg
               xmlns="http://www.w3.org/2000/svg"
               class="h-5 w-5 mr-1"
               viewBox="0 0 20 20"
@@ -1017,12 +1067,17 @@ watch(
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Product Name</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Barcode</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Category</th>
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">SubCategory</th>
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Price</th>
+            <!-- <th class="py-4.5 px-4 font-medium text-black dark:text-white">SubCategory</th> -->
+            <!-- <th class="py-4.5 px-4 font-medium text-black dark:text-white">Price</th> -->
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Stock</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Status</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Created By</th>
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white" v-if="authStore.canPerform('edit_product')">Actions</th>
+            <th
+              class="py-4.5 px-4 font-medium text-black dark:text-white"
+              v-if="authStore.canPerform('edit_product')"
+            >
+              Actions
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -1041,7 +1096,11 @@ watch(
               <div class="flex items-center gap-3">
                 <div class="flex h-10 w-10 items-center justify-center rounded-full bg-meta-2">
                   <img
-                    v-if="Array.isArray(product.images) && product.images.length && product.images[0].url"
+                    v-if="
+                      Array.isArray(product.images) &&
+                      product.images.length &&
+                      product.images[0].url
+                    "
                     :src="product.images[0].url"
                     class="h-10 w-10 rounded-full object-cover"
                   />
@@ -1057,8 +1116,8 @@ watch(
             </td>
             <td class="py-4.5 px-4">{{ product.barcode?.text }}</td>
             <td class="py-4.5 px-4">{{ product.category?.name || 'Not Assigned' }}</td>
-            <td class="py-4.5 px-4">{{ product.subCategory?.name || 'Not Assigned' }}</td>
-            <td class="py-4.5 px-4">{{ formatPrice(product.price) }}</td>
+            <!-- <td class="py-4.5 px-4">{{ product.subCategory?.name || 'Not Assigned' }}</td> -->
+            <!-- <td class="py-4.5 px-4">{{ formatPrice(product.price) }}</td> -->
             <td class="py-4.5 px-4">{{ product.currentStock }} {{ product.unit }}</td>
             <td class="py-4.5 px-4">
               <div class="flex items-center space-x-2">
@@ -1081,17 +1140,23 @@ watch(
             <td class="py-4.5 px-4">
               <div class="flex items-center gap-2">
                 <span class="text-sm text-gray-600 dark:text-gray-400">
-                  {{ 
-                    product.createdBy?.user && typeof product.createdBy.user === 'object' 
+                  {{
+                    product.createdBy?.user && typeof product.createdBy.user === 'object'
                       ? `${product.createdBy.user.firstName} ${product.createdBy.user.lastName}`
                       : product.createdBy?.role || 'Unknown'
                   }}
                 </span>
-                <span 
-                  v-if="authStore.user && (authStore.user.id || authStore.user._id) && product.createdBy && product.createdBy.user && (
-                    (typeof product.createdBy.user === 'object' && product.createdBy.user._id === (authStore.user.id || authStore.user._id)) ||
-                    (typeof product.createdBy.user === 'string' && product.createdBy.user === (authStore.user.id || authStore.user._id))
-                  )"
+                <span
+                  v-if="
+                    authStore.user &&
+                    (authStore.user.id || authStore.user._id) &&
+                    product.createdBy &&
+                    product.createdBy.user &&
+                    ((typeof product.createdBy.user === 'object' &&
+                      product.createdBy.user._id === (authStore.user.id || authStore.user._id)) ||
+                      (typeof product.createdBy.user === 'string' &&
+                        product.createdBy.user === (authStore.user.id || authStore.user._id)))
+                  "
                   class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary bg-opacity-10 text-primary"
                 >
                   You
@@ -1100,14 +1165,22 @@ watch(
             </td>
             <td class="py-4.5 px-4">
               <div class="flex items-center space-x-2">
-                <button 
-                  v-if="authStore.hasPermission('manage_products') && canEditProduct(product)" 
-                  @click="handleEditProduct(product)" 
+                <button
+                  v-if="authStore.hasPermission('manage_products') && canEditProduct(product)"
+                  @click="handleEditProduct(product)"
                   class="hover:text-primary"
-                  :title="authStore.user && (authStore.user.id || authStore.user._id) && product.createdBy && product.createdBy.user && (
-                    (typeof product.createdBy.user === 'object' && product.createdBy.user._id === (authStore.user.id || authStore.user._id)) ||
-                    (typeof product.createdBy.user === 'string' && product.createdBy.user === (authStore.user.id || authStore.user._id))
-                  ) ? 'Edit your product' : 'Edit product (Super Admin)'"
+                  :title="
+                    authStore.user &&
+                    (authStore.user.id || authStore.user._id) &&
+                    product.createdBy &&
+                    product.createdBy.user &&
+                    ((typeof product.createdBy.user === 'object' &&
+                      product.createdBy.user._id === (authStore.user.id || authStore.user._id)) ||
+                      (typeof product.createdBy.user === 'string' &&
+                        product.createdBy.user === (authStore.user.id || authStore.user._id)))
+                      ? 'Edit your product'
+                      : 'Edit product (Super Admin)'
+                  "
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -1120,8 +1193,8 @@ watch(
                     />
                   </svg>
                 </button>
-                <span 
-                  v-else-if="authStore.hasPermission('manage_products') && !canEditProduct(product)" 
+                <span
+                  v-else-if="authStore.hasPermission('manage_products') && !canEditProduct(product)"
                   class="text-gray-400 cursor-not-allowed"
                   title="You can only edit products that you created"
                 >
@@ -1135,16 +1208,24 @@ watch(
                       d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"
                     />
                   </svg>
-                </span> 
+                </span>
                 <button
                   v-if="authStore.hasPermission('delete_products') && canDeleteProduct(product)"
                   @click="handleDeleteProduct(product._id)"
                   class="hover:text-danger"
                   :disabled="isDeleting && selectedProductId === product._id"
-                  :title="authStore.user && (authStore.user.id || authStore.user._id) && product.createdBy && product.createdBy.user && (
-                    (typeof product.createdBy.user === 'object' && product.createdBy.user._id === (authStore.user.id || authStore.user._id)) ||
-                    (typeof product.createdBy.user === 'string' && product.createdBy.user === (authStore.user.id || authStore.user._id))
-                  ) ? 'Delete your product' : 'Delete product (Super Admin)'"
+                  :title="
+                    authStore.user &&
+                    (authStore.user.id || authStore.user._id) &&
+                    product.createdBy &&
+                    product.createdBy.user &&
+                    ((typeof product.createdBy.user === 'object' &&
+                      product.createdBy.user._id === (authStore.user.id || authStore.user._id)) ||
+                      (typeof product.createdBy.user === 'string' &&
+                        product.createdBy.user === (authStore.user.id || authStore.user._id)))
+                      ? 'Delete your product'
+                      : 'Delete product (Super Admin)'
+                  "
                 >
                   <svg
                     v-if="!(isDeleting && selectedProductId === product._id)"
@@ -1181,8 +1262,10 @@ watch(
                     ></path>
                   </svg>
                 </button>
-                <span 
-                  v-else-if="authStore.hasPermission('delete_products') && !canDeleteProduct(product)" 
+                <span
+                  v-else-if="
+                    authStore.hasPermission('delete_products') && !canDeleteProduct(product)
+                  "
                   class="text-gray-400 cursor-not-allowed"
                   title="You can only delete products that you created"
                 >
@@ -1240,7 +1323,9 @@ watch(
       v-if="showModal"
       class="fixed inset-0 z-999 flex items-center justify-center overflow-y-auto bg-black bg-opacity-50"
     >
-      <div class="relative w-full max-w-4xl rounded-lg bg-white p-8 dark:bg-boxdark">
+      <div
+        class="relative max-h-[85%] overflow-auto w-full max-w-4xl rounded-lg bg-white p-8 dark:bg-boxdark"
+      >
         <!-- Header -->
         <div class="mb-6 flex items-center justify-between">
           <h3 class="text-xl font-semibold">
@@ -1320,23 +1405,19 @@ watch(
               </select>
             </div>
 
-            <!-- SubCategory -->
+            <!-- Brand -->
             <div>
               <label class="mb-2.5 block text-black dark:text-white">
-                SubCategory <span class="text-danger">*</span>
+                Brand <span class="text-danger">*</span>
               </label>
               <select
-                class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-                v-model="newProduct.subCategoryId"
+                v-model="newProduct.brandId"
                 required
+                class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               >
-                <option value="" disabled>Select a subcategory</option>
-                <option
-                  v-for="subCategory in filteredSubCategories"
-                  :key="subCategory._id"
-                  :value="subCategory._id"
-                >
-                  {{ subCategory.name }}
+                <option value="" disabled>Select a brand</option>
+                <option v-for="brand in brands" :key="brand._id" :value="brand._id">
+                  {{ brand.name }}
                 </option>
               </select>
             </div>
@@ -1358,36 +1439,70 @@ watch(
               </select>
             </div>
 
-            <!-- Price -->
-            <div>
-              <label class="mb-2.5 block text-black dark:text-white">
-                Price <span class="text-danger">*</span>
-              </label>
-              <input
-                v-model="newProduct.price"
-                type="number"
-                required
-                min="0"
-                step="0.01"
-                placeholder="Enter selling price"
-                class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-              />
-            </div>
+            <!-- Specifications -->
+            <div class="col-span-2">
+              <label class="mb-2.5 block text-black dark:text-white">Specifications</label>
+              <div class="space-y-3">
+                <!-- <div
+                  v-for="(spec, idx) in newProduct.specifications"
+                  :key="idx"
+                  class="grid grid-cols-3 gap-1"
+                >
+                  <div class="col-span-1">
+                    <input
+                      v-model="spec.name"
+                      placeholder="Name (e.g., Socket)"
+                      class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+                    />
+                  </div>
+                  <div class="flex w-full col-span-2 gap-1">
+                    <input
+                      v-model="spec.value"
+                      placeholder="Value (e.g., LGA1700)"
+                      class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+                    />
+                    <button
+                      type="button"
+                      class="px-3 py-2 rounded bg-danger text-white"
+                      @click="newProduct.specifications.splice(idx, 1)"
+                    >
+                      Remove
+                    </button>
+                  </div>
 
-            <!-- Cost Price -->
-            <div>
-              <label class="mb-2.5 block text-black dark:text-white">
-                Cost Price <span class="text-danger">*</span>
-              </label>
-              <input
-                v-model="newProduct.costPrice"
-                type="number"
-                required
-                min="0"
-                step="0.01"
-                placeholder="Enter cost price"
-                class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-              />
+                  <div class="flex gap-2"></div>
+                </div> -->
+                <div
+                  v-for="(spec, index) in newProduct.specifications"
+                  :key="index"
+                  class="flex gap-2 mb-2"
+                >
+                  <input
+                    v-model="spec.name"
+                    placeholder="Name"
+                    class="w-1/2 rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+                  />
+                  <input
+                    v-model="spec.value"
+                    placeholder="Value"
+                    class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+                  />
+                  <button
+                    type="button"
+                    class="px-3 py-2 rounded bg-danger text-white"
+                    @click="newProduct.specifications.splice(index, 1)"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  class="px-3 py-2 rounded bg-primary text-white"
+                  @click="newProduct.specifications.push({ name: '', value: '' })"
+                >
+                  Add Specification
+                </button>
+              </div>
             </div>
 
             <!-- Unit -->
@@ -1398,7 +1513,7 @@ watch(
               <select
                 v-model="newProduct.unit"
                 required
-                class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+                class="rounded w-full border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               >
                 <option value="" disabled>Select a unit</option>
                 <option value="pieces">Pieces</option>
@@ -1432,8 +1547,6 @@ watch(
               <input
                 v-model="newProduct.sku"
                 type="number"
-                :required="!isEditing"
-
                 placeholder="Enter product SKU"
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               />
@@ -1442,9 +1555,7 @@ watch(
 
             <!-- Barcode -->
             <div>
-              <label class="mb-2.5 block text-black dark:text-white">
-                Barcode
-              </label>
+              <label class="mb-2.5 block text-black dark:text-white"> Barcode </label>
               <input
                 v-model="newProduct.barcodeText"
                 type="number"
@@ -1474,12 +1585,6 @@ watch(
             </div>
           </div>
 
-          <div
-            v-if="!isPriceValid && newProduct.price && newProduct.costPrice"
-            class="text-danger text-sm"
-          >
-            Selling price must be greater than cost price
-          </div>
           <!-- Form Actions -->
           <div class="flex justify-end gap-4">
             <button
@@ -1495,7 +1600,6 @@ watch(
             </button>
             <button
               type="submit"
-              :disabled="isSubmitting || !isPriceValid"
               class="rounded bg-primary px-6 py-2 text-white hover:bg-opacity-90 disabled:opacity-50"
             >
               {{ isSubmitting ? 'Saving...' : isEditing ? 'Update' : 'Create' }}

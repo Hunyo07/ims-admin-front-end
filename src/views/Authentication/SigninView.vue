@@ -1,9 +1,8 @@
-<script setup >
+<script setup>
 import DefaultAuthCard from '../../components/Auths/DefaultAuthCard.vue'
 import InputGroup from '../../components/Auths/InputGroup.vue'
 import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
 import DefaultLayout from '../../layouts/DefaultLayout.vue'
-
 
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -25,18 +24,18 @@ const handleSubmit = async (e) => {
   isLoading.value = true
 
   try {
-    const response = await axios.post('https://ims-api-id38.onrender.com/api/auth/signin', {
+    const response = await axios.post('http://localhost:5000/api/auth/signin', {
       email: email.value,
       password: password.value
     })
-    
+
     const { token, user } = response.data
     // Store auth data
     authStore.setToken(token)
     authStore.setUser(user)
 
     // Redirect based on role\
-    
+
     switch (user.role.name) {
       case 'superadmin':
         router.push('/eCommerce')

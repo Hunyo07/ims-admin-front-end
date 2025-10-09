@@ -22,7 +22,7 @@ const isPrinting = ref(false)
 const fetchProducts = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/products/', {
+    const response = await axios.get('http://localhost:5000/api/products/', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -75,7 +75,7 @@ const selectAllProducts = () => {
 const generateBarcode = async (productId) => {
   try {
     isGenerating.value = true
-    const response = await axios.get(`https://ims-api-id38.onrender.com/api/barcodes/generate/${productId}`, {
+    const response = await axios.get(`http://localhost:5000/api/barcodes/generate/${productId}`, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       },
@@ -126,7 +126,7 @@ const batchGenerateBarcodes = async () => {
   try {
     isGenerating.value = true
     const response = await axios.post(
-      'https://ims-api-id38.onrender.com/api/barcodes/batch',
+      'http://localhost:5000/api/barcodes/batch',
       { productIds: selectedProducts.value },
       {
         headers: {
@@ -155,83 +155,69 @@ const batchGenerateBarcodes = async () => {
   }
 }
 
-  // Print barcode for a single product
-  const printBarcode = async (productId) => {
-    try {
-      isPrinting.value = true
-      const response = await axios.get(`https://ims-api-id38.onrender.com/api/barcodes/product/${productId}`, {
-        headers: {
-          Authorization: `Bearer ${authStore.token}`
-        }
-      })
+// Print barcode for a single product
+const printBarcode = async (productId) => {
+  try {
+    isPrinting.value = true
+    const response = await axios.get(`http://localhost:5000/api/barcodes/product/${productId}`, {
+      headers: {
+        Authorization: `Bearer ${authStore.token}`
+      }
+    })
 
-      const printData = response.data.printData
+    const printData = response.data.printData
 
-      // Create PDF with standard dimensions (in mm)
-      const doc = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: [60, 40] // Standard small label size (60mm x 40mm)
-      })
+    // Create PDF with standard dimensions (in mm)
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: [60, 40] // Standard small label size (60mm x 40mm)
+    })
 
-      // Set margins and positions
-      const margin = 5
-      const width = 50 // Width of content area
-      const barcodeHeight = 15 // Standard height for retail barcodes
+    // Set margins and positions
+    const margin = 5
+    const width = 50 // Width of content area
+    const barcodeHeight = 15 // Standard height for retail barcodes
 
-      // Add product name (truncate if too long)
-      doc.setFontSize(8)
-      doc.setFont('helvetica', 'bold')
-      const name =
-        printData.productInfo.name.length > 25
-          ? printData.productInfo.name.substring(0, 22) + '...'
-          : printData.productInfo.name
-      doc.text(name, 30, margin + 4, { align: 'center' })
+    // Add product name (truncate if too long)
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'bold')
+    const name =
+      printData.productInfo.name.length > 25
+        ? printData.productInfo.name.substring(0, 22) + '...'
+        : printData.productInfo.name
+    doc.text(name, 30, margin + 4, { align: 'center' })
 
-      // Add SKU and price
-      doc.setFontSize(7)
-      doc.setFont('helvetica', 'normal')
-      doc.text(`SKU: ${printData.productInfo.sku}`, 30, margin + 8, { align: 'center' })
+    // Add SKU and price
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`SKU: ${printData.productInfo.sku}`, 30, margin + 8, { align: 'center' })
 
-      doc.setFontSize(8)
-      doc.setFont('helvetica', 'normal')
-      
-      // Improved price formatting with better error handling
-      const rawPrice = printData.productInfo?.price;
-      const cleanedPrice = typeof rawPrice === 'string'
-        ? rawPrice.replace(/[^\d.-]/g, '')
-        : rawPrice;
-      
-      const numericPrice = Number(cleanedPrice);
-      const priceText = Number.isFinite(numericPrice) ? numericPrice.toFixed(2) : '0.00';
-      
-      doc.text(`Price: P${priceText}`, 30, margin + 12, { align: 'center' })
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
 
-      // Add barcode image with standard dimensions
-      const imgData = `data:image/png;base64,${printData.barcodeImage}`
-      doc.addImage(imgData, 'PNG', margin, margin + 14, width, barcodeHeight)
+    const imgData = `data:image/png;base64,${printData.barcodeImage}`
+    doc.addImage(imgData, 'PNG', margin, +14, width, barcodeHeight)
 
-      // Add barcode text
-      doc.setFontSize(7)
-      doc.setFont('helvetica', 'normal')
-      doc.text(printData.barcodeText, 30, margin + 32, { align: 'center' })
+    // Add barcode text
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'normal')
+    doc.text(printData.barcodeText, 30, margin + 32, { align: 'center' })
 
-      // Print the PDF
-      doc.autoPrint()
-      doc.output('dataurlnewwindow')
-    } catch (error) {
-      console.error('Error printing barcode:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to print barcode'
-      })
-    } finally {
-      isPrinting.value = false
-    }
+    // Print the PDF
+    doc.autoPrint()
+    doc.output('dataurlnewwindow')
+  } catch (error) {
+    console.error('Error printing barcode:', error)
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: error.response?.data?.message || 'Failed to print barcode'
+    })
+  } finally {
+    isPrinting.value = false
   }
-
-
+}
 
 // Print barcode with quantity option
 const printBarcodeWithQuantity = async (productId) => {
@@ -254,24 +240,24 @@ const printBarcodeWithQuantity = async (productId) => {
         }
       }
     })
-    
+
     if (quantity) {
       isPrinting.value = true
-      const response = await axios.get(`https://ims-api-id38.onrender.com/api/barcodes/product/${productId}`, {
+      const response = await axios.get(`http://localhost:5000/api/barcodes/product/${productId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
       })
 
       const printData = response.data.printData
-      
+
       // Create PDF with A4 size for multiple copies
       const doc = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4'
       })
-      
+
       // Define layout constants
       const pageWidth = 210
       const pageHeight = 297
@@ -282,30 +268,30 @@ const printBarcodeWithQuantity = async (productId) => {
       const marginY = 5
       const colGap = 0
       const rowGap = 0
-      
+
       // Calculate columns and rows
       const cols = Math.floor((pageWidth - 2 * marginX) / (labelWidth + colGap))
       const rows = Math.floor((pageHeight - 2 * marginY) / (labelHeight + rowGap))
       const labelsPerPage = cols * rows
-      
+
       for (let i = 0; i < quantity; i++) {
         // Add a new page if needed
         if (i > 0 && i % labelsPerPage === 0) {
           doc.addPage()
         }
-        
+
         // Calculate position
         const positionOnPage = i % labelsPerPage
         const row = Math.floor(positionOnPage / cols)
         const col = positionOnPage % cols
-        
+
         const x = marginX + col * (labelWidth + colGap)
         const y = marginY + row * (labelHeight + rowGap)
-        
+
         // Draw label border
         doc.setDrawColor(200, 200, 200)
         doc.rect(x, y, labelWidth, labelHeight)
-        
+
         // Add product name (truncate if too long)
         doc.setFontSize(8)
         doc.setFont('helvetica', 'bold')
@@ -314,36 +300,27 @@ const printBarcodeWithQuantity = async (productId) => {
             ? printData.productInfo.name.substring(0, 22) + '...'
             : printData.productInfo.name
         doc.text(name, x + labelWidth / 2, y + 4, { align: 'center' })
-        
+
         // Add SKU and price
         doc.setFontSize(7)
         doc.setFont('helvetica', 'normal')
-        doc.text(`SKU: ${printData.productInfo.sku}`, x + labelWidth / 2, y + 8, { align: 'center' })
-        
+        doc.text(`SKU: ${printData.productInfo.sku}`, x + labelWidth / 2, y + 8, {
+          align: 'center'
+        })
+
         doc.setFontSize(8)
         doc.setFont('helvetica', 'normal')
-        
-        // Improved price formatting
-        const rawPrice = printData.productInfo?.price;
-        const cleanedPrice = typeof rawPrice === 'string'
-          ? rawPrice.replace(/[^\d.-]/g, '')
-          : rawPrice;
-        
-        const numericPrice = Number(cleanedPrice);
-        const priceText = Number.isFinite(numericPrice) ? numericPrice.toFixed(2) : '0.00';
-        
-        doc.text(`Price: P${priceText}`, x + labelWidth / 2, y + 12, { align: 'center' })
-        
+
         // Add barcode image
         const imgData = `data:image/png;base64,${printData.barcodeImage}`
         doc.addImage(imgData, 'PNG', x + 5, y + 14, labelWidth - 10, barcodeHeight)
-        
+
         // Add barcode text
         doc.setFontSize(7)
         doc.setFont('helvetica', 'normal')
         doc.text(printData.barcodeText, x + labelWidth / 2, y + 32, { align: 'center' })
       }
-      
+
       // Print the PDF
       doc.autoPrint()
       doc.output('dataurlnewwindow')
@@ -364,18 +341,18 @@ const printBarcodeWithQuantity = async (productId) => {
 const exportBarcode = async (productId) => {
   try {
     isPrinting.value = true
-    const response = await axios.get(`https://ims-api-id38.onrender.com/api/barcodes/product/${productId}`, {
+    const response = await axios.get(`http://localhost:5000/api/barcodes/product/${productId}`, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
     })
 
     const printData = response.data.printData
-    
+
     // Create a download link for the PNG
     const productName = printData.productInfo.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()
     const fileName = `${productName}_${printData.productInfo.sku}.png`
-    
+
     // Create a download link
     const link = document.createElement('a')
     link.href = `data:image/png;base64,${printData.barcodeImage}`
@@ -383,7 +360,7 @@ const exportBarcode = async (productId) => {
     document.body.appendChild(link)
     link.click()
     link.remove()
-    
+
     Swal.fire({
       icon: 'success',
       title: 'Success',
@@ -409,171 +386,148 @@ const exportMultipleBarcodes = async () => {
       icon: 'warning',
       title: 'No Products Selected',
       text: 'Please select at least one product'
-    });
-    return;
+    })
+    return
   }
 
   try {
-    isPrinting.value = true;
+    isPrinting.value = true
 
     // Fetch all barcode data first
-    const barcodeDataPromises = selectedProducts.value.map(productId => 
-      axios.get(`https://ims-api-id38.onrender.com/api/barcodes/product/${productId}`, {
+    const barcodeDataPromises = selectedProducts.value.map((productId) =>
+      axios.get(`http://localhost:5000/api/barcodes/product/${productId}`, {
         headers: { Authorization: `Bearer ${authStore.token}` }
       })
-    );
-    
-    const barcodeResponses = await Promise.all(barcodeDataPromises);
-    const barcodeDataList = barcodeResponses.map(response => response.data.printData);
+    )
+
+    const barcodeResponses = await Promise.all(barcodeDataPromises)
+    const barcodeDataList = barcodeResponses.map((response) => response.data.printData)
 
     // Create a zip file to store all the barcode preview images
-    const JSZip = await import('jszip').then(module => module.default);
-    const zip = new JSZip();
-    
+    const JSZip = await import('jszip').then((module) => module.default)
+    const zip = new JSZip()
+
     // Process each barcode
     const processPromises = barcodeDataList.map(async (printData) => {
       return new Promise((resolve, reject) => {
         try {
-          // Format price consistently
-          const rawPrice = printData.productInfo?.price;
-          const cleanedPrice = typeof rawPrice === 'string'
-            ? rawPrice.replace(/[^\d.-]/g, '')
-            : rawPrice;
-          
-          const numericPrice = Number(cleanedPrice);
-          const priceText = Number.isFinite(numericPrice) ? numericPrice.toFixed(2) : '0.00';
-          
           // Create a canvas to draw the barcode preview
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          
+          const canvas = document.createElement('canvas')
+          const ctx = canvas.getContext('2d')
+
           // Set canvas dimensions
-          canvas.width = 600;
-          canvas.height = 400;
-          
+          canvas.width = 600
+          canvas.height = 400
+
           // Fill background
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, canvas.width, canvas.height)
+
           // Add border
-          ctx.strokeStyle = '#cccccc';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(5, 5, canvas.width - 10, canvas.height - 10);
-          
+          ctx.strokeStyle = '#cccccc'
+          ctx.lineWidth = 2
+          ctx.strokeRect(5, 5, canvas.width - 10, canvas.height - 10)
+
           // Add product name
-          ctx.fillStyle = '#000000';
-          ctx.font = 'bold 24px Arial';
-          ctx.textAlign = 'center';
-          
-          const name = printData.productInfo.name.length > 25
-            ? printData.productInfo.name.substring(0, 22) + '...'
-            : printData.productInfo.name;
-          
-          ctx.fillText(name, canvas.width / 2, 50);
-          
+          ctx.fillStyle = '#000000'
+          ctx.font = 'bold 24px Arial'
+          ctx.textAlign = 'center'
+
+          const name =
+            printData.productInfo.name.length > 25
+              ? printData.productInfo.name.substring(0, 22) + '...'
+              : printData.productInfo.name
+
+          ctx.fillText(name, canvas.width / 2, 50)
+
           // Add SKU
-          ctx.font = '18px Arial';
-          ctx.fillText(`SKU: ${printData.productInfo.sku}`, canvas.width / 2, 80);
-          
-          // Add price
-          ctx.font = 'bold 20px Arial';
-          ctx.fillText(`Price: P${priceText}`, canvas.width / 2, 110);
-          
+          ctx.font = '18px Arial'
+          ctx.fillText(`SKU: ${printData.productInfo.sku}`, canvas.width / 2, 80)
+
           // Add barcode image
-          const img = new Image();
+          const img = new Image()
           img.onload = () => {
             // Draw barcode image
-            const barcodeWidth = 500;
-            const barcodeHeight = 150;
-            const barcodeX = (canvas.width - barcodeWidth) / 2;
-            const barcodeY = 130;
-            
-            ctx.drawImage(img, barcodeX, barcodeY, barcodeWidth, barcodeHeight);
-            
+            const barcodeWidth = 500
+            const barcodeHeight = 150
+            const barcodeX = (canvas.width - barcodeWidth) / 2
+            const barcodeY = 130
+
+            ctx.drawImage(img, barcodeX, barcodeY, barcodeWidth, barcodeHeight)
+
             // Add barcode text
-            ctx.font = '16px Arial';
-            ctx.fillText(printData.barcodeText, canvas.width / 2, 320);
-            
+            ctx.font = '16px Arial'
+            ctx.fillText(printData.barcodeText, canvas.width / 2, 320)
+
             // Convert canvas to PNG and add to zip
-            const productName = printData.productInfo.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-            const fileName = `${productName}_${printData.productInfo.sku}_label.png`;
-            
+            const productName = printData.productInfo.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()
+            const fileName = `${productName}_${printData.productInfo.sku}_label.png`
+
             canvas.toBlob((blob) => {
-              zip.file(fileName, blob);
-              resolve();
-            });
-          };
-          
+              zip.file(fileName, blob)
+              resolve()
+            })
+          }
+
           img.onerror = () => {
-            console.error('Error loading barcode image');
-            reject(new Error('Failed to load barcode image'));
-          };
-          
-          img.src = `data:image/png;base64,${printData.barcodeImage}`;
+            console.error('Error loading barcode image')
+            reject(new Error('Failed to load barcode image'))
+          }
+
+          img.src = `data:image/png;base64,${printData.barcodeImage}`
         } catch (error) {
-          reject(error);
+          reject(error)
         }
-      });
-    });
-    
+      })
+    })
+
     // Wait for all barcodes to be processed
-    await Promise.all(processPromises);
-    
+    await Promise.all(processPromises)
+
     // Generate the zip file
-    const content = await zip.generateAsync({type: 'blob'});
-    
+    const content = await zip.generateAsync({ type: 'blob' })
+
     // Create a download link
-    const url = window.URL.createObjectURL(content);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'barcode_labels.zip');
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    
+    const url = window.URL.createObjectURL(content)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'barcode_labels.zip')
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+
     Swal.fire({
       icon: 'success',
       title: 'Success',
       text: `Exported ${barcodeDataList.length} barcode labels successfully`,
       timer: 2000
-    });
+    })
   } catch (error) {
-    console.error('Error exporting barcode previews:', error);
+    console.error('Error exporting barcode previews:', error)
     Swal.fire({
       icon: 'error',
       title: 'Error',
       text: error.response?.data?.message || 'Failed to export barcode previews'
-    });
+    })
   } finally {
-    isPrinting.value = false;
+    isPrinting.value = false
   }
 }
 // Print barcode for a single product
 const previewBarcode = async (productId) => {
   try {
-    const response = await axios.get(`https://ims-api-id38.onrender.com/api/barcodes/product/${productId}`, {
+    const response = await axios.get(`http://localhost:5000/api/barcodes/product/${productId}`, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
     })
-
     const printData = response.data.printData
-    
-    // Format price consistently with printing
-    const rawPrice = printData.productInfo?.price;
-    const cleanedPrice = typeof rawPrice === 'string'
-      ? rawPrice.replace(/[^\d.-]/g, '')
-      : rawPrice;
-    
-    const numericPrice = Number(cleanedPrice);
-    const priceText = Number.isFinite(numericPrice) ? numericPrice.toFixed(2) : '0.00';
 
     Swal.fire({
       title: printData.productInfo.name,
       html: `
         <div class="flex flex-col items-center">
           <p class="mb-2">SKU: ${printData.productInfo.sku}</p>
-          <p class="mb-4">Price: P${priceText}</p>
           <img 
             src="data:image/png;base64,${printData.barcodeImage}" 
             alt="Barcode" 
@@ -663,15 +617,15 @@ onMounted(() => {
           <span v-else>Generate Selected Barcodes</span>
         </button> -->
 
-      <!-- Replace the print button with export button -->
-<button
-  @click="exportMultipleBarcodes"
-  :disabled="isPrinting || selectedProducts.length === 0"
-  class="rounded-lg bg-success px-4 py-2 text-sm font-medium text-white hover:bg-opacity-90 disabled:opacity-50"
->
-  <span v-if="isPrinting">Exporting...</span>
-  <span v-else>Export Selected Barcodes</span>
-</button>
+        <!-- Replace the print button with export button -->
+        <button
+          @click="exportMultipleBarcodes"
+          :disabled="isPrinting || selectedProducts.length === 0"
+          class="rounded-lg bg-success px-4 py-2 text-sm font-medium text-white hover:bg-opacity-90 disabled:opacity-50"
+        >
+          <span v-if="isPrinting">Exporting...</span>
+          <span v-else>Export Selected Barcodes</span>
+        </button>
 
         <div class="ml-auto">
           <span class="text-sm font-medium text-black dark:text-white">
@@ -702,7 +656,6 @@ onMounted(() => {
               <th class="py-4.5 px-4 font-medium text-black dark:text-white">SKU</th>
               <th class="py-4.5 px-4 font-medium text-black dark:text-white">Barcode</th>
               <th class="py-4.5 px-4 font-medium text-black dark:text-white">Preview</th>
-              <th class="py-4.5 px-4 font-medium text-black dark:text-white">Price</th>
               <th class="py-4.5 px-4 font-medium text-black dark:text-white">Stock</th>
               <th class="py-4.5 px-4 font-medium text-black dark:text-white">Actions</th>
             </tr>
@@ -790,9 +743,7 @@ onMounted(() => {
                 </div>
                 <p v-else class="text-gray-500 dark:text-gray-400 text-center">No preview</p>
               </td>
-              <td class="py-5 px-4">
-                <p class="text-black dark:text-white">₱{{ product.price }}</p>
-              </td>
+
               <td class="py-5 px-4">
                 <p class="text-black dark:text-white">{{ product.currentStock }}</p>
               </td>
@@ -818,8 +769,8 @@ onMounted(() => {
                     </svg>
                   </button> -->
 
-                  <!-- Show Generate button only for products without barcodes -->
-                  <!-- <button
+              <!-- Show Generate button only for products without barcodes -->
+              <!-- <button
                     v-if="!product.barcode || !product.barcode.text"
                     @click="generateBarcode(product._id)"
                     :disabled="isGenerating"
@@ -839,8 +790,8 @@ onMounted(() => {
                     </svg>
                   </button> -->
 
-                  <!-- Add Regenerate button for products with existing barcodes -->
-                  <!-- <button
+              <!-- Add Regenerate button for products with existing barcodes -->
+              <!-- <button
                     v-if="product.barcode && product.barcode.text"
                     @click="generateBarcode(product._id)"
                     :disabled="isGenerating"
@@ -862,33 +813,51 @@ onMounted(() => {
                 </div>
               </td> -->
               <!-- In your table actions column -->
-<td class="py-5 px-4">
-  <div class="flex items-center space-x-2">
-    <button
-      v-if="product.barcode && product.barcode.text"
-      @click="printBarcode(product._id)"
-      class="inline-flex items-center justify-center rounded-md bg-success bg-opacity-10 px-3 py-1.5 text-xs font-medium text-success hover:bg-opacity-20 transition-all duration-200"
-      :disabled="isPrinting"
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 mr-1" viewBox="0 0 20 20" fill="currentColor">
-        <path fill-rule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a2 2 0 002 2h6a2 2 0 002-2v-2h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zm0 8H7v4h6v-4z" clip-rule="evenodd" />
-      </svg>
-      Print
-    </button>
-    <button
-      v-if="product.barcode && product.barcode.text"
-      @click="printBarcodeWithQuantity(product._id)"
-      class="inline-flex items-center justify-center rounded-md bg-info bg-opacity-10 px-3 py-1.5 text-xs font-medium text-info hover:bg-opacity-20 transition-all duration-200"
-      :disabled="isPrinting"
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 mr-1" viewBox="0 0 20 20" fill="currentColor">
-        <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5z" />
-        <path d="M11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-      </svg>
-      Multiple
-    </button>
-  </div>
-</td>
+              <td class="py-5 px-4">
+                <div class="flex items-center space-x-2">
+                  <button
+                    v-if="product.barcode && product.barcode.text"
+                    @click="printBarcode(product._id)"
+                    class="inline-flex items-center justify-center rounded-md bg-success bg-opacity-10 px-3 py-1.5 text-xs font-medium text-success hover:bg-opacity-20 transition-all duration-200"
+                    :disabled="isPrinting"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="h-3.5 w-3.5 mr-1"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a2 2 0 002 2h6a2 2 0 002-2v-2h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zm0 8H7v4h6v-4z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                    Print
+                  </button>
+                  <button
+                    v-if="product.barcode && product.barcode.text"
+                    @click="printBarcodeWithQuantity(product._id)"
+                    class="inline-flex items-center justify-center rounded-md bg-info bg-opacity-10 px-3 py-1.5 text-xs font-medium text-info hover:bg-opacity-20 transition-all duration-200"
+                    :disabled="isPrinting"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="h-3.5 w-3.5 mr-1"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5z"
+                      />
+                      <path
+                        d="M11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+                      />
+                    </svg>
+                    Multiple
+                  </button>
+                </div>
+              </td>
             </tr>
           </tbody>
         </table>

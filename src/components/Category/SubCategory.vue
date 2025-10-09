@@ -19,8 +19,8 @@ interface SubCategory {
 }
 
 interface Category {
-  _id: string;
-  name: string;
+  _id: string
+  name: string
   // Add other fields as needed
 }
 
@@ -53,7 +53,7 @@ const totalPages = computed(() => {
 const fetchSubCategories = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/subcategories', {
+    const response = await axios.get('http://localhost:5000/api/subcategories', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -72,13 +72,14 @@ const fetchSubCategories = async () => {
 }
 const fetchCategories = async () => {
   try {
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/categories', {
+    const response = await axios.get('http://localhost:5000/api/categories', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
     })
-    categories.value = (response.data || [])
-      .filter((category: any) => category && typeof category === 'object')
+    categories.value = (response.data || []).filter(
+      (category: any) => category && typeof category === 'object'
+    )
   } catch (error: any) {
     categories.value = []
     Swal.fire({
@@ -158,7 +159,7 @@ const handleAddSubCategory = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.post(
-      'https://ims-api-id38.onrender.com/api/subcategories/create',
+      'http://localhost:5000/api/subcategories/create',
       newSubCategory.value,
       {
         headers: {
@@ -219,7 +220,7 @@ const handleUpdateSubCategory = async () => {
     isSubmitting.value = true
     if (!editingSubCategory.value) return
     const response = await axios.put(
-      `https://ims-api-id38.onrender.com/api/subcategories/${editingSubCategory.value._id}`,
+      `http://localhost:5000/api/subcategories/${editingSubCategory.value._id}`,
       newSubCategory.value,
       {
         headers: {
@@ -265,7 +266,7 @@ const handleDeleteSubCategory = async (subCategoryId: any) => {
     try {
       isDeleting.value = true
       selectedSubCategoryId.value = subCategoryId
-      await axios.delete(`https://ims-api-id38.onrender.com/api/subcategories/${subCategoryId}`, {
+      await axios.delete(`http://localhost:5000/api/subcategories/${subCategoryId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -307,7 +308,7 @@ const handleToggleStatus = async (subCategoryId: any, currentStatus: any) => {
 
     if (result.isConfirmed) {
       const response = await axios.patch(
-        `https://ims-api-id38.onrender.com/api/subcategories/${subCategoryId}/toggle-status`,
+        `http://localhost:5000/api/subcategories/${subCategoryId}/toggle-status`,
         { isActive: !currentStatus },
         {
           headers: {
@@ -623,11 +624,7 @@ onMounted(() => {
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               >
                 <option value="" disabled>Select a category</option>
-                <option
-                  v-for="category in categories"
-                  :key="category._id"
-                  :value="category._id"
-                >
+                <option v-for="category in categories" :key="category._id" :value="category._id">
                   {{ category.name }}
                 </option>
               </select>

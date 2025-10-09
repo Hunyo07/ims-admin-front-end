@@ -1,32 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import SigninView from '../views/Authentication/SigninView.vue'
-import SignupView from '../views/Authentication/SignupView.vue'
-import CalendarView from '../views/CalendarView.vue'
-import BasicChartView from '../views/Charts/BasicChartView.vue'
-import ECommerceView from '../views/Dashboard/ECommerceView.vue'
-import FormElementsView from '../views/Forms/FormElementsView.vue'
-import FormLayoutView from '../views/Forms/FormLayoutView.vue'
-import SettingsView from '../views/Pages/SettingsView.vue'
-import ProfileView from '../views/ProfileView.vue'
-import TablesView from '../views/TablesView.vue'
-import AlertsView from '../views/UiElements/AlertsView.vue'
-import ButtonsView from '../views/UiElements/ButtonsView.vue'
-import UserManagementView from '../views/User/UserManagementView.vue'
-import CustomerManagementView from '../views/Customer/CustomerManagementView.vue'
-import SupplierManagementView from '../views/Supplier/SupplierManagementView.vue'
-import MainCategoryView from '../views/Category/MainCategoryView.vue'
-import SubCategoryView from '../views/Category/SubCategoryView.vue'
-import ProductManagementView from '../views/Product/ProductManagementView.vue'
-import SalesManagementView from '../views/Sales/SalesManagementView.vue'
-import CreatSaleView from '../views/Sales/CreateSaleView.vue'
-import BarcodesView from '../views/Barcodes/BarcodeManagementView.vue'
-import ReorderView from '../views/Reorder/PurchaseMangementView.vue'
-import ReorderPointView from '../views/Settings/ReorderPointView.vue'
-import InventoryCounts from '../views/Inventory/InventoryCountsView.vue'
-import StockAdjustments from '../views/Inventory/StockAdjustmentsView.vue'
-import ForgotPasswordView from '../views/Authentication/ForgotPasswordView.vue';
-import ResetPasswordView from '../views/Authentication/ResetPasswordView.vue';
-import ActivityLogView from '../views/ActivityLog/ActivityLogView.vue';
+
+// import SalesManagementView from '../views/Sales/SalesManagementView.vue'
+// import CreatSaleView from '../views/Sales/CreateSaleView.vue'
+const RISListView = () => import('../views/Inventory/RISListView.vue')
+const RISDetailView = () => import('../views/Inventory/RISDetailView.vue')
 
 const routes = [
   {
@@ -94,6 +71,17 @@ const routes = [
     }
   },
   {
+    path: '/brand',
+    name: 'brand',
+    component: () => import('../views/Brand/BrandManagementView.vue'),
+    meta: {
+      title: 'Brand Management',
+      requiresAuth: true,
+      roles: ['superadmin', 'admin'],
+      permissions: ['view_brands', 'manage_brands']
+    }
+  },
+  {
     path: '/stock-adjustments',
     name: 'Stock Adjustments',
     component: () => import('../views/Inventory/StockAdjustmentsView.vue'),
@@ -137,27 +125,18 @@ const routes = [
       permissions: ['view_customers', 'manage_customers']
     }
   },
+  // RIS routes
   {
-    path: '/pos',
-    name: 'POS',
-    component: () => import('../views/Sales/CreateSaleView.vue'),
-    meta: {
-      title: 'POS Management',
-      requiresAuth: true,
-      roles: ['superadmin', 'admin', 'staff'],
-      permissions: ['use_pos']
-    }
+    path: '/inventory/ris',
+    name: 'ris-list',
+    component: RISListView,
+    meta: { title: 'Requisition Issue Slips', requiresAuth: true }
   },
   {
-    path: '/sales',
-    name: 'sales',
-    component: () => import('../views/Sales/SalesManagementView.vue'),
-    meta: {
-      title: 'Sales Management',
-      requiresAuth: true,
-      roles: ['superadmin', 'admin', 'staff'],
-      permissions: ['view_sales', 'process_sales']
-    }
+    path: '/inventory/ris/:id',
+    name: 'ris-detail',
+    component: RISDetailView,
+    meta: { title: 'RIS Details', requiresAuth: true }
   },
   {
     path: '/supplier',
@@ -184,6 +163,7 @@ const routes = [
   {
     path: '/sub-category',
     name: 'sub-category',
+    // component removed
     component: () => import('../views/Category/SubCategoryView.vue'),
     meta: {
       title: 'Sub Category Management',
@@ -311,7 +291,7 @@ const routes = [
   {
     path: '/ui-elements/buttons',
     name: 'buttons',
-        component: () => import('../views/UiElements/ButtonsView.vue'),
+    component: () => import('../views/UiElements/ButtonsView.vue'),
     meta: {
       title: 'Buttons',
       requiresAuth: true

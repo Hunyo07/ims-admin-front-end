@@ -29,7 +29,7 @@ interface Role {
   description: string
   createdAt: string
 }
-  
+
 interface User {
   _id: string
   firstName: string
@@ -140,8 +140,9 @@ const paginatedUsers = computed(() => {
 const hasUnsavedChanges = computed(() => {
   if (!showModal.value) return false
   return (Object.keys(newUser.value) as Array<keyof typeof newUser.value>).some(
-  (key) => newUser.value[key] !== ''
-)})
+    (key) => newUser.value[key] !== ''
+  )
+})
 const handleCloseModal = async () => {
   if (hasUnsavedChanges.value) {
     const result = await Swal.fire({
@@ -179,14 +180,14 @@ const calculateAge = (birthDate: string) => {
   }
   return age
 }
-const formatDate = (dateString:string) => {
+const formatDate = (dateString: string) => {
   if (!dateString) return ''
   const date = new Date(dateString)
   return date.toISOString().split('T')[0]
 }
 const fetchRoles = async () => {
   try {
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/roles', {
+    const response = await axios.get('http://localhost:5000/api/roles', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -198,21 +199,14 @@ const fetchRoles = async () => {
 }
 const fetchUsers = async () => {
   try {
-
-    
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/superadmin/users', {
+    const response = await axios.get('http://localhost:5000/api/superadmin/users', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
     })
-    
-    
-    
+
     // Check if response.data has the users array in a nested property
     users.value = response.data.users || response.data.data || response.data
-    
-    
-    
   } catch (error) {
     console.error('Error fetching users:', error)
   } finally {
@@ -221,7 +215,7 @@ const fetchUsers = async () => {
 }
 const fetchBranches = async () => {
   try {
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/superadmin/branches', {
+    const response = await axios.get('http://localhost:5000/api/superadmin/branches', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -231,7 +225,7 @@ const fetchBranches = async () => {
     console.error('Error fetching branches:', error)
   }
 }
-const handleEditUser = (user:User) => {
+const handleEditUser = (user: User) => {
   editingUser.value = { ...user }
   // Map the user data to newUser format
   newUser.value = {
@@ -300,7 +294,7 @@ const filteredUsers = computed(() => {
 })
 
 const handleUpdateUser = async () => {
-  if (!editingUser.value) return;
+  if (!editingUser.value) return
   try {
     if (!validateForm()) {
       Swal.fire({
@@ -313,7 +307,7 @@ const handleUpdateUser = async () => {
 
     isSubmitting.value = true
     const response = await axios.put(
-      `https://ims-api-id38.onrender.com/api/superadmin/users/${editingUser.value._id}/profile`,
+      `http://localhost:5000/api/superadmin/users/${editingUser.value._id}/profile`,
       newUser.value, // Use newUser instead of editingUser
       {
         headers: {
@@ -348,7 +342,8 @@ const handleUpdateUser = async () => {
       title: 'Error',
       text: errorMessage,
       customClass: {
-        confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
+        confirmButton:
+          'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
       }
     })
   } finally {
@@ -433,7 +428,7 @@ const handleAddUser = async () => {
 
     isSubmitting.value = true
     const response = await axios.post(
-      'https://ims-api-id38.onrender.com/api/superadmin/create-user',
+      'http://localhost:5000/api/superadmin/create-user',
       newUser.value,
       {
         headers: {
@@ -459,7 +454,7 @@ const handleAddUser = async () => {
       timerProgressBar: true
     })
     await fetchUsers()
-  } catch (error:any) {
+  } catch (error: any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -483,14 +478,15 @@ const handleDeleteUser = async (userId: string) => {
     confirmButtonText: 'Yes, delete it!',
     customClass: {
       confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90',
-      cancelButton: 'swal2-cancel bg-danger text-white px-4 py-2 rounded-lg hover:bg-opacity-90 ml-3'
+      cancelButton:
+        'swal2-cancel bg-danger text-white px-4 py-2 rounded-lg hover:bg-opacity-90 ml-3'
     }
   })
 
   if (result.isConfirmed) {
     try {
       isDeleting.value = true
-      await axios.delete(`https://ims-api-id38.onrender.com/api/superadmin/delete-user/${userId}`, {
+      await axios.delete(`http://localhost:5000/api/superadmin/delete-user/${userId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -504,7 +500,8 @@ const handleDeleteUser = async (userId: string) => {
         title: 'Error',
         text: errorMessage,
         customClass: {
-          confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
+          confirmButton:
+            'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
         }
       })
     } finally {
@@ -525,16 +522,17 @@ const handleToggleStatus = async (userId: string, currentStatus: boolean) => {
       cancelButtonColor: '#6B7280',
       confirmButtonText: `Yes, ${currentStatus ? 'deactivate' : 'activate'} it!`,
       customClass: {
-        confirmButton: currentStatus 
+        confirmButton: currentStatus
           ? 'swal2-confirm bg-danger text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
           : 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90',
-        cancelButton: 'swal2-cancel bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-opacity-90 ml-3'
+        cancelButton:
+          'swal2-cancel bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-opacity-90 ml-3'
       }
     })
 
     if (result.isConfirmed) {
       const response = await axios.patch(
-        `https://ims-api-id38.onrender.com/api/superadmin/toggle-user-status/${userId}`,
+        `http://localhost:5000/api/superadmin/toggle-user-status/${userId}`,
         {},
         {
           headers: {
@@ -566,22 +564,20 @@ const handleToggleStatus = async (userId: string, currentStatus: boolean) => {
       title: 'Error',
       text: errorMessage,
       customClass: {
-        confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
+        confirmButton:
+          'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
       }
     })
   }
 }
 onMounted(async () => {
-  
-  
   if (!authStore.user || !authStore.user.id) {
-    
-    await authStore.fetchCurrentUser();
-          await authStore.fetchCurrentUser();
-    }
-    
-    userInfoLoaded.value = true;
-  
+    await authStore.fetchCurrentUser()
+    await authStore.fetchCurrentUser()
+  }
+
+  userInfoLoaded.value = true
+
   fetchUsers()
   fetchRoles()
   fetchBranches()
@@ -624,77 +620,70 @@ watch(
 )
 
 // Place these after all imports and before the export
-const canAssignRole = computed(() => authStore.hasPermission('assign_roles') || authStore.hasPermission('manage_users'));
-const canCreateUser = computed(() => authStore.hasPermission('manage_users'));
+const canAssignRole = computed(
+  () => authStore.hasPermission('assign_roles') || authStore.hasPermission('manage_users')
+)
+const canCreateUser = computed(() => authStore.hasPermission('manage_users'))
 const filteredRoles = computed<Role[]>(() => {
-  const userRole = authStore.getUserRole();
-  const allRoles = roles.value as Role[];
+  const userRole = authStore.getUserRole()
+  const allRoles = roles.value as Role[]
   if (userRole === 'superadmin') {
     // Exclude superadmin and customer from the dropdown
-    return allRoles.filter(role => role.name !== 'superadmin' && role.name !== 'customer');
+    return allRoles.filter((role) => role.name !== 'superadmin' && role.name !== 'customer')
   } else if (userRole === 'admin') {
-    return allRoles.filter(role => role.name === 'staff');
+    return allRoles.filter((role) => role.name === 'staff')
   }
-  return [];
-});
+  return []
+})
 
 // Check if current user can edit a specific user
 const canEditUser = (user: User) => {
-  const currentUserRole = authStore.getUserRole();
-  const currentUserId = authStore.user?.id; // Changed from _id to id
-  const userCreatedById = user.createdBy?.user?._id;
-  
+  const currentUserRole = authStore.getUserRole()
+  const currentUserId = authStore.user?.id // Changed from _id to id
+  const userCreatedById = user.createdBy?.user?._id
 
-  
   if (currentUserRole === 'superadmin') {
-    return true;
+    return true
   } else if (currentUserRole === 'admin') {
     // Admin can only edit users they created
     // Convert both to strings for comparison to handle ObjectId vs string issues
-    const canEdit = String(userCreatedById) === String(currentUserId);
-    return canEdit;
+    const canEdit = String(userCreatedById) === String(currentUserId)
+    return canEdit
   }
-  return false;
-};
+  return false
+}
 
 // Check if current user can delete a specific user
 const canDeleteUser = (user: User) => {
-  const currentUserRole = authStore.getUserRole();
-  const currentUserId = authStore.user?.id; // Changed from _id to id
-  const userCreatedById = user.createdBy?.user?._id;
-  
+  const currentUserRole = authStore.getUserRole()
+  const currentUserId = authStore.user?.id // Changed from _id to id
+  const userCreatedById = user.createdBy?.user?._id
 
-  
   if (currentUserRole === 'superadmin') {
-    return true;
+    return true
   } else if (currentUserRole === 'admin') {
     // Admin can only delete users they created
-    const canDelete = String(userCreatedById) === String(currentUserId);
-    return canDelete;
+    const canDelete = String(userCreatedById) === String(currentUserId)
+    return canDelete
   }
-  return false;
-};
+  return false
+}
 
 // Check if current user can toggle status of a specific user
 const canToggleUserStatus = (user: User) => {
-  const currentUserRole = authStore.getUserRole();
-  const currentUserId = authStore.user?.id; // Changed from _id to id
-  const userCreatedById = user.createdBy?.user?._id;
-  
+  const currentUserRole = authStore.getUserRole()
+  const currentUserId = authStore.user?.id // Changed from _id to id
+  const userCreatedById = user.createdBy?.user?._id
 
-  
   if (currentUserRole === 'superadmin') {
-    return true;
+    return true
   } else if (currentUserRole === 'admin') {
     // Admin can only toggle status of users they created
-    const canToggle = String(userCreatedById) === String(currentUserId);
-    return canToggle;
+    const canToggle = String(userCreatedById) === String(currentUserId)
+    return canToggle
   }
-  return false;
-};
-
-
-
+  return false
+}
 </script>
 
 <template>
@@ -742,7 +731,6 @@ const canToggleUserStatus = (user: User) => {
           >
             Create User
           </button>
-        
         </div>
       </div>
     </div>
@@ -817,9 +805,10 @@ const canToggleUserStatus = (user: User) => {
                   >
                     {{ user.isActive ? 'Active' : 'Inactive' }}
                   </button>
-                  <span v-else :class="`text-sm font-medium ${
-                    user.isActive ? 'text-success' : 'text-danger'
-                  }`">
+                  <span
+                    v-else
+                    :class="`text-sm font-medium ${user.isActive ? 'text-success' : 'text-danger'}`"
+                  >
                     {{ user.isActive ? 'Active' : 'Inactive' }}
                   </span>
                 </div>
@@ -828,8 +817,10 @@ const canToggleUserStatus = (user: User) => {
                 <div class="flex items-center gap-2">
                   <span v-if="user.createdBy?.user" class="text-sm">
                     {{ user.createdBy.user.firstName }} {{ user.createdBy.user.lastName }}
-                    <span v-if="user.createdBy.user._id === authStore.user?.id" 
-                          class="ml-1 px-2 py-0.5 text-xs bg-primary text-white rounded">
+                    <span
+                      v-if="user.createdBy.user._id === authStore.user?.id"
+                      class="ml-1 px-2 py-0.5 text-xs bg-primary text-white rounded"
+                    >
                       You
                     </span>
                   </span>
@@ -838,9 +829,9 @@ const canToggleUserStatus = (user: User) => {
               </td>
               <td class="py-4.5 px-4">
                 <div class="flex items-center space-x-2">
-                  <button 
+                  <button
                     v-if="canEditUser(user)"
-                    @click="handleEditUser(user)" 
+                    @click="handleEditUser(user)"
                     class="hover:text-primary"
                     title="Edit User"
                   >
@@ -914,8 +905,10 @@ const canToggleUserStatus = (user: User) => {
                       ></path>
                     </svg>
                   </button>
-                  <span v-if="!canEditUser(user) && !canDeleteUser(user) && !canToggleUserStatus(user)" 
-                        class="text-sm text-gray-500">
+                  <span
+                    v-if="!canEditUser(user) && !canDeleteUser(user) && !canToggleUserStatus(user)"
+                    class="text-sm text-gray-500"
+                  >
                     No actions available
                   </span>
                 </div>
@@ -1218,7 +1211,15 @@ const canToggleUserStatus = (user: User) => {
                       {{ role.name }}
                     </option>
                   </select>
-                  <input v-else type="text" v-model="newUser.role" readonly class="w-full rounded border-[1.5px] border-stroke bg-gray-100 px-5 py-3 outline-none dark:border-form-strokedark dark:bg-form-input" :required="false" tabindex="-1" />
+                  <input
+                    v-else
+                    type="text"
+                    v-model="newUser.role"
+                    readonly
+                    class="w-full rounded border-[1.5px] border-stroke bg-gray-100 px-5 py-3 outline-none dark:border-form-strokedark dark:bg-form-input"
+                    :required="false"
+                    tabindex="-1"
+                  />
                 </div>
                 <div>
                   <label class="mb-2.5 block text-black dark:text-white">Employment Date</label>

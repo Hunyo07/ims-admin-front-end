@@ -33,7 +33,7 @@ const exportInventoryCountsPDF = async () => {
   try {
     // Create a new PDF document
     const doc = new jsPDF()
-    
+
     // Set margins
     const marginLeft = 15
     const marginRight = 15
@@ -58,14 +58,16 @@ const exportInventoryCountsPDF = async () => {
     const now = new Date()
     doc.setFontSize(10)
     doc.setFont('helvetica', 'normal')
-    doc.text(`Generated on: ${format(now, 'MMM dd, yyyy h:mm a')}`, pageWidth / 2, currentY, { align: 'center' })
+    doc.text(`Generated on: ${format(now, 'MMM dd, yyyy h:mm a')}`, pageWidth / 2, currentY, {
+      align: 'center'
+    })
     currentY += 15
 
     // Inventory Counts Statistics in a box
     doc.setDrawColor(240, 240, 240)
     doc.setFillColor(250, 250, 250)
     doc.roundedRect(marginLeft, currentY, contentWidth, 30, 2, 2, 'FD')
-    
+
     currentY += 8
     doc.setFontSize(14)
     doc.setFont('helvetica', 'bold')
@@ -76,14 +78,18 @@ const exportInventoryCountsPDF = async () => {
     doc.setFontSize(10)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(0, 0, 0)
-    
+
     // Create a 2x1 grid for statistics
     const colWidth = contentWidth / 2
-    
+
     // Statistics row
     doc.text(`Total Counts: ${inventoryCounts.value.length}`, marginLeft + 10, currentY)
-    doc.text(`Total Products Counted: ${getTotalProductsCounted()}`, marginLeft + 10 + colWidth, currentY)
-    
+    doc.text(
+      `Total Products Counted: ${getTotalProductsCounted()}`,
+      marginLeft + 10 + colWidth,
+      currentY
+    )
+
     currentY += 15
 
     // Inventory Counts Table
@@ -96,7 +102,7 @@ const exportInventoryCountsPDF = async () => {
     // Table headers with background
     const headers = ['Count #', 'Date', 'Items Count', 'Created By']
     const colWidths = [30, 40, 40, 60]
-    
+
     // Calculate positions for columns
     const positions = []
     let currentX = marginLeft
@@ -104,54 +110,54 @@ const exportInventoryCountsPDF = async () => {
       positions.push(currentX)
       currentX += colWidths[i]
     }
-    
+
     // Draw header background
     doc.setFillColor(240, 240, 240)
     doc.rect(marginLeft, currentY, contentWidth, lineHeight, 'F')
-    
+
     // Draw header text
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 0, 0)
-    
+
     for (let i = 0; i < headers.length; i++) {
       doc.text(headers[i], positions[i] + 2, currentY + 5)
     }
-    
+
     currentY += lineHeight + 2
 
     // Table rows
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
-    
+
     // Track items per page for pagination
     const itemsPerPage = 20
     let itemsOnCurrentPage = 0
     let totalPages = Math.ceil(filteredInventoryCounts.value.length / itemsPerPage)
     let currentPage = 1
-    
+
     // Function to add header to new pages
     const addTableHeader = () => {
       currentY = 20
-      
+
       // Add page header
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
       doc.text('Inventory Counts Report - Continued', pageWidth / 2, currentY, { align: 'center' })
       currentY += 10
-      
+
       // Draw header background
       doc.setFillColor(240, 240, 240)
       doc.rect(marginLeft, currentY, contentWidth, lineHeight, 'F')
-      
+
       // Draw header text
       doc.setFontSize(9)
       doc.setFont('helvetica', 'bold')
-      
+
       for (let i = 0; i < headers.length; i++) {
         doc.text(headers[i], positions[i] + 2, currentY + 5)
       }
-      
+
       currentY += lineHeight + 2
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(8)
@@ -166,13 +172,13 @@ const exportInventoryCountsPDF = async () => {
         itemsOnCurrentPage = 0
         addTableHeader()
       }
-      
+
       // Draw row background (alternating)
       if (index % 2 === 1) {
         doc.setFillColor(248, 248, 248)
         doc.rect(marginLeft, currentY - 1, contentWidth, lineHeight, 'F')
       }
-      
+
       // Format data
       const rowData = [
         count.countNumber,
@@ -180,12 +186,12 @@ const exportInventoryCountsPDF = async () => {
         Array.isArray(count.products) ? count.products.length.toString() : '0',
         count.createdBy?.user.firstName || 'Unknown'
       ]
-      
+
       // Draw row data
       for (let i = 0; i < rowData.length; i++) {
         doc.text(rowData[i], positions[i] + 2, currentY + 4)
       }
-      
+
       currentY += lineHeight
       itemsOnCurrentPage++
     })
@@ -196,7 +202,9 @@ const exportInventoryCountsPDF = async () => {
       doc.setFontSize(8)
       doc.setFont('helvetica', 'italic')
       doc.setTextColor(100, 100, 100)
-      doc.text(`Page ${i} of ${currentPage}`, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' })
+      doc.text(`Page ${i} of ${currentPage}`, pageWidth / 2, doc.internal.pageSize.height - 10, {
+        align: 'center'
+      })
     }
 
     doc.save(`Inventory_Counts_Report_${format(now, 'yyyy-MM-dd')}.pdf`)
@@ -210,7 +218,6 @@ const exportInventoryCountsPDF = async () => {
       showConfirmButton: false,
       timer: 3000
     })
-
   } catch (error) {
     console.error('Error exporting inventory counts to PDF:', error)
     Swal.fire({
@@ -223,58 +230,58 @@ const exportInventoryCountsPDF = async () => {
 
 // Add exportInventoryCountDetailsPDF function
 const exportInventoryCountDetailsPDF = () => {
-  if (!selectedCount.value) return;
-  const count = selectedCount.value.inventoryCount;
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const marginLeft = 20;
-  const marginRight = 20;
-  const pageWidth = doc.internal.pageSize.width;
-  const contentWidth = pageWidth - marginLeft - marginRight;
-  let currentY = 20;
+  if (!selectedCount.value) return
+  const count = selectedCount.value.inventoryCount
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const marginLeft = 20
+  const marginRight = 20
+  const pageWidth = doc.internal.pageSize.width
+  const contentWidth = pageWidth - marginLeft - marginRight
+  let currentY = 20
 
   // Title
-  doc.setFontSize(22);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Inventory Count Details', pageWidth / 2, currentY, { align: 'center' });
-  currentY += 12;
+  doc.setFontSize(22)
+  doc.setFont('helvetica', 'bold')
+  doc.text('Inventory Count Details', pageWidth / 2, currentY, { align: 'center' })
+  currentY += 12
 
   // Line
-  doc.setDrawColor(220, 220, 220);
-  doc.setLineWidth(0.5);
-  doc.line(marginLeft, currentY, pageWidth - marginLeft, currentY);
-  currentY += 8;
+  doc.setDrawColor(220, 220, 220)
+  doc.setLineWidth(0.5)
+  doc.line(marginLeft, currentY, pageWidth - marginLeft, currentY)
+  currentY += 8
 
   // Count Info Box
-  doc.setDrawColor(240, 240, 240);
-  doc.setFillColor(250, 250, 250);
-  doc.roundedRect(marginLeft, currentY, contentWidth, 32, 2, 2, 'FD');
-  let infoY = currentY + 8;
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(60, 60, 60);
-  doc.text('Count Information', marginLeft + 5, infoY);
-  infoY += 7;
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(0, 0, 0);
-  doc.text(`Count Number: ${count.countNumber}`, marginLeft + 5, infoY);
-  infoY += 5;
-  doc.text(`Count Date: ${formatDate(count.countDate)}`, marginLeft + 5, infoY);
-  infoY += 5;
-  doc.text(`Created: ${formatDate(count.createdAt)}`, marginLeft + 5, infoY);
-  infoY += 5;
-  doc.text(`Created By: ${count.createdBy?.user.firstName || 'Unknown'}`, marginLeft + 5, infoY);
-  currentY += 36;
+  doc.setDrawColor(240, 240, 240)
+  doc.setFillColor(250, 250, 250)
+  doc.roundedRect(marginLeft, currentY, contentWidth, 32, 2, 2, 'FD')
+  let infoY = currentY + 8
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(60, 60, 60)
+  doc.text('Count Information', marginLeft + 5, infoY)
+  infoY += 7
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(0, 0, 0)
+  doc.text(`Count Number: ${count.countNumber}`, marginLeft + 5, infoY)
+  infoY += 5
+  doc.text(`Count Date: ${formatDate(count.countDate)}`, marginLeft + 5, infoY)
+  infoY += 5
+  doc.text(`Created: ${formatDate(count.createdAt)}`, marginLeft + 5, infoY)
+  infoY += 5
+  doc.text(`Created By: ${count.createdBy?.user.firstName || 'Unknown'}`, marginLeft + 5, infoY)
+  currentY += 36
 
   // Items Table
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Count Items', marginLeft, currentY);
-  currentY += 8;
+  doc.setFontSize(12)
+  doc.setFont('helvetica', 'bold')
+  doc.text('Count Items', marginLeft, currentY)
+  currentY += 8
   autoTable(doc, {
     startY: currentY,
     head: [['Product Name', 'SKU', 'Expected Qty', 'Notes']],
-    body: count.products.map(item => [
+    body: count.products.map((item) => [
       item.product.name,
       item.product.sku,
       String(item.expectedQuantity),
@@ -290,41 +297,41 @@ const exportInventoryCountDetailsPDF = () => {
       3: { cellWidth: 50 }
     },
     margin: { left: marginLeft, right: marginRight }
-  });
-  currentY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : currentY + 40;
+  })
+  currentY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : currentY + 40
 
   // Notes
   if (selectedCount.value.notes) {
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Notes', marginLeft, currentY);
-    currentY += 7;
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.setDrawColor(240, 240, 240);
-    doc.setFillColor(250, 250, 250);
-    doc.roundedRect(marginLeft, currentY, contentWidth, 20, 2, 2, 'FD');
-    const splitNotes = doc.splitTextToSize(selectedCount.value.notes, contentWidth - 10);
-    doc.text(splitNotes, marginLeft + 5, currentY + 5);
+    doc.setFontSize(12)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Notes', marginLeft, currentY)
+    currentY += 7
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setDrawColor(240, 240, 240)
+    doc.setFillColor(250, 250, 250)
+    doc.roundedRect(marginLeft, currentY, contentWidth, 20, 2, 2, 'FD')
+    const splitNotes = doc.splitTextToSize(selectedCount.value.notes, contentWidth - 10)
+    doc.text(splitNotes, marginLeft + 5, currentY + 5)
   }
 
   // Footer
-  const pageCount = doc.internal.getNumberOfPages();
+  const pageCount = doc.internal.getNumberOfPages()
   for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'italic');
-    doc.setTextColor(100, 100, 100);
+    doc.setPage(i)
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'italic')
+    doc.setTextColor(100, 100, 100)
     doc.text(
       `Created by: ${count.createdBy?.user.firstName || 'Unknown'} | Page ${i} of ${pageCount}`,
       pageWidth / 2,
       doc.internal.pageSize.height - 10,
       { align: 'center' }
-    );
+    )
   }
 
-  doc.save(`Inventory_Count_Details_${count.countNumber}.pdf`);
-};
+  doc.save(`Inventory_Count_Details_${count.countNumber}.pdf`)
+}
 
 // Helper function to get total products counted
 const getTotalProductsCounted = () => {
@@ -361,7 +368,7 @@ const prevPage = () => {
 const fetchInventoryCounts = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/inventory/counts', {
+    const response = await axios.get('http://localhost:5000/api/inventory/counts', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -383,7 +390,7 @@ const fetchInventoryCounts = async () => {
 // Fetch products
 const fetchProducts = async () => {
   try {
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/products', {
+    const response = await axios.get('http://localhost:5000/api/products', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -409,7 +416,7 @@ const setExpectedQuantity = async (index) => {
   const productId = newCount.value.items[index].productId
   if (productId) {
     try {
-      const response = await axios.get(`https://ims-api-id38.onrender.com/api/products/${productId}`, {
+      const response = await axios.get(`http://localhost:5000/api/products/${productId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -459,7 +466,7 @@ const createInventoryCount = async () => {
     }
 
     // Create the inventory count
-    const response = await axios.post('https://ims-api-id38.onrender.com/api/inventory/counts', payload, {
+    const response = await axios.post('http://localhost:5000/api/inventory/counts', payload, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -470,7 +477,7 @@ const createInventoryCount = async () => {
 
     // Update product counts
     await axios.patch(
-      `https://ims-api-id38.onrender.com/api/inventory/counts/${countId}/products`,
+      `http://localhost:5000/api/inventory/counts/${countId}/products`,
       {
         products: newCount.value.items.map((item) => ({
           productId: item.productId,
@@ -487,7 +494,7 @@ const createInventoryCount = async () => {
 
     // Update status to completed
     await axios.patch(
-      `https://ims-api-id38.onrender.com/api/inventory/counts/${countId}/status`,
+      `http://localhost:5000/api/inventory/counts/${countId}/status`,
       {
         status: 'completed'
       },
@@ -500,7 +507,7 @@ const createInventoryCount = async () => {
 
     // Apply the inventory count to update stock levels
     await axios.post(
-      `https://ims-api-id38.onrender.com/api/inventory/counts/${countId}/apply`,
+      `http://localhost:5000/api/inventory/counts/${countId}/apply`,
       {},
       {
         headers: {
@@ -555,7 +562,7 @@ const viewCountDetails = async (countId) => {
   }
   try {
     isLoading.value = true
-    const response = await axios.get(`https://ims-api-id38.onrender.com/api/inventory/counts/${countId}`, {
+    const response = await axios.get(`http://localhost:5000/api/inventory/counts/${countId}`, {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -998,7 +1005,9 @@ onMounted(async () => {
       >
         <div class="border-b border-stroke px-6.5 py-4 dark:border-strokedark">
           <div class="flex items-center justify-between">
-            <h3 class="text-xl font-semibold text-black dark:text-white">Inventory Count Details</h3>
+            <h3 class="text-xl font-semibold text-black dark:text-white">
+              Inventory Count Details
+            </h3>
             <button @click="showDetailsModal = false" class="text-gray-500 hover:text-red-500">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -1018,7 +1027,6 @@ onMounted(async () => {
           </div>
         </div>
         <div class="p-6.5">
-       
           <div class="grid grid-cols-2 gap-6 mb-6">
             <div class="col-span-1">
               <h4 class="text-lg font-semibold mb-3">Count Information</h4>

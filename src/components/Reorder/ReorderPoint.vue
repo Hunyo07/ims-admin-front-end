@@ -64,7 +64,7 @@ const editForm = ref({
 const fetchProducts = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/products/', {
+    const response = await axios.get('http://localhost:5000/api/products/', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -99,7 +99,7 @@ const fetchProducts = async () => {
 // Add this new function to fetch reorder points
 const fetchReorderPoints = async () => {
   try {
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/reorder', {
+    const response = await axios.get('http://localhost:5000/api/reorder', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -149,7 +149,7 @@ const saveReorderSettings = async () => {
     if (selectedProduct.value.reorderPointId) {
       // Update existing reorder point
       response = await axios.put(
-        `https://ims-api-id38.onrender.com/api/reorder/${selectedProduct.value.reorderPointId}`,
+        `http://localhost:5000/api/reorder/${selectedProduct.value.reorderPointId}`,
         {
           minimumStock: editForm.value.reorderLevel,
           reorderQuantity: editForm.value.reorderQuantity,
@@ -176,7 +176,7 @@ const saveReorderSettings = async () => {
         supplierId: selectedProduct.value.supplier?._id
       }
 
-      response = await axios.post('https://ims-api-id38.onrender.com/api/reorder', requestData, {
+      response = await axios.post('http://localhost:5000/api/reorder', requestData, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -264,16 +264,16 @@ const bulkForm = ref({
   reorderQuantity: 10
 })
 interface Category {
-  _id: string;
-  name: string;
+  _id: string
+  name: string
   // Add other fields as needed
 }
-const categories = ref<Category[]>([]);
+const categories = ref<Category[]>([])
 
 // Fetch categories for bulk update
 const fetchCategories = async () => {
   try {
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/categories', {
+    const response = await axios.get('http://localhost:5000/api/categories', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -297,7 +297,7 @@ const applyBulkUpdate = async () => {
     }
 
     const response = await axios.post(
-      'https://ims-api-id38.onrender.com/api/reorder/bulk-update',
+      'http://localhost:5000/api/reorder/bulk-update',
       {
         products: products.value
           .filter((p) => p.category?._id === bulkForm.value.categoryId)
@@ -347,7 +347,7 @@ const triggerReorderCheck = async () => {
       }
     })
 
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/reorder/check', {
+    const response = await axios.get('http://localhost:5000/api/reorder/check', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -386,7 +386,7 @@ const triggerAutoReorder = async () => {
     })
 
     const response = await axios.post(
-      'https://ims-api-id38.onrender.com/api/reorder/auto-reorder',
+      'http://localhost:5000/api/reorder/auto-reorder',
       {},
       {
         headers: {
@@ -416,336 +416,339 @@ const triggerAutoReorder = async () => {
 
 <template>
   <div>
-  <div
-    class="rounded-sm border border-stroke bg-white px-5 pt-6 pb-2.5 shadow-default dark:border-strokedark dark:bg-boxdark sm:px-7.5 xl:pb-1"
-  >
-    <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
-      <h4 class="text-xl font-semibold text-black dark:text-white">Reorder Point Settings</h4>
+    <div
+      class="rounded-sm border border-stroke bg-white px-5 pt-6 pb-2.5 shadow-default dark:border-strokedark dark:bg-boxdark sm:px-7.5 xl:pb-1"
+    >
+      <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <h4 class="text-xl font-semibold text-black dark:text-white">Reorder Point Settings</h4>
 
-      <div class="flex flex-wrap gap-3">
-        <div class="relative">
-          <input
-            type="text"
-            placeholder="Search products..."
-            v-model="searchQuery"
-            class="rounded-lg border border-stroke bg-transparent py-2 pl-10 pr-4 outline-none focus:border-primary dark:border-form-strokedark dark:bg-form-input"
-          />
-          <span class="absolute left-3 top-2.5">
-            <svg class="fill-body h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-              <path
-                d="M18.031 16.617l4.283 4.282-1.415 1.415-4.282-4.283A8.96 8.96 0 0 1 11 20c-4.968 0-9-4.032-9-9s4.032-9 9-9 9 4.032 9 9a8.96 8.96 0 0 1-1.969 5.617zm-2.006-.742A6.977 6.977 0 0 0 18 11c0-3.868-3.133-7-7-7-3.868 0-7 3.132-7 7 0 3.867 3.132 7 7 7a6.977 6.977 0 0 0 4.875-1.975l.15-.15z"
-              />
-            </svg>
-          </span>
+        <div class="flex flex-wrap gap-3">
+          <div class="relative">
+            <input
+              type="text"
+              placeholder="Search products..."
+              v-model="searchQuery"
+              class="rounded-lg border border-stroke bg-transparent py-2 pl-10 pr-4 outline-none focus:border-primary dark:border-form-strokedark dark:bg-form-input"
+            />
+            <span class="absolute left-3 top-2.5">
+              <svg class="fill-body h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path
+                  d="M18.031 16.617l4.283 4.282-1.415 1.415-4.282-4.283A8.96 8.96 0 0 1 11 20c-4.968 0-9-4.032-9-9s4.032-9 9-9 9 4.032 9 9a8.96 8.96 0 0 1-1.969 5.617zm-2.006-.742A6.977 6.977 0 0 0 18 11c0-3.868-3.133-7-7-7-3.868 0-7 3.132-7 7 0 3.867 3.132 7 7 7a6.977 6.977 0 0 0 4.875-1.975l.15-.15z"
+                />
+              </svg>
+            </span>
+          </div>
+
+          <select
+            v-model="stockFilter"
+            class="rounded-lg border border-stroke bg-transparent py-2 px-4 outline-none focus:border-primary dark:border-form-strokedark dark:bg-form-input"
+          >
+            <option value="all">All Products</option>
+            <option value="low">Low Stock</option>
+            <option value="out">Out of Stock</option>
+          </select>
+
+          <button
+            @click="showBulkModal = true"
+            class="rounded-lg bg-primary py-2 px-4 text-white hover:bg-opacity-90"
+          >
+            Bulk Update
+          </button>
+
+          <button
+            @click="triggerReorderCheck"
+            class="rounded-lg bg-success py-2 px-4 text-white hover:bg-opacity-90"
+          >
+            Run Reorder Check
+          </button>
+        </div>
+      </div>
+
+      <div class="max-w-full overflow-x-auto">
+        <div v-if="isLoading" class="flex justify-center py-8">
+          <div
+            class="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"
+          ></div>
         </div>
 
-        <select
-          v-model="stockFilter"
-          class="rounded-lg border border-stroke bg-transparent py-2 px-4 outline-none focus:border-primary dark:border-form-strokedark dark:bg-form-input"
-        >
-          <option value="all">All Products</option>
-          <option value="low">Low Stock</option>
-          <option value="out">Out of Stock</option>
-        </select>
-
-        <button
-          @click="showBulkModal = true"
-          class="rounded-lg bg-primary py-2 px-4 text-white hover:bg-opacity-90"
-        >
-          Bulk Update
-        </button>
-
-        <button
-          @click="triggerReorderCheck"
-          class="rounded-lg bg-success py-2 px-4 text-white hover:bg-opacity-90"
-        >
-          Run Reorder Check
-        </button>
-      </div>
-    </div>
-
-    <div class="max-w-full overflow-x-auto">
-      <div v-if="isLoading" class="flex justify-center py-8">
-        <div
-          class="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"
-        ></div>
-      </div>
-
-      <div v-else-if="products.length === 0" class="py-8 text-center">
-        <p class="text-gray-500">No products found. Please check your API connection.</p>
-        <pre class="mt-4 text-xs text-left bg-gray-100 p-4 rounded max-w-lg mx-auto overflow-auto">
+        <div v-else-if="products.length === 0" class="py-8 text-center">
+          <p class="text-gray-500">No products found. Please check your API connection.</p>
+          <pre
+            class="mt-4 text-xs text-left bg-gray-100 p-4 rounded max-w-lg mx-auto overflow-auto"
+          >
           Debug info:
           Products array length: {{ products.length }}
           Filtered products length: {{ filteredProducts.length }}
           Searched products length: {{ searchedProducts.length }}
-        </pre>
-      </div>
-
-      <table v-else class="w-full table-auto">
-        <thead>
-          <tr class="bg-gray-2 text-left dark:bg-meta-4">
-            <th class="py-4 px-4 font-medium text-black dark:text-white">Product</th>
-            <th class="py-4 px-4 font-medium text-black dark:text-white">SKU</th>
-            <th class="py-4 px-4 font-medium text-black dark:text-white">Supplier</th>
-            <th class="py-4 px-4 font-medium text-black dark:text-white">Current Stock</th>
-            <th class="py-4 px-4 font-medium text-black dark:text-white">Reorder Level</th>
-            <th class="py-4 px-4 font-medium text-black dark:text-white">Reorder Quantity</th>
-            <th class="py-4 px-4 font-medium text-black dark:text-white">Status</th>
-            <th class="py-4 px-4 font-medium text-black dark:text-white">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="paginatedReorderPoints.length === 0">
-            <td colspan="9" class="py-4 px-4 text-center text-gray-500">No products found</td>
-          </tr>
-          <tr
-            v-for="product in paginatedReorderPoints"
-            :key="product._id"
-            class="border-b border-[#eee] dark:border-strokedark"
+        </pre
           >
-            <td class="py-4 px-4">
-              <h5 class="font-medium text-black dark:text-white">{{ product.name }}</h5>
-              <p class="text-sm">{{ product.category?.name || 'N/A' }}</p>
-            </td>
-            <td class="py-4 px-4">{{ product.sku }}</td>
-            <td class="py-4 px-4">{{ product.supplier?.name || 'N/A' }}</td>
-            <td class="py-4 px-4">{{ product.currentStock }}</td>
-            <td class="py-4 px-4">{{ product.reorderLevel || 'Not set' }}</td>
-            <td class="py-4 px-4">{{ product.reorderQuantity || 'Not set' }}</td>
-            <td class="py-4 px-4">
-              <span
-                class="inline-flex rounded-full px-3 py-1 text-sm font-medium"
-                :class="{
-                  'bg-success bg-opacity-10 text-success': getStockStatus(product) === 'normal',
-                  'bg-warning bg-opacity-10 text-warning': getStockStatus(product) === 'low',
-                  'bg-danger bg-opacity-10 text-danger': getStockStatus(product) === 'out'
-                }"
-              >
-                {{
-                  getStockStatus(product) === 'normal'
-                    ? 'Normal'
-                    : getStockStatus(product) === 'low'
-                      ? 'Low Stock'
-                      : 'Out of Stock'
-                }}
-              </span>
-            </td>
-            <td class="py-4 px-4">
-              <button @click="openEditModal(product)" class="hover:text-primary">
-                <svg
-                  class="h-5 w-5"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+        </div>
+
+        <table v-else class="w-full table-auto">
+          <thead>
+            <tr class="bg-gray-2 text-left dark:bg-meta-4">
+              <th class="py-4 px-4 font-medium text-black dark:text-white">Product</th>
+              <th class="py-4 px-4 font-medium text-black dark:text-white">SKU</th>
+              <th class="py-4 px-4 font-medium text-black dark:text-white">Supplier</th>
+              <th class="py-4 px-4 font-medium text-black dark:text-white">Current Stock</th>
+              <th class="py-4 px-4 font-medium text-black dark:text-white">Reorder Level</th>
+              <th class="py-4 px-4 font-medium text-black dark:text-white">Reorder Quantity</th>
+              <th class="py-4 px-4 font-medium text-black dark:text-white">Status</th>
+              <th class="py-4 px-4 font-medium text-black dark:text-white">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="paginatedReorderPoints.length === 0">
+              <td colspan="9" class="py-4 px-4 text-center text-gray-500">No products found</td>
+            </tr>
+            <tr
+              v-for="product in paginatedReorderPoints"
+              :key="product._id"
+              class="border-b border-[#eee] dark:border-strokedark"
+            >
+              <td class="py-4 px-4">
+                <h5 class="font-medium text-black dark:text-white">{{ product.name }}</h5>
+                <p class="text-sm">{{ product.category?.name || 'N/A' }}</p>
+              </td>
+              <td class="py-4 px-4">{{ product.sku }}</td>
+              <td class="py-4 px-4">{{ product.supplier?.name || 'N/A' }}</td>
+              <td class="py-4 px-4">{{ product.currentStock }}</td>
+              <td class="py-4 px-4">{{ product.reorderLevel || 'Not set' }}</td>
+              <td class="py-4 px-4">{{ product.reorderQuantity || 'Not set' }}</td>
+              <td class="py-4 px-4">
+                <span
+                  class="inline-flex rounded-full px-3 py-1 text-sm font-medium"
+                  :class="{
+                    'bg-success bg-opacity-10 text-success': getStockStatus(product) === 'normal',
+                    'bg-warning bg-opacity-10 text-warning': getStockStatus(product) === 'low',
+                    'bg-danger bg-opacity-10 text-danger': getStockStatus(product) === 'out'
+                  }"
                 >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                  />
-                </svg>
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <!-- Pagination Controls -->
-      <div class="flex items-center justify-between p-4">
-        <div class="flex items-center gap-2">
-          <select
-            v-model="itemsPerPage"
-            class="rounded border border-stroke bg-transparent px-2 py-1"
-          >
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="20">20</option>
-          </select>
-          <span>Items per page</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <button
-            @click="prevPage"
-            :disabled="currentPage === 1"
-            class="rounded px-3 py-1 disabled:opacity-50"
-          >
-            Previous
-          </button>
-          <span>Page {{ currentPage }} of {{ totalPages }}</span>
-          <button
-            @click="nextPage"
-            :disabled="currentPage === totalPages"
-            class="rounded px-3 py-1 disabled:opacity-50"
-          >
-            Next
-          </button>
+                  {{
+                    getStockStatus(product) === 'normal'
+                      ? 'Normal'
+                      : getStockStatus(product) === 'low'
+                        ? 'Low Stock'
+                        : 'Out of Stock'
+                  }}
+                </span>
+              </td>
+              <td class="py-4 px-4">
+                <button @click="openEditModal(product)" class="hover:text-primary">
+                  <svg
+                    class="h-5 w-5"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                  </svg>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <!-- Pagination Controls -->
+        <div class="flex items-center justify-between p-4">
+          <div class="flex items-center gap-2">
+            <select
+              v-model="itemsPerPage"
+              class="rounded border border-stroke bg-transparent px-2 py-1"
+            >
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="20">20</option>
+            </select>
+            <span>Items per page</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              @click="prevPage"
+              :disabled="currentPage === 1"
+              class="rounded px-3 py-1 disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <span>Page {{ currentPage }} of {{ totalPages }}</span>
+            <button
+              @click="nextPage"
+              :disabled="currentPage === totalPages"
+              class="rounded px-3 py-1 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Edit Modal -->
-  <div
-    v-if="showEditModal"
-    class="fixed inset-0 z-999 flex items-center justify-center overflow-y-auto bg-black bg-opacity-50"
-  >
-    <div class="relative w-full max-w-lg rounded-lg bg-white p-8 dark:bg-boxdark">
-      <div class="mb-6 flex items-center justify-between">
-        <h3 class="text-xl font-semibold">Edit Reorder Settings</h3>
-        <button @click="showEditModal = false" class="hover:text-danger">
-          <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M6 18L18 6M6 6l12 12"
+    <!-- Edit Modal -->
+    <div
+      v-if="showEditModal"
+      class="fixed inset-0 z-999 flex items-center justify-center overflow-y-auto bg-black bg-opacity-50"
+    >
+      <div class="relative w-full max-w-lg rounded-lg bg-white p-8 dark:bg-boxdark">
+        <div class="mb-6 flex items-center justify-between">
+          <h3 class="text-xl font-semibold">Edit Reorder Settings</h3>
+          <button @click="showEditModal = false" class="hover:text-danger">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <div v-if="selectedProduct" class="space-y-4">
+          <div>
+            <h4 class="font-medium">{{ selectedProduct.name }}</h4>
+            <p class="text-sm text-gray-500">SKU: {{ selectedProduct.sku }}</p>
+            <p class="text-sm text-gray-500">Current Stock: {{ selectedProduct.currentStock }}</p>
+          </div>
+
+          <div>
+            <label class="mb-2.5 block text-black dark:text-white">Reorder Level</label>
+            <input
+              type="number"
+              v-model="editForm.reorderLevel"
+              min="0"
+              class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
             />
-          </svg>
-        </button>
-      </div>
+            <p class="mt-1 text-xs text-gray-500">Stock level at which to trigger a reorder</p>
+          </div>
 
-      <div v-if="selectedProduct" class="space-y-4">
-        <div>
-          <h4 class="font-medium">{{ selectedProduct.name }}</h4>
-          <p class="text-sm text-gray-500">SKU: {{ selectedProduct.sku }}</p>
-          <p class="text-sm text-gray-500">Current Stock: {{ selectedProduct.currentStock }}</p>
-        </div>
-
-        <div>
-          <label class="mb-2.5 block text-black dark:text-white">Reorder Level</label>
-          <input
-            type="number"
-            v-model="editForm.reorderLevel"
-            min="0"
-            class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          />
-          <p class="mt-1 text-xs text-gray-500">Stock level at which to trigger a reorder</p>
-        </div>
-
-        <div>
-          <label class="mb-2.5 block text-black dark:text-white">Maximum Stock</label>
-          <input
-            type="number"
-            v-model="editForm.maxStock"
-            min="0"
-            class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          />
-          <p class="mt-1 text-xs text-gray-500">Maximum stock level to maintain</p>
-        </div>
-
-        <div>
-          <label class="mb-2.5 block text-black dark:text-white">Reorder Quantity</label>
-          <input
-            type="number"
-            v-model="editForm.reorderQuantity"
-            min="1"
-            class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          />
-          <p class="mt-1 text-xs text-gray-500">
-            Default quantity to reorder if maximum stock is not set
-          </p>
-        </div>
-
-        <div class="mt-6 flex justify-end space-x-4">
-          <button
-            @click="showEditModal = false"
-            class="rounded border border-stroke px-6 py-2 text-black hover:border-gray-300 dark:border-strokedark dark:text-white dark:hover:border-gray-600"
-          >
-            Cancel
-          </button>
-          <button
-            @click="saveReorderSettings"
-            class="rounded bg-primary px-6 py-2 text-white hover:bg-opacity-90"
-          >
-            Save Changes
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Bulk Update Modal -->
-  <div
-    v-if="showBulkModal"
-    class="fixed inset-0 z-999 flex items-center justify-center overflow-y-auto bg-black bg-opacity-50"
-  >
-    <div class="relative w-full max-w-lg rounded-lg bg-white p-8 dark:bg-boxdark">
-      <div class="mb-6 flex items-center justify-between">
-        <h3 class="text-xl font-semibold">Bulk Update Reorder Settings</h3>
-        <button @click="showBulkModal = false" class="hover:text-danger">
-          <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M6 18L18 6M6 6l12 12"
+          <div>
+            <label class="mb-2.5 block text-black dark:text-white">Maximum Stock</label>
+            <input
+              type="number"
+              v-model="editForm.maxStock"
+              min="0"
+              class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
             />
-          </svg>
-        </button>
+            <p class="mt-1 text-xs text-gray-500">Maximum stock level to maintain</p>
+          </div>
+
+          <div>
+            <label class="mb-2.5 block text-black dark:text-white">Reorder Quantity</label>
+            <input
+              type="number"
+              v-model="editForm.reorderQuantity"
+              min="1"
+              class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+            />
+            <p class="mt-1 text-xs text-gray-500">
+              Default quantity to reorder if maximum stock is not set
+            </p>
+          </div>
+
+          <div class="mt-6 flex justify-end space-x-4">
+            <button
+              @click="showEditModal = false"
+              class="rounded border border-stroke px-6 py-2 text-black hover:border-gray-300 dark:border-strokedark dark:text-white dark:hover:border-gray-600"
+            >
+              Cancel
+            </button>
+            <button
+              @click="saveReorderSettings"
+              class="rounded bg-primary px-6 py-2 text-white hover:bg-opacity-90"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
       </div>
+    </div>
 
-      <div class="space-y-4">
-        <div>
-          <label class="mb-2.5 block text-black dark:text-white">Category</label>
-          <select
-            v-model="bulkForm.categoryId"
-            class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          >
-            <option value="">Select a category</option>
-            <option v-for="category in categories" :key="category._id" :value="category._id">
-              {{ category.name }}
-            </option>
-          </select>
-          <p class="mt-1 text-xs text-gray-500">All products in this category will be updated</p>
-        </div>
-
-        <div>
-          <label class="mb-2.5 block text-black dark:text-white">Reorder Level</label>
-          <input
-            type="number"
-            v-model="bulkForm.reorderLevel"
-            min="0"
-            class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          />
-        </div>
-
-        <div>
-          <label class="mb-2.5 block text-black dark:text-white">Maximum Stock</label>
-          <input
-            type="number"
-            v-model="bulkForm.maxStock"
-            min="0"
-            class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          />
-        </div>
-
-        <div>
-          <label class="mb-2.5 block text-black dark:text-white">Reorder Quantity</label>
-          <input
-            type="number"
-            v-model="bulkForm.reorderQuantity"
-            min="1"
-            class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          />
-        </div>
-
-        <div class="mt-6 flex justify-end space-x-4">
-          <button
-            @click="showBulkModal = false"
-            class="rounded border border-stroke px-6 py-2 text-black hover:border-gray-300 dark:border-strokedark dark:text-white dark:hover:border-gray-600"
-          >
-            Cancel
+    <!-- Bulk Update Modal -->
+    <div
+      v-if="showBulkModal"
+      class="fixed inset-0 z-999 flex items-center justify-center overflow-y-auto bg-black bg-opacity-50"
+    >
+      <div class="relative w-full max-w-lg rounded-lg bg-white p-8 dark:bg-boxdark">
+        <div class="mb-6 flex items-center justify-between">
+          <h3 class="text-xl font-semibold">Bulk Update Reorder Settings</h3>
+          <button @click="showBulkModal = false" class="hover:text-danger">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
           </button>
-          <button
-            @click="applyBulkUpdate"
-            class="rounded bg-primary px-6 py-2 text-white hover:bg-opacity-90"
-          >
-            Apply to All
-          </button>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="mb-2.5 block text-black dark:text-white">Category</label>
+            <select
+              v-model="bulkForm.categoryId"
+              class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+            >
+              <option value="">Select a category</option>
+              <option v-for="category in categories" :key="category._id" :value="category._id">
+                {{ category.name }}
+              </option>
+            </select>
+            <p class="mt-1 text-xs text-gray-500">All products in this category will be updated</p>
+          </div>
+
+          <div>
+            <label class="mb-2.5 block text-black dark:text-white">Reorder Level</label>
+            <input
+              type="number"
+              v-model="bulkForm.reorderLevel"
+              min="0"
+              class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+            />
+          </div>
+
+          <div>
+            <label class="mb-2.5 block text-black dark:text-white">Maximum Stock</label>
+            <input
+              type="number"
+              v-model="bulkForm.maxStock"
+              min="0"
+              class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+            />
+          </div>
+
+          <div>
+            <label class="mb-2.5 block text-black dark:text-white">Reorder Quantity</label>
+            <input
+              type="number"
+              v-model="bulkForm.reorderQuantity"
+              min="1"
+              class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+            />
+          </div>
+
+          <div class="mt-6 flex justify-end space-x-4">
+            <button
+              @click="showBulkModal = false"
+              class="rounded border border-stroke px-6 py-2 text-black hover:border-gray-300 dark:border-strokedark dark:text-white dark:hover:border-gray-600"
+            >
+              Cancel
+            </button>
+            <button
+              @click="applyBulkUpdate"
+              class="rounded bg-primary px-6 py-2 text-white hover:bg-opacity-90"
+            >
+              Apply to All
+            </button>
+          </div>
         </div>
       </div>
     </div>
   </div>
-</div>
 </template>

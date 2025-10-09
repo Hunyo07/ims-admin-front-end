@@ -43,7 +43,9 @@ const daysOfMonth = Array.from({ length: 31 }, (_, i) => ({ value: i + 1, label:
 
 // Update time input when hour/minute changes
 const updateTimeFromSettings = () => {
-  timeInput.value = `${scheduleSettings.value.hour.toString().padStart(2, '0')}:${scheduleSettings.value.minute.toString().padStart(2, '0')}`
+  timeInput.value = `${scheduleSettings.value.hour
+    .toString()
+    .padStart(2, '0')}:${scheduleSettings.value.minute.toString().padStart(2, '0')}`
 }
 
 // Update hour/minute when time input changes
@@ -57,7 +59,7 @@ const updateSettingsFromTime = () => {
 const fetchSettings = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/settings', {
+    const response = await axios.get('http://localhost:5000/api/settings', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -85,7 +87,7 @@ const saveSettings = async () => {
     updateSettingsFromTime() // Ensure hour/minute are updated from time input
     isLoading.value = true
     await axios.put(
-      'https://ims-api-id38.onrender.com/api/settings/auto-reorder-schedule',
+      'http://localhost:5000/api/settings/auto-reorder-schedule',
       scheduleSettings.value,
       {
         headers: {
@@ -142,13 +144,17 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+  <div
+    class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark"
+  >
     <div class="border-b border-stroke px-4 py-3 dark:border-strokedark">
       <h3 class="font-medium text-black dark:text-white">Auto-Reorder Schedule</h3>
     </div>
     <div class="p-4">
       <div v-if="isLoading" class="flex justify-center py-4">
-        <div class="animate-spin h-6 w-6 border-3 border-primary border-t-transparent rounded-full"></div>
+        <div
+          class="animate-spin h-6 w-6 border-3 border-primary border-t-transparent rounded-full"
+        ></div>
       </div>
       <div v-else>
         <!-- Enable/Disable Toggle and Current Schedule -->
@@ -162,7 +168,9 @@ onMounted(() => {
                 class="absolute left-1 top-1 h-5 w-5 rounded-full bg-white transition"
               ></div>
             </div>
-            <span class="ml-2 text-sm font-medium text-black dark:text-white">Enable Auto-Reorder</span>
+            <span class="ml-2 text-sm font-medium text-black dark:text-white"
+              >Enable Auto-Reorder</span
+            >
           </label>
           <div class="text-xs text-meta-4">{{ scheduleDescription }}</div>
         </div>
@@ -184,7 +192,9 @@ onMounted(() => {
 
           <!-- Time (Combined Hour and Minute) -->
           <div class="col-span-2 sm:col-span-1">
-            <label class="mb-1 block text-sm text-black dark:text-white">Time (24-hour format)</label>
+            <label class="mb-1 block text-sm text-black dark:text-white"
+              >Time (24-hour format)</label
+            >
             <input
               type="time"
               v-model="timeInput"
@@ -199,7 +209,9 @@ onMounted(() => {
               v-model="scheduleSettings.dayOfWeek"
               class="w-full rounded border-[1.5px] border-stroke bg-transparent px-3 py-2 text-sm outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
             >
-              <option v-for="day in daysOfWeek" :key="day.value" :value="day.value">{{ day.label }}</option>
+              <option v-for="day in daysOfWeek" :key="day.value" :value="day.value">
+                {{ day.label }}
+              </option>
             </select>
           </div>
 
@@ -210,7 +222,9 @@ onMounted(() => {
               v-model="scheduleSettings.dayOfMonth"
               class="w-full rounded border-[1.5px] border-stroke bg-transparent px-3 py-2 text-sm outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
             >
-              <option v-for="day in daysOfMonth" :key="day.value" :value="day.value">{{ day.label }}</option>
+              <option v-for="day in daysOfMonth" :key="day.value" :value="day.value">
+                {{ day.label }}
+              </option>
             </select>
           </div>
         </div>

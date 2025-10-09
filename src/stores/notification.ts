@@ -59,7 +59,7 @@ export const useNotificationStore = defineStore('notification', {
         const { useAuthStore } = await import('./auth')
         const authStore = useAuthStore()
         this.loading = true
-        const response = await axios.get('https://ims-api-id38.onrender.com/api/notifications', {
+        const response = await axios.get('http://localhost:5000/api/notifications', {
           params: { limit: 10 },
           headers: {
             Authorization: `Bearer ${authStore.token}`
@@ -85,7 +85,7 @@ export const useNotificationStore = defineStore('notification', {
       const { useAuthStore } = await import('./auth')
       const authStore = useAuthStore()
       try {
-        await axios.patch(`https://ims-api-id38.onrender.com/notifications/${id}/read`, {
+        await axios.patch(`http://localhost:5000/notifications/${id}/read`, {
           headers: {
             Authorization: `Bearer ${authStore.token}`
           }
@@ -107,7 +107,7 @@ export const useNotificationStore = defineStore('notification', {
 
       try {
         await axios.patch(
-          'https://ims-api-id38.onrender.com/api/notifications/read-all',
+          'http://localhost:5000/api/notifications/read-all',
           {},
           {
             headers: {
@@ -128,14 +128,11 @@ export const useNotificationStore = defineStore('notification', {
       try {
         const { useAuthStore } = await import('./auth')
         const authStore = useAuthStore()
-        await axios.delete(
-          `https://ims-api-id38.onrender.com/api/notifications/${id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${authStore.token}`
-            }
+        await axios.delete(`http://localhost:5000/api/notifications/${id}`, {
+          headers: {
+            Authorization: `Bearer ${authStore.token}`
           }
-        )
+        })
 
         const index = this.notifications.findIndex((n) => n._id === id)
         if (index !== -1) {
@@ -155,14 +152,11 @@ export const useNotificationStore = defineStore('notification', {
       try {
         const { useAuthStore } = await import('./auth')
         const authStore = useAuthStore()
-        await axios.delete(
-          'https://ims-api-id38.onrender.com/api/notifications/read',
-          {
-            headers: {
-              Authorization: `Bearer ${authStore.token}`
-            }
+        await axios.delete('http://localhost:5000/api/notifications/read', {
+          headers: {
+            Authorization: `Bearer ${authStore.token}`
           }
-        )
+        })
         this.notifications = this.notifications.filter((n) => !n.isRead)
       } catch (error) {
         console.error('Error deleting read notifications:', error)

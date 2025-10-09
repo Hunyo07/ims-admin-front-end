@@ -17,7 +17,7 @@ export const useAuthStore = defineStore('auth', {
     setUser(user: any) {
       this.user = user
       localStorage.setItem('user', JSON.stringify(user))
-      
+
       // Extract permissions from user role if available
       if (user?.role?.permissions) {
         this.permissions = user.role.permissions
@@ -33,7 +33,7 @@ export const useAuthStore = defineStore('auth', {
       try {
         if (!this.token) return null
 
-        const response = await axios.get('https://ims-api-id38.onrender.com/api/auth/me', {
+        const response = await axios.get('http://localhost:5000/api/auth/me', {
           headers: {
             Authorization: `Bearer ${this.token}`
           }
@@ -42,7 +42,7 @@ export const useAuthStore = defineStore('auth', {
         const userData = response.data.user
         this.setUser(userData)
         return userData
-      } catch (error:any) {
+      } catch (error: any) {
         console.error('Failed to fetch current user:', error)
         // If token is invalid, clear auth data
         if (error.response?.status === 401) {
@@ -62,24 +62,24 @@ export const useAuthStore = defineStore('auth', {
     },
 
     hasPermission(permission: string): boolean {
-      if (!this.user || !this.permissions) return false;
+      if (!this.user || !this.permissions) return false
       // Grant all permissions if "all" is present
-      if (this.permissions.includes('all')) return true;
-      return this.permissions.includes(permission);
+      if (this.permissions.includes('all')) return true
+      return this.permissions.includes(permission)
     },
 
     hasAnyPermission(permissions: string[]): boolean {
-      if (!this.user || !this.permissions) return false;
+      if (!this.user || !this.permissions) return false
       // Grant all permissions if "all" is present
-      if (this.permissions.includes('all')) return true;
-      return permissions.some(permission => this.permissions.includes(permission));
+      if (this.permissions.includes('all')) return true
+      return permissions.some((permission) => this.permissions.includes(permission))
     },
 
     hasAllPermissions(permissions: string[]): boolean {
-      if (!this.user || !this.permissions) return false;
+      if (!this.user || !this.permissions) return false
       // Grant all permissions if "all" is present
-      if (this.permissions.includes('all')) return true;
-      return permissions.every(permission => this.permissions.includes(permission));
+      if (this.permissions.includes('all')) return true
+      return permissions.every((permission) => this.permissions.includes(permission))
     },
 
     hasRole(role: string | string[]): boolean {
@@ -103,7 +103,7 @@ export const useAuthStore = defineStore('auth', {
     // Check if user has all specified roles (useful for complex role requirements)
     hasAllRoles(roles: string[]): boolean {
       if (!this.user || !this.user.role) return false
-      
+
       const userRole = typeof this.user.role === 'string' ? this.user.role : this.user.role.name
       return roles.includes(userRole)
     },
@@ -138,32 +138,32 @@ export const useAuthStore = defineStore('auth', {
     getUserRoleDisplayName(): string {
       const role = this.getUserRole()
       if (!role) return 'Unknown'
-      
+
       const roleNames: { [key: string]: string } = {
-        'superadmin': 'Super Administrator',
-        'admin': 'Administrator',
-        'staff': 'Staff',
-        'customer': 'Customer'
+        superadmin: 'Super Administrator',
+        admin: 'Administrator',
+        staff: 'Staff',
+        customer: 'Customer'
       }
-      
+
       return roleNames[role] || role
     },
 
     // Check if user can access a specific feature
     canAccess(feature: string): boolean {
       const featurePermissions: { [key: string]: string[] } = {
-        'dashboard': ['view_dashboard_stats'],
-        'users': ['view_users', 'manage_users'],
-        'products': ['view_products', 'manage_products'],
-        'sales': ['view_sales', 'manage_sales', 'use_pos'],
-        'inventory': ['view_inventory', 'manage_inventory'],
-        'suppliers': ['view_suppliers', 'manage_suppliers'],
-        'customers': ['view_customers', 'manage_customers'],
-        'reports': ['view_reports', 'generate_reports'],
-        'settings': ['view_settings', 'manage_settings'],
-        'pos': ['use_pos'],
-        'barcodes': ['view_barcodes', 'manage_barcodes'],
-        'activity_logs': ['view_activity_logs']
+        dashboard: ['view_dashboard_stats'],
+        users: ['view_users', 'manage_users'],
+        products: ['view_products', 'manage_products'],
+        sales: ['view_sales', 'manage_sales', 'use_pos'],
+        inventory: ['view_inventory', 'manage_inventory'],
+        suppliers: ['view_suppliers', 'manage_suppliers'],
+        customers: ['view_customers', 'manage_customers'],
+        reports: ['view_reports', 'generate_reports'],
+        settings: ['view_settings', 'manage_settings'],
+        pos: ['use_pos'],
+        barcodes: ['view_barcodes', 'manage_barcodes'],
+        activity_logs: ['view_activity_logs']
       }
 
       const requiredPermissions = featurePermissions[feature] || []
@@ -173,26 +173,26 @@ export const useAuthStore = defineStore('auth', {
     // Check if user can perform a specific action
     canPerform(action: string): boolean {
       const actionPermissions: { [key: string]: string[] } = {
-        'create_user': ['create_users', 'manage_users'],
-        'edit_user': ['edit_users', 'manage_users'],
-        'delete_user': ['delete_users', 'manage_users'],
-        'create_product': ['create_products', 'manage_products'],
-        'edit_product': ['edit_products', 'manage_products'],
-        'delete_product': ['delete_products', 'manage_products'],
-        'create_sale': ['create_sales', 'manage_sales', 'use_pos'],
-        'edit_sale': ['edit_sales', 'manage_sales'],
-        'delete_sale': ['delete_sales', 'manage_sales'],
-        'void_sale': ['void_sales', 'manage_sales'],
-        'adjust_stock': ['adjust_stock', 'manage_inventory'],
-        'create_order': ['create_orders', 'manage_orders'],
-        'approve_order': ['approve_orders', 'manage_orders'],
-        'export_data': ['export_reports', 'export_sales_data'],
-        'manage_settings': ['manage_settings'],
-        'assign_roles': ['assign_roles', 'manage_users'],
-        'create_customer': ['create_customers', 'manage_customers'],
-        'edit_customer': ['edit_customers', 'manage_customers'],
-        'delete_customer': ['delete_customers', 'manage_customers'],
-        'deactivate_customer': ['deactivate_customers', 'manage_customers']
+        create_user: ['create_users', 'manage_users'],
+        edit_user: ['edit_users', 'manage_users'],
+        delete_user: ['delete_users', 'manage_users'],
+        create_product: ['create_products', 'manage_products'],
+        edit_product: ['edit_products', 'manage_products'],
+        delete_product: ['delete_products', 'manage_products'],
+        create_sale: ['create_sales', 'manage_sales', 'use_pos'],
+        edit_sale: ['edit_sales', 'manage_sales'],
+        delete_sale: ['delete_sales', 'manage_sales'],
+        void_sale: ['void_sales', 'manage_sales'],
+        adjust_stock: ['adjust_stock', 'manage_inventory'],
+        create_order: ['create_orders', 'manage_orders'],
+        approve_order: ['approve_orders', 'manage_orders'],
+        export_data: ['export_reports', 'export_sales_data'],
+        manage_settings: ['manage_settings'],
+        assign_roles: ['assign_roles', 'manage_users'],
+        create_customer: ['create_customers', 'manage_customers'],
+        edit_customer: ['edit_customers', 'manage_customers'],
+        delete_customer: ['delete_customers', 'manage_customers'],
+        deactivate_customer: ['deactivate_customers', 'manage_customers']
       }
 
       const requiredPermissions = actionPermissions[action] || []

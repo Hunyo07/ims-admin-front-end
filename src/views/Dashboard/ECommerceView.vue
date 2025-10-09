@@ -27,7 +27,11 @@ const error = ref(null)
 // Computed properties for formatted data
 const formattedStats = computed(() => {
   // Return default stats if any critical data is missing
-  if (!dashboardData.value.salesStats || !dashboardData.value.productStats || !dashboardData.value.userStats) {
+  if (
+    !dashboardData.value.salesStats ||
+    !dashboardData.value.productStats ||
+    !dashboardData.value.userStats
+  ) {
     return [
       {
         icon: `<svg class="fill-primary dark:fill-white" width="22" height="16" viewBox="0 0 22 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -124,35 +128,43 @@ const fetchDashboardData = async () => {
 
     // Fetch all dashboard data in parallel with individual error handling
     const results = await Promise.allSettled([
-      axios.get('https://ims-api-id38.onrender.com/api/sales/stats', { headers }),
-      axios.get('https://ims-api-id38.onrender.com/api/products/stats', { headers }),
-      axios.get('https://ims-api-id38.onrender.com/api/sales?limit=5', { headers }),
-      axios.get('https://ims-api-id38.onrender.com/api/products?lowStock=true', { headers }),
-      axios.get('https://ims-api-id38.onrender.com/api/superadmin/user-stats', { headers })
+      axios.get('http://localhost:5000/api/sales/stats', { headers }),
+      axios.get('http://localhost:5000/api/products/stats', { headers }),
+      axios.get('http://localhost:5000/api/sales?limit=5', { headers }),
+      axios.get('http://localhost:5000/api/products?lowStock=true', { headers }),
+      axios.get('http://localhost:5000/api/superadmin/user-stats', { headers })
     ])
 
     // Handle individual responses
-    const [salesStatsResponse, productStatsResponse, recentSalesResponse, lowStockResponse, userStatsResponse] = results
+    const [
+      salesStatsResponse,
+      productStatsResponse,
+      recentSalesResponse,
+      lowStockResponse,
+      userStatsResponse
+    ] = results
 
     dashboardData.value = {
       salesStats: salesStatsResponse.status === 'fulfilled' ? salesStatsResponse.value.data : null,
-      productStats: productStatsResponse.status === 'fulfilled' ? productStatsResponse.value.data : null,
+      productStats:
+        productStatsResponse.status === 'fulfilled' ? productStatsResponse.value.data : null,
       userStats: userStatsResponse.status === 'fulfilled' ? userStatsResponse.value.data : null,
-      recentSales: recentSalesResponse.status === 'fulfilled' ? (recentSalesResponse.value.data.sales || []) : [],
-      lowStockProducts: lowStockResponse.status === 'fulfilled' ? (lowStockResponse.value.data.products || []) : []
+      recentSales:
+        recentSalesResponse.status === 'fulfilled'
+          ? recentSalesResponse.value.data.sales || []
+          : [],
+      lowStockProducts:
+        lowStockResponse.status === 'fulfilled' ? lowStockResponse.value.data.products || [] : []
     }
 
     // Check if any critical requests failed
-    const failedRequests = results.filter(result => result.status === 'rejected')
+    const failedRequests = results.filter((result) => result.status === 'rejected')
     if (failedRequests.length > 0) {
-      
       if (failedRequests.length === results.length) {
         error.value = 'Failed to load dashboard data'
       }
     }
-
   } catch (err) {
-    
     error.value = 'Failed to load dashboard data'
   } finally {
     isLoading.value = false
@@ -173,15 +185,21 @@ onMounted(() => {
   <DefaultLayout>
     <!-- Role-Based Dashboard Header -->
     <RoleBasedDashboard v-if="authStore.isAuthenticated" />
-    
+
     <!-- Error Alert -->
-    <div v-if="error" class="mb-4 rounded-sm border border-danger bg-danger/10 px-4 py-3 text-danger">
+    <div
+      v-if="error"
+      class="mb-4 rounded-sm border border-danger bg-danger/10 px-4 py-3 text-danger"
+    >
       {{ error }}
       <button @click="refreshDashboard" class="ml-2 underline">Retry</button>
     </div>
 
     <!-- Stats Cards -->
-    <div v-if="!authStore.getUserRole || authStore.getUserRole() !== 'staff'" class="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 xl:grid-cols-4 2xl:gap-7.5">
+    <div
+      v-if="!authStore.getUserRole || authStore.getUserRole() !== 'staff'"
+      class="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 xl:grid-cols-4 2xl:gap-7.5"
+    >
       <DataStatsOne :stats="formattedStats" :loading="isLoading" />
     </div>
 
@@ -189,36 +207,46 @@ onMounted(() => {
     <div class="mt-4 grid grid-cols-12 gap-4 md:mt-6 md:gap-6 2xl:mt-7.5 2xl:gap-7.5">
       <!-- Revenue Chart -->
       <ChartOne :sales-data="dashboardData.salesStats" />
-      
+
       <!-- Sales Chart -->
       <ChartTwo :sales-data="dashboardData.salesStats" />
-      
+
       <!-- Product Chart -->
       <ChartThree :product-data="dashboardData.productStats" />
-            <!-- Recent Sales -->
+      <!-- Recent Sales -->
       <div class="col-span-12 xl:col-span-6">
-        <div class="rounded-sm border border-stroke bg-white px-5 pt-6 pb-2.5 shadow-default dark:border-strokedark dark:bg-boxdark sm:px-7.5 xl:pb-1">
-          <h4 class="mb-6 text-xl font-semibold text-black dark:text-white">
-            Recent Sales
-          </h4>
-          <div v-if="authStore.getUserRole && authStore.getUserRole() === 'staff'" class="mb-2 text-sm text-info">
+        <div
+          class="rounded-sm border border-stroke bg-white px-5 pt-6 pb-2.5 shadow-default dark:border-strokedark dark:bg-boxdark sm:px-7.5 xl:pb-1"
+        >
+          <h4 class="mb-6 text-xl font-semibold text-black dark:text-white">Recent Sales</h4>
+          <div
+            v-if="authStore.getUserRole && authStore.getUserRole() === 'staff'"
+            class="mb-2 text-sm text-info"
+          >
             This table reflects only your own sales.
           </div>
           <div v-if="isLoading" class="flex justify-center py-4">
-            <div class="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+            <div
+              class="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"
+            ></div>
           </div>
-          <div v-else-if="dashboardData.recentSales.length === 0" class="text-center py-4 text-gray-500">
+          <div
+            v-else-if="dashboardData.recentSales.length === 0"
+            class="text-center py-4 text-gray-500"
+          >
             No recent sales
           </div>
           <div v-else class="space-y-3">
-            <div  
-              v-for="sale in dashboardData.recentSales" 
+            <div
+              v-for="sale in dashboardData.recentSales"
               :key="sale._id"
               class="flex items-center justify-between border-b border-gray-100 pb-3 last:border-b-0"
             >
               <div>
                 <p class="font-medium text-black dark:text-white">{{ sale.customerName }}</p>
-                <p class="text-sm text-gray-500">{{ new Date(sale.createdAt).toLocaleDateString() }}</p>
+                <p class="text-sm text-gray-500">
+                  {{ new Date(sale.createdAt).toLocaleDateString() }}
+                </p>
               </div>
               <div class="text-right">
                 <p class="font-semibold text-primary">₱{{ sale.total?.toLocaleString() }}</p>
@@ -232,26 +260,32 @@ onMounted(() => {
 
     <!-- Recent Activity Section -->
     <div class="mt-4 grid grid-cols-12 gap-4 md:mt-6 md:gap-6 2xl:mt-7.5 2xl:gap-7.5">
-
-
       <!-- Low Stock Alert -->
       <div class="col-span-12 xl:col-span-6">
-        <div class="rounded-sm border border-stroke bg-white px-5 pt-6 pb-2.5 shadow-default dark:border-strokedark dark:bg-boxdark sm:px-7.5 xl:pb-1">
-          <h4 class="mb-6 text-xl font-semibold text-black dark:text-white">
-            Low Stock Alert
-          </h4>
-          <div v-if="authStore.getUserRole && authStore.getUserRole() === 'staff'" class="mb-2 text-sm text-info">
+        <div
+          class="rounded-sm border border-stroke bg-white px-5 pt-6 pb-2.5 shadow-default dark:border-strokedark dark:bg-boxdark sm:px-7.5 xl:pb-1"
+        >
+          <h4 class="mb-6 text-xl font-semibold text-black dark:text-white">Low Stock Alert</h4>
+          <div
+            v-if="authStore.getUserRole && authStore.getUserRole() === 'staff'"
+            class="mb-2 text-sm text-info"
+          >
             This table shows all low stock products in the system.
           </div>
           <div v-if="isLoading" class="flex justify-center py-4">
-            <div class="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+            <div
+              class="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"
+            ></div>
           </div>
-          <div v-else-if="dashboardData.lowStockProducts.length === 0" class="text-center py-4 text-gray-500">
+          <div
+            v-else-if="dashboardData.lowStockProducts.length === 0"
+            class="text-center py-4 text-gray-500"
+          >
             No low stock items
           </div>
           <div v-else class="space-y-3">
-            <div 
-              v-for="product in dashboardData.lowStockProducts" 
+            <div
+              v-for="product in dashboardData.lowStockProducts"
               :key="product._id"
               class="flex items-center justify-between border-b border-gray-100 pb-3 last:border-b-0"
             >

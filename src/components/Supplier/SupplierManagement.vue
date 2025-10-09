@@ -74,13 +74,13 @@ const filteredSuppliers = computed(() => {
 const fetchSuppliers = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/suppliers/suppliers', {
+    const response = await axios.get('http://localhost:5000/api/suppliers/suppliers', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
     })
     suppliers.value = response.data.suppliers || response.data
-  } catch (error:any) {
+  } catch (error: any) {
     console.error('Error fetching suppliers:', error)
     Swal.fire({
       icon: 'error',
@@ -103,7 +103,7 @@ const totalPages = computed(() => {
   return Math.ceil(filteredSuppliers.value.length / itemsPerPage.value)
 })
 // Update CRUD functions
-const handleEditSupplier = (supplier:Supplier) => {
+const handleEditSupplier = (supplier: Supplier) => {
   isEditing.value = true
   editingSupplier.value = supplier
   newSupplier.value = {
@@ -113,7 +113,7 @@ const handleEditSupplier = (supplier:Supplier) => {
   showModal.value = true
 }
 
-const handleDeleteSupplier = async (supplierId:string) => {
+const handleDeleteSupplier = async (supplierId: string) => {
   selectedSupplierId.value = supplierId
   const result = await Swal.fire({
     title: 'Are you sure?',
@@ -128,7 +128,7 @@ const handleDeleteSupplier = async (supplierId:string) => {
   if (result.isConfirmed) {
     try {
       isDeleting.value = true
-      await axios.delete(`https://ims-api-id38.onrender.com/api/suppliers/${supplierId}`, {
+      await axios.delete(`http://localhost:5000/api/suppliers/${supplierId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -141,7 +141,7 @@ const handleDeleteSupplier = async (supplierId:string) => {
       socket.emit('deleteSupplier', supplierId)
 
       Swal.fire('Deleted!', 'Supplier has been deleted.', 'success')
-    } catch (error:any) {
+    } catch (error: any) {
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -153,8 +153,8 @@ const handleDeleteSupplier = async (supplierId:string) => {
     }
   }
 }
-const handleToggleStatus = async (supplierId:string, currentStatus:boolean) => {
-  try { 
+const handleToggleStatus = async (supplierId: string, currentStatus: boolean) => {
+  try {
     const result = await Swal.fire({
       title: `${currentStatus ? 'Deactivate' : 'Activate'} Supplier?`,
       text: `Are you sure you want to ${currentStatus ? 'deactivate' : 'activate'} this supplier?`,
@@ -167,7 +167,7 @@ const handleToggleStatus = async (supplierId:string, currentStatus:boolean) => {
 
     if (result.isConfirmed) {
       const response = await axios.patch(
-        `https://ims-api-id38.onrender.com/api/suppliers/${supplierId}/toggle-status`,
+        `http://localhost:5000/api/suppliers/${supplierId}/toggle-status`,
         {},
         {
           headers: {
@@ -190,7 +190,7 @@ const handleToggleStatus = async (supplierId:string, currentStatus:boolean) => {
         showConfirmButton: false
       })
     }
-  } catch (error:any) {
+  } catch (error: any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -202,7 +202,7 @@ const handleAddSupplier = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.post(
-      'https://ims-api-id38.onrender.com/api/suppliers/create-supplier',
+      'http://localhost:5000/api/suppliers/create-supplier',
       newSupplier.value,
       {
         headers: {
@@ -221,7 +221,7 @@ const handleAddSupplier = async () => {
       text: 'Supplier created successfully',
       timer: 1500
     })
-  } catch (error:any) {
+  } catch (error: any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -236,9 +236,9 @@ const handleUpdateSupplier = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.put(
-      `https://ims-api-id38.onrender.com/api/suppliers/${editingSupplier.value!._id}`,
+      `http://localhost:5000/api/suppliers/${editingSupplier.value!._id}`,
       newSupplier.value,
-      { 
+      {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
@@ -261,7 +261,7 @@ const handleUpdateSupplier = async () => {
       text: 'Supplier updated successfully',
       timer: 1500
     })
-  } catch (error:any) {
+  } catch (error: any) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -294,8 +294,9 @@ const resetForm = () => {
 const hasUnsavedChanges = computed(() => {
   if (!showModal.value) return false
   return (Object.keys(newSupplier.value) as Array<keyof typeof newSupplier.value>).some(
-  (key) => newSupplier.value[key] !== ''
-)})
+    (key) => newSupplier.value[key] !== ''
+  )
+})
 const handleCloseModal = async () => {
   if (hasUnsavedChanges.value) {
     const result = await Swal.fire({

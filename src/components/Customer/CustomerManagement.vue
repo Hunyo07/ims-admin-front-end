@@ -93,7 +93,7 @@ const filteredCustomers = computed(() => {
 const fetchCustomers = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('https://ims-api-id38.onrender.com/api/customers', {
+    const response = await axios.get('http://localhost:5000/api/customers', {
       headers: {
         Authorization: `Bearer ${authStore.token}`
       }
@@ -119,8 +119,8 @@ const paginatedCustomers = computed(() => {
 
 const totalPages = computed(() => Math.ceil(filteredCustomers.value.length / itemsPerPage.value))
 const hasUnsavedChanges = computed(() => {
-  if (!showModal.value) return false;
-  const nc = newCustomer.value;
+  if (!showModal.value) return false
+  const nc = newCustomer.value
   return (
     nc.firstName !== '' ||
     nc.lastName !== '' ||
@@ -134,8 +134,8 @@ const hasUnsavedChanges = computed(() => {
     nc.gcashDetails.accountName !== '' ||
     nc.gcashDetails.accountNumber !== '' ||
     nc.preferredDeliveryTime !== ''
-  );
-});
+  )
+})
 
 const handleCloseModal = async () => {
   if (hasUnsavedChanges.value) {
@@ -164,8 +164,8 @@ const handleCloseModal = async () => {
 
 // Edit and delete functions
 const handleEditCustomer = (customer: Customer) => {
-  isEditing.value = true;
-  editingCustomer.value = customer;
+  isEditing.value = true
+  editingCustomer.value = customer
   newCustomer.value = {
     firstName: customer.firstName || '',
     lastName: customer.lastName || '',
@@ -183,9 +183,9 @@ const handleEditCustomer = (customer: Customer) => {
       accountNumber: customer.gcashDetails?.accountNumber || ''
     },
     preferredDeliveryTime: customer.preferredDeliveryTime || ''
-  };
-  showModal.value = true;
-};
+  }
+  showModal.value = true
+}
 
 const handleToggleCustomerStatus = async (customer: Customer) => {
   const action = customer.isActive ? 'deactivate' : 'activate'
@@ -199,7 +199,8 @@ const handleToggleCustomerStatus = async (customer: Customer) => {
     confirmButtonText: `Yes, ${action} customer!`,
     customClass: {
       confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90',
-      cancelButton: 'swal2-cancel bg-danger text-white px-4 py-2 rounded-lg hover:bg-opacity-90 ml-3'
+      cancelButton:
+        'swal2-cancel bg-danger text-white px-4 py-2 rounded-lg hover:bg-opacity-90 ml-3'
     }
   })
 
@@ -207,26 +208,24 @@ const handleToggleCustomerStatus = async (customer: Customer) => {
     try {
       isTogglingStatus.value = true
       selectedCustomerId.value = customer._id
-      const response = await axios.patch(`https://ims-api-id38.onrender.com/api/customers/${customer._id}/toggle-status`, {}, {
-        headers: {
-          Authorization: `Bearer ${authStore.token}`
+      const response = await axios.patch(
+        `http://localhost:5000/api/customers/${customer._id}/toggle-status`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${authStore.token}`
+          }
         }
-      })
-      
+      )
+
       // Update the customer in the local array with the response data
       const updatedCustomer = response.data.customer
-      customers.value = customers.value.map(c => 
-        c._id === customer._id ? updatedCustomer : c
-      )
-      
+      customers.value = customers.value.map((c) => (c._id === customer._id ? updatedCustomer : c))
+
       // Emit socket event for real-time update
       socket.emit('customerStatusToggled', updatedCustomer)
-      
-      Swal.fire(
-        'Success!', 
-        `Customer has been ${action}d.`, 
-        'success'
-      )
+
+      Swal.fire('Success!', `Customer has been ${action}d.`, 'success')
     } catch (error: any) {
       console.error('Error toggling customer status:', error)
       Swal.fire({
@@ -253,21 +252,22 @@ const handleDeleteCustomer = async (customerId: string) => {
     confirmButtonText: 'Yes, delete it!',
     customClass: {
       confirmButton: 'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90',
-      cancelButton: 'swal2-cancel bg-danger text-white px-4 py-2 rounded-lg hover:bg-opacity-90 ml-3'
+      cancelButton:
+        'swal2-cancel bg-danger text-white px-4 py-2 rounded-lg hover:bg-opacity-90 ml-3'
     }
   })
 
   if (result.isConfirmed) {
     try {
       isDeleting.value = true
-      await axios.delete(`https://ims-api-id38.onrender.com/api/customers/${customerId}`, {
+      await axios.delete(`http://localhost:5000/api/customers/${customerId}`, {
         headers: {
           Authorization: `Bearer ${authStore.token}`
         }
       })
       socket.emit('deleteCustomer', customerId)
       Swal.fire('Deleted!', 'Customer has been deleted.', 'success')
-      customers.value = customers.value.filter(customer => customer._id !== customerId)
+      customers.value = customers.value.filter((customer) => customer._id !== customerId)
     } catch (error: any) {
       Swal.fire({
         icon: 'error',
@@ -285,7 +285,7 @@ const handleAddCustomer = async () => {
   try {
     isSubmitting.value = true
     const response = await axios.post(
-      'https://ims-api-id38.onrender.com/api/customers/register',
+      'http://localhost:5000/api/customers/register',
       newCustomer.value,
       {
         headers: {
@@ -322,7 +322,7 @@ const handleUpdateCustomer = async () => {
       throw new Error('No customer selected for editing.')
     }
     const response = await axios.put(
-      `https://ims-api-id38.onrender.com/api/customers/${editingCustomer.value._id}`,
+      `http://localhost:5000/api/customers/${editingCustomer.value._id}`,
       newCustomer.value,
       {
         headers: {
@@ -375,10 +375,10 @@ const resetForm = () => {
       accountNumber: ''
     },
     preferredDeliveryTime: ''
-  };
-  isEditing.value = false;
-  editingCustomer.value = null;
-};
+  }
+  isEditing.value = false
+  editingCustomer.value = null
+}
 
 onMounted(() => {
   fetchCustomers()
@@ -397,7 +397,7 @@ onMounted(() => {
       }
     }
   })
-  
+
   socket.on('customerUpdated', (updatedCustomer) => {
     if (updatedCustomer && updatedCustomer._id) {
       customers.value = customers.value.map((customer) =>
@@ -491,7 +491,12 @@ onMounted(() => {
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Address</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Status</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Preferred Delivery</th>
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white" v-if="authStore.canPerform('edit_customer')">Actions</th>
+            <th
+              class="py-4.5 px-4 font-medium text-black dark:text-white"
+              v-if="authStore.canPerform('edit_customer')"
+            >
+              Actions
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -509,9 +514,12 @@ onMounted(() => {
             <td class="py-4.5 px-4">
               <div class="flex items-center gap-3">
                 <div class="flex h-10 w-10 items-center justify-center rounded-full bg-meta-2">
-                  {{ customer.firstName.charAt(0).toUpperCase() }}{{ customer.lastName.charAt(0).toUpperCase() }}
+                  {{ customer.firstName.charAt(0).toUpperCase()
+                  }}{{ customer.lastName.charAt(0).toUpperCase() }}
                 </div>
-                <p class="text-black dark:text-white">{{ customer.firstName }} {{ customer.lastName }}</p>
+                <p class="text-black dark:text-white">
+                  {{ customer.firstName }} {{ customer.lastName }}
+                </p>
               </div>
             </td>
             <td class="py-4.5 px-4">{{ customer.email }}</td>
@@ -525,11 +533,11 @@ onMounted(() => {
               </div>
             </td>
             <td class="py-4.5 px-4">
-              <span 
+              <span
                 :class="[
                   'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
-                  customer.isActive 
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                  customer.isActive
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                     : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
                 ]"
               >
@@ -539,9 +547,13 @@ onMounted(() => {
             <td class="py-4.5 px-4">
               {{ customer.preferredDeliveryTime || 'Not specified' }}
             </td>
-                        <td class="py-4.5 px-4">
+            <td class="py-4.5 px-4">
               <div class="flex items-center space-x-2">
-                <button v-if="authStore.canPerform('edit_customer')" @click="handleEditCustomer(customer)" class="hover:text-primary">
+                <button
+                  v-if="authStore.canPerform('edit_customer')"
+                  @click="handleEditCustomer(customer)"
+                  class="hover:text-primary"
+                >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     class="h-5 w-5"
@@ -603,14 +615,14 @@ onMounted(() => {
                     ></path>
                   </svg>
                 </button>
-          
+
                 <button
                   v-if="authStore.canPerform('delete_customer')"
                   @click="handleDeleteCustomer(customer._id)"
                   class="hover:text-danger"
                   :disabled="isDeleting && selectedCustomerId === customer._id"
                 >
-                <svg
+                  <svg
                     v-if="!(isDeleting && selectedCustomerId === customer._id)"
                     xmlns="http://www.w3.org/2000/svg"
                     class="h-5 w-5"
@@ -690,11 +702,10 @@ onMounted(() => {
       <div class="relative w-full max-w-4xl rounded-lg bg-white p-8 dark:bg-boxdark">
         <!-- Header -->
         <div class="mb-6 flex items-center justify-between">
-          <h3 class="text-xl font-semibold">{{ isEditing ? 'Update Customer' : 'Register Customer' }}</h3>
-          <button
-            @click="handleCloseModal"
-            class="hover:text-danger"
-          >
+          <h3 class="text-xl font-semibold">
+            {{ isEditing ? 'Update Customer' : 'Register Customer' }}
+          </h3>
+          <button @click="handleCloseModal" class="hover:text-danger">
             <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 stroke-linecap="round"
