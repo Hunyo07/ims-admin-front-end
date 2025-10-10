@@ -4,6 +4,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 // import CreatSaleView from '../views/Sales/CreateSaleView.vue'
 const RISListView = () => import('../views/Inventory/RISListView.vue')
 const RISDetailView = () => import('../views/Inventory/RISDetailView.vue')
+const CreateRISView = () => import('../views/Inventory/CreateRISView.vue')
+const DepartmentManagementView = () => import('../views/Department/DepartmentManagementView.vue')
 
 const routes = [
   {
@@ -40,6 +42,15 @@ const routes = [
     meta: {
       title: 'Reset Password',
       requiresAuth: false
+    }
+  },
+  {
+    path: '/departments',
+    name: 'departments',
+    component: DepartmentManagementView,
+    meta: {
+      title: 'Departments',
+      requiresAuth: true
     }
   },
   {
@@ -131,6 +142,12 @@ const routes = [
     name: 'ris-list',
     component: RISListView,
     meta: { title: 'Requisition Issue Slips', requiresAuth: true }
+  },
+  {
+    path: '/inventory/ris/create',
+    name: 'ris-create',
+    component: CreateRISView,
+    meta: { title: 'Create Requisition Issue Slip', requiresAuth: true }
   },
   {
     path: '/inventory/ris/:id',

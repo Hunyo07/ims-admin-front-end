@@ -925,7 +925,8 @@ function handleQuantityInput(index: number, event: Event) {
               />
               <button
                 v-if="customerSearchQuery"
-                @click="customerSearchQuery = '';
+                @click="
+                  customerSearchQuery = ''
                   selectedCustomer = null
                   customerName = 'Walk-in Customer'
                   customerPhone = ''
