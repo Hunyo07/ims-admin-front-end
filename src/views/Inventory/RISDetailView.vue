@@ -1,58 +1,33 @@
-<script setup lang="ts">
+<script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from '../../utils/axios'
 import { socket } from '../../socket'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
-import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-
-// Types
-interface RISItem {
-  product: string | { _id: string }
-  name: string
-  sku?: string
-  requestedQty: number
-  issuedQty: number
-  unit?: string
-  remarks?: string
-}
-
-interface RIS {
-  _id: string
-  risNumber: string
-  purpose: string
-  requestor: string
-  department?: string
-  status: string
-  notes?: string
-  items: RISItem[]
-  issuedAt?: string
-  createdAt: string
-  updatedAt: string
-}
+import DefaultLayout from '../../layouts/DefaultLayout.vue'
+import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
 
 const route = useRoute()
 const router = useRouter()
 
 const pageTitle = ref('Requisition Issue Slip Details')
-const ris = ref<RIS | null>(null)
+const ris = ref(null)
 const loading = ref(true)
-const error = ref<string | null>(null)
+const error = ref(null)
 const issuing = ref(false)
-const successMessage = ref<string | null>(null)
+const successMessage = ref(null)
 const downloading = ref(false)
 
 // key: productId (string), value: quantity to issue
-const issueQuantities = ref<Record<string, number>>({})
+const issueQuantities = ref({})
 
 // Format date
-const formatDate = (dateString: string) => {
+const formatDate = (dateString) => {
   if (!dateString) return 'N/A'
   return new Date(dateString).toLocaleString()
 }
 
 // Status classes
-const getStatusClass = (status: string) => {
+const getStatusClass = (status) => {
   switch (status?.toLowerCase()) {
     case 'pending':
       return 'bg-warning text-white'
@@ -68,7 +43,7 @@ const getStatusClass = (status: string) => {
 // Compute remaining quantity
 const remainingQty = computed(() => {
   if (!ris.value) return {}
-  const result: Record<string, number> = {}
+  const result = {}
   ris.value.items.forEach((item) => {
     result[typeof item.product === 'string' ? item.product : item.product._id] =
       item.requestedQty - item.issuedQty
@@ -94,7 +69,7 @@ async function fetchRIS() {
 
     ris.value = {
       ...data.ris,
-      items: data.ris.items.map((item: any) => ({
+      items: data.ris.items.map((item) => ({
         ...item,
         productId: typeof item.product === 'string' ? item.product : item.product._id,
         issuedQty: item.issuedQty || 0
@@ -102,11 +77,11 @@ async function fetchRIS() {
     }
 
     // Initialize issueQuantities with remaining quantities
-    ris.value.items.forEach((item: any) => {
+    ris.value.items.forEach((item) => {
       const remaining = item.requestedQty - item.issuedQty
       issueQuantities.value[item.productId] = remaining > 0 ? remaining : 0
     })
-  } catch (e: any) {
+  } catch (e) {
     error.value = e?.response?.data?.message || e.message
   } finally {
     loading.value = false
@@ -118,7 +93,7 @@ const issue = async () => {
   if (!ris.value) return
 
   // Only send positive quantities
-  const payload: Record<string, number> = {}
+  const payload = {}
   ris.value.items.forEach((item) => {
     const productId = typeof item.product === 'string' ? item.product : item.product._id
     const qty = issueQuantities.value[productId] || 0
@@ -139,7 +114,7 @@ const issue = async () => {
     successMessage.value = 'Items issued successfully'
 
     // Update local issuedQty
-    data.ris.items.forEach((item: RISItem) => {
+    data.ris.items.forEach((item) => {
       const productId = typeof item.product === 'string' ? item.product : item.product._id
       const localItem = ris.value?.items.find((i) => {
         const id = typeof i.product === 'string' ? i.product : i.product._id
@@ -150,7 +125,7 @@ const issue = async () => {
 
     // Reset inputs
     Object.keys(issueQuantities.value).forEach((key) => (issueQuantities.value[key] = 0))
-  } catch (e: any) {
+  } catch (e) {
     error.value = e?.response?.data?.message || e.message
   } finally {
     issuing.value = false
@@ -158,7 +133,7 @@ const issue = async () => {
 }
 
 // Socket listener
-const handleRISUpdated = (updatedRIS: RIS) => {
+const handleRISUpdated = (updatedRIS) => {
   if (ris.value && updatedRIS._id === ris.value._id) {
     fetchRIS()
   }
@@ -186,7 +161,7 @@ async function downloadExcel() {
   successMessage.value = null
 
   try {
-    const id = route.params.id as string
+    const id = String(route.params.id)
     const response = await axios.get(`/ris/${id}/export`, {
       responseType: 'blob'
     })
@@ -197,7 +172,7 @@ async function downloadExcel() {
     const url = window.URL.createObjectURL(blob)
 
     // Try to extract filename from Content-Disposition
-    const disposition = (response.headers as any)['content-disposition'] || ''
+    const disposition = response.headers?.['content-disposition'] || ''
     let filename = `RIS-${ris.value.risNumber || id}.xlsx`
     const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition)
     if (match) {
@@ -213,11 +188,92 @@ async function downloadExcel() {
     window.URL.revokeObjectURL(url)
 
     successMessage.value = 'RIS Excel downloaded successfully'
-  } catch (e: any) {
+  } catch (e) {
     error.value = e?.response?.data?.message || e.message || 'Failed to download RIS Excel'
   } finally {
     downloading.value = false
   }
+}
+
+// Print RIS
+function printRIS() {
+  if (!ris.value) return
+
+  const remainingFor = (item) => {
+    const id = typeof item.product === 'string' ? item.product : item.product._id
+    return (
+      (item.requestedQty || 0) - (item.issuedQty || 0)
+    )
+  }
+
+  const rows = ris.value.items
+    .map(
+      (item) => `
+        <tr>
+          <td style="padding:8px;border:1px solid #ddd;">${item.name || ''}</td>
+          <td style="padding:8px;border:1px solid #ddd;">${item.sku || ''}</td>
+          <td style="padding:8px;border:1px solid #ddd; text-align:right;">${item.requestedQty || 0}</td>
+          <td style="padding:8px;border:1px solid #ddd; text-align:right;">${item.issuedQty || 0}</td>
+          <td style="padding:8px;border:1px solid #ddd; text-align:right;">${remainingFor(item)}</td>
+          <td style="padding:8px;border:1px solid #ddd;">${item.remarks || ''}</td>
+        </tr>`
+    )
+    .join('')
+
+  const html = `
+    <html>
+      <head>
+        <title>RIS #${ris.value.risNumber}</title>
+        <meta charset="utf-8" />
+        <style>
+          body { font-family: Arial, sans-serif; color: #111; }
+          .header { display:flex; justify-content:space-between; align-items:center; }
+          .title { font-size: 20px; font-weight: 600; }
+          .meta { margin-top: 6px; font-size: 12px; color: #555; }
+          table { border-collapse: collapse; width: 100%; margin-top: 16px; }
+          th { background: #f5f5f5; }
+          th, td { border: 1px solid #ddd; padding: 8px; }
+          .section { margin-top: 12px; }
+          .label { font-weight: 600; }
+          @media print { .no-print { display: none; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="title">Requisition Issue Slip (RIS)</div>
+          <div>RIS #${ris.value.risNumber}</div>
+        </div>
+        <div class="meta">Created: ${formatDate(ris.value.createdAt)} | Status: ${ris.value.status}</div>
+        <div class="section"><span class="label">Purpose:</span> ${ris.value.purpose}</div>
+        <div class="section"><span class="label">Requestor:</span> ${ris.value.requestor}</div>
+        ${ris.value.department ? `<div class="section"><span class="label">Department:</span> ${ris.value.department}</div>` : ''}
+        ${ris.value.notes ? `<div class="section"><span class="label">Notes:</span> ${ris.value.notes}</div>` : ''}
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>SKU</th>
+              <th>Requested</th>
+              <th>Issued</th>
+              <th>Remaining</th>
+              <th>Remarks</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `
+
+  const printWindow = window.open('', '', 'width=900,height=700')
+  if (!printWindow) return
+  printWindow.document.open()
+  printWindow.document.write(html)
+  printWindow.document.close()
+  printWindow.focus()
+  printWindow.print()
 }
 </script>
 
@@ -348,8 +404,19 @@ async function downloadExcel() {
                 fill="none"
                 viewBox="0 0 24 24"
               >
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                ></circle>
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
               </svg>
               <svg
                 v-else
@@ -358,9 +425,28 @@ async function downloadExcel() {
                 viewBox="0 0 20 20"
                 fill="currentColor"
               >
-                <path d="M3 3a1 1 0 011-1h12a1 1 0 011 1v10a1 1 0 01-1 1h-3l-2 3-2-3H4a1 1 0 01-1-1V3zm8 7V5H9v5H7l3 3 3-3h-2z" />
+                <path
+                  d="M3 3a1 1 0 011-1h12a1 1 0 011 1v10a1 1 0 01-1 1h-3l-2 3-2-3H4a1 1 0 01-1-1V3zm8 7V5H9v5H7l3 3 3-3h-2z"
+                />
               </svg>
               {{ downloading ? 'Preparing...' : 'Download RIS' }}
+            </button>
+
+            <button
+              type="button"
+              @click="router.push({ name: 'ris-print', params: { id: ris._id || route.params.id } })"
+              class="bg-primary text-white px-4 py-2 rounded hover:bg-opacity-90 flex items-center"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5 mr-2"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v3h-2V4H6v3H4V4z" />
+                <path d="M4 9a2 2 0 00-2 2v3h4v2h8v-2h4v-3a2 2 0 00-2-2H4zm2 3h8v2H6v-2z" />
+              </svg>
+              Print RIS
             </button>
 
             <span

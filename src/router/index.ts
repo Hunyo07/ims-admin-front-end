@@ -4,6 +4,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 // import CreatSaleView from '../views/Sales/CreateSaleView.vue'
 const RISListView = () => import('../views/Inventory/RISListView.vue')
 const RISDetailView = () => import('../views/Inventory/RISDetailView.vue')
+const RISPrintView = () => import('../views/Inventory/RISPrintView.vue')
 const CreateRISView = () => import('../views/Inventory/CreateRISView.vue')
 const DepartmentManagementView = () => import('../views/Department/DepartmentManagementView.vue')
 
@@ -154,6 +155,12 @@ const routes = [
     name: 'ris-detail',
     component: RISDetailView,
     meta: { title: 'RIS Details', requiresAuth: true }
+  },
+  {
+    path: '/inventory/ris/:id/print',
+    name: 'ris-print',
+    component: RISPrintView,
+    meta: { title: 'Print RIS', requiresAuth: true }
   },
   {
     path: '/supplier',

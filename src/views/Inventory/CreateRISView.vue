@@ -24,6 +24,8 @@ const items = ref([
 
 // Products for selection
 const products = ref([])
+// Departments for dropdown
+const departments = ref([])
 const loading = ref(true) // Start with loading true
 const submitting = ref(false)
 const error = ref(null)
@@ -38,6 +40,19 @@ async function fetchProducts() {
     error.value = e?.response?.data?.message || e.message
   } finally {
     loading.value = false
+  }
+}
+
+// Fetch departments for dropdown
+async function fetchDepartments() {
+  try {
+    const response = await axios.get('/departments')
+    const list = response.data.departments || []
+    // Prefer active departments first
+    departments.value = list.filter((d) => d.isActive !== false)
+  } catch (e) {
+    // Non-blocking error; department is optional
+    console.error('Failed to fetch departments', e)
   }
 }
 
@@ -103,6 +118,7 @@ async function submitRIS() {
 
 onMounted(() => {
   fetchProducts()
+  fetchDepartments()
 
   // Listen for socket connection events
   socket.on('connect', () => {
@@ -172,12 +188,15 @@ onUnmounted(() => {
 
               <div>
                 <label class="mb-2.5 block text-black dark:text-white"> Department </label>
-                <input
+                <select
                   v-model="department"
-                  type="text"
-                  placeholder="Enter department"
                   class="w-full rounded border-[1.5px] border-stroke bg-transparent py-3 px-5 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
-                />
+                >
+                  <option value="">Select department</option>
+                  <option v-for="dept in departments" :key="dept._id" :value="dept.code">
+                    {{ dept.name }}<span v-if="dept.code"> ({{ dept.code }})</span>
+                  </option>
+                </select>
               </div>
 
               <div>

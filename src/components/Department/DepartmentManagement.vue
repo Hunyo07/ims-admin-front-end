@@ -83,7 +83,14 @@ const handleCreateDepartment = async () => {
     }
     isSubmitting.value = true
     const response = await axios.post('/departments', newDepartment.value)
-    departments.value.unshift(response.data.department)
+    // Optimistic insert with de-duplication
+    const dep = response.data.department
+    if (dep && dep._id) {
+      const exists = departments.value.some((d) => d._id === dep._id)
+      if (!exists) {
+        departments.value.unshift(dep)
+      }
+    }
     showModal.value = false
     resetForm()
     Swal.fire({ icon: 'success', title: 'Success', text: 'Department created successfully' })
@@ -105,7 +112,10 @@ const handleUpdateDepartment = async () => {
       return Swal.fire({ icon: 'warning', title: 'Validation', text: 'Name is required' })
     }
     isSubmitting.value = true
-    const response = await axios.put(`/departments/${selectedDepartmentId.value}`, newDepartment.value)
+    const response = await axios.put(
+      `/departments/${selectedDepartmentId.value}`,
+      newDepartment.value
+    )
     departments.value = departments.value.map((d) =>
       d._id === response.data.department._id ? response.data.department : d
     )
@@ -126,10 +136,16 @@ const handleUpdateDepartment = async () => {
 const handleToggleStatus = async (department: Department) => {
   try {
     const response = await axios.patch(`/departments/${department._id}/toggle-status`)
-    departments.value = departments.value.map((d) => (d._id === department._id ? response.data.department : d))
+    departments.value = departments.value.map((d) =>
+      d._id === department._id ? response.data.department : d
+    )
     Swal.fire({ icon: 'success', title: 'Success', text: 'Status updated' })
   } catch (error: any) {
-    Swal.fire({ icon: 'error', title: 'Error', text: error?.response?.data?.message || 'Failed to update status' })
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: error?.response?.data?.message || 'Failed to update status'
+    })
   }
 }
 
@@ -147,7 +163,11 @@ const handleDeleteDepartment = async (departmentId: string) => {
     departments.value = departments.value.filter((d) => d._id !== departmentId)
     Swal.fire({ icon: 'success', title: 'Deleted', text: 'Department deleted' })
   } catch (error: any) {
-    Swal.fire({ icon: 'error', title: 'Error', text: error?.response?.data?.message || 'Failed to delete department' })
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: error?.response?.data?.message || 'Failed to delete department'
+    })
   }
 }
 
@@ -162,14 +182,23 @@ onMounted(() => {
         socket.emit('authenticate', user._id)
       }
     }
-  } catch {}
+  } catch (error: any) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: error?.response?.data?.message || 'Failed to authenticate socket'
+    })
+  }
 
   // Real-time listeners
   socket.on('departmentCreated', (payload: any) => {
-    if (payload?.department) {
-      departments.value.unshift(payload.department)
-    } else if (payload?._id) {
-      departments.value.unshift(payload)
+    // Normalize payload shape
+    const dep = payload?.department || payload
+    if (!dep || !dep._id) return
+    // Prevent duplicates when we already optimistically inserted after create
+    const exists = departments.value.some((d) => d._id === dep._id)
+    if (!exists) {
+      departments.value.unshift(dep)
     }
   })
   socket.on('departmentUpdated', (updated: any) => {
@@ -197,8 +226,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
-    <div class="p-4 border-b border-stroke dark:border-strokedark flex items-center justify-between">
+  <div
+    class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark"
+  >
+    <div
+      class="p-4 border-b border-stroke dark:border-strokedark flex items-center justify-between"
+    >
       <div class="flex items-center gap-3">
         <input
           v-model="searchQuery"
@@ -207,7 +240,9 @@ onUnmounted(() => {
           class="rounded-lg border border-stroke bg-transparent py-2 px-4 outline-none focus:border-primary dark:border-strokedark"
         />
       </div>
-      <button @click="openCreateModal" class="rounded-lg bg-primary text-white py-2 px-4">Add Department</button>
+      <button @click="openCreateModal" class="rounded-lg bg-primary text-white py-2 px-4">
+        Add Department
+      </button>
     </div>
 
     <div class="p-4">
@@ -225,7 +260,11 @@ onUnmounted(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="dept in filteredDepartments" :key="dept._id" class="border-b border-stroke dark:border-strokedark">
+              <tr
+                v-for="dept in filteredDepartments"
+                :key="dept._id"
+                class="border-b border-stroke dark:border-strokedark"
+              >
                 <td class="py-3 px-4">{{ dept.name }}</td>
                 <td class="py-3 px-4">{{ dept.code || '-' }}</td>
                 <td class="py-3 px-4">
@@ -235,11 +274,24 @@ onUnmounted(() => {
                 </td>
                 <td class="py-3 px-4">
                   <div class="flex gap-2">
-                    <button class="rounded border border-stroke py-1 px-3" @click="openEditModal(dept)">Edit</button>
-                    <button class="rounded border border-stroke py-1 px-3" @click="handleToggleStatus(dept)">
+                    <button
+                      class="rounded border border-stroke py-1 px-3"
+                      @click="openEditModal(dept)"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      class="rounded border border-stroke py-1 px-3"
+                      @click="handleToggleStatus(dept)"
+                    >
                       {{ dept.isActive ? 'Deactivate' : 'Activate' }}
                     </button>
-                    <button class="rounded border border-meta-1 text-meta-1 py-1 px-3" @click="handleDeleteDepartment(dept._id)">Delete</button>
+                    <button
+                      class="rounded border border-meta-1 text-meta-1 py-1 px-3"
+                      @click="handleDeleteDepartment(dept._id)"
+                    >
+                      Delete
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -253,21 +305,38 @@ onUnmounted(() => {
     </div>
 
     <!-- Modal -->
-    <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+    <div
+      v-if="showModal"
+      class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
+    >
       <div class="bg-white dark:bg-boxdark rounded-lg w-full max-w-lg p-6 shadow-lg">
-        <h3 class="text-xl font-semibold mb-4">{{ isEditing ? 'Edit Department' : 'Create Department' }}</h3>
+        <h3 class="text-xl font-semibold mb-4">
+          {{ isEditing ? 'Edit Department' : 'Create Department' }}
+        </h3>
         <div class="space-y-4">
           <div>
             <label class="block mb-2">Name</label>
-            <input v-model="newDepartment.name" type="text" class="w-full rounded border border-stroke py-2 px-3 outline-none focus:border-primary dark:border-strokedark" />
+            <input
+              v-model="newDepartment.name"
+              type="text"
+              class="w-full rounded border border-stroke py-2 px-3 outline-none focus:border-primary dark:border-strokedark"
+            />
           </div>
           <div>
             <label class="block mb-2">Code</label>
-            <input v-model="newDepartment.code" type="text" class="w-full rounded border border-stroke py-2 px-3 outline-none focus:border-primary dark:border-strokedark" />
+            <input
+              v-model="newDepartment.code"
+              type="text"
+              class="w-full rounded border border-stroke py-2 px-3 outline-none focus:border-primary dark:border-strokedark"
+            />
           </div>
           <div>
             <label class="block mb-2">Description</label>
-            <textarea v-model="newDepartment.description" rows="3" class="w-full rounded border border-stroke py-2 px-3 outline-none focus:border-primary dark:border-strokedark"></textarea>
+            <textarea
+              v-model="newDepartment.description"
+              rows="3"
+              class="w-full rounded border border-stroke py-2 px-3 outline-none focus:border-primary dark:border-strokedark"
+            ></textarea>
           </div>
           <div class="flex items-center gap-2">
             <input id="dept-active" v-model="newDepartment.isActive" type="checkbox" />
@@ -275,13 +344,15 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="mt-6 flex justify-end gap-3">
-          <button class="rounded border border-stroke py-2 px-4" @click="showModal = false">Cancel</button>
+          <button class="rounded border border-stroke py-2 px-4" @click="showModal = false">
+            Cancel
+          </button>
           <button
             class="rounded bg-primary text-white py-2 px-4"
             :disabled="isSubmitting"
             @click="isEditing ? handleUpdateDepartment() : handleCreateDepartment()"
           >
-            {{ isSubmitting ? 'Saving...' : (isEditing ? 'Update' : 'Create') }}
+            {{ isSubmitting ? 'Saving...' : isEditing ? 'Update' : 'Create' }}
           </button>
         </div>
       </div>
