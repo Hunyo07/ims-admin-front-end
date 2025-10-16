@@ -36,6 +36,10 @@ function handleRISUpdated(data) {
   fetchRIS()
 }
 
+// function handleClickRIS(){
+
+// }
+
 function getStatusClass(status) {
   switch (status) {
     case 'requested':
@@ -230,6 +234,7 @@ onUnmounted(() => {
           <thead class="bg-gray-50 dark:bg-meta-4">
             <tr class="text-left">
               <th class="p-4 font-medium">RIS #</th>
+              <th class="p-4 font-medium">Type</th>
               <th class="p-4 font-medium">Purpose</th>
               <th class="p-4 font-medium">Requestor</th>
               <th class="p-4 font-medium">Status</th>
@@ -248,6 +253,16 @@ onUnmounted(() => {
                   :to="{ name: 'ris-detail', params: { id: r._id } }"
                   >{{ r.risNumber }}</router-link
                 >
+              </td>
+              <td class="p-4">
+                <span
+                  :class="[
+                    'px-2 py-1 rounded-full text-xs font-medium',
+                    r.risType === 'Deployment' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                  ]"
+                >
+                  {{ r.risType || 'Individual' }}
+                </span>
               </td>
               <td class="p-4">{{ r.purpose }}</td>
               <td class="p-4">{{ r.requestor }}</td>

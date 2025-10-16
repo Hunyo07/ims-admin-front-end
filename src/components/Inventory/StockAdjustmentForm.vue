@@ -17,6 +17,17 @@ const authStore = useAuthStore()
 const products = ref([])
 const isLoading = ref(false)
 
+// Utility: find duplicate values in an array
+const findDuplicates = (arr) => {
+  const seen = new Set()
+  const dups = new Set()
+  for (const s of arr) {
+    if (seen.has(s)) dups.add(s)
+    else seen.add(s)
+  }
+  return Array.from(dups)
+}
+
 // Form data for creating stock adjustments with multiple items
 const adjustmentItems = ref([
   {
@@ -27,7 +38,8 @@ const adjustmentItems = ref([
     adjustmentQuantity: 0,
     reason: '',
     notes: '',
-    selectedProduct: null
+    selectedProduct: null,
+    affectedSerialsText: ''
   }
 ])
 
@@ -96,6 +108,17 @@ const updateAllItems = () => {
   })
 }
 
+const getSerialPlaceholder = (type) => {
+  switch (type) {
+    case 'receive': return 'Enter new serial numbers (one per line or comma-separated)'
+    case 'damage': return 'Enter serial numbers of damaged items'
+    case 'loss': return 'Enter serial numbers of lost items'
+    case 'return': return 'Enter serial numbers being returned'
+    case 'reduction': return 'Enter serial numbers to remove'
+    default: return 'Enter serial numbers'
+  }
+}
+
 // Set product details when product is selected
 const setProductDetails = async (index) => {
   const item = adjustmentItems.value[index]
@@ -108,10 +131,8 @@ const setProductDetails = async (index) => {
       })
       item.selectedProduct = response.data.product
       item.previousQuantity = item.selectedProduct.currentStock
-      if (item.adjustmentType !== 'receive') {
-        item.newQuantity = item.selectedProduct.currentStock
-      }
-      calculateAdjustmentQuantity(index)
+      item.adjustmentQuantity = 0
+      item.newQuantity = item.selectedProduct.currentStock
     } catch (error) {
       console.error('Error fetching product details:', error)
       item.selectedProduct = null
@@ -127,14 +148,50 @@ const setProductDetails = async (index) => {
 //     item.adjustmentQuantity = item.newQuantity - item.previousQuantity
 //   }
 // }
-const calculateAdjustmentQuantity = (index) => {
+const updateNewQuantity = (index) => {
   const item = adjustmentItems.value[index]
-  if (item.selectedProduct) {
-    if (item.adjustmentType === 'receive') {
-      item.adjustmentQuantity = item.newQuantity // Quantity received
+  if (item.selectedProduct && item.adjustmentQuantity > 0) {
+    if (item.adjustmentType === 'receive' || item.adjustmentType === 'return') {
+      item.newQuantity = item.previousQuantity + item.adjustmentQuantity
     } else {
-      item.adjustmentQuantity = item.newQuantity - item.previousQuantity
+      item.newQuantity = Math.max(0, item.previousQuantity - item.adjustmentQuantity)
     }
+  }
+}
+
+const getQuantityLabel = (type) => {
+  switch (type) {
+    case 'receive': return 'Quantity to Receive'
+    case 'return': return 'Quantity to Return'
+    case 'damage': return 'Quantity Damaged'
+    case 'loss': return 'Quantity Lost'
+    case 'reduction': return 'Quantity to Reduce'
+    default: return 'Quantity'
+  }
+}
+
+const getQuantityPlaceholder = (type) => {
+  switch (type) {
+    case 'receive': return 'Enter quantity received'
+    case 'return': return 'Enter quantity returned'
+    case 'damage': return 'Enter quantity damaged'
+    case 'loss': return 'Enter quantity lost'
+    case 'reduction': return 'Enter quantity to reduce'
+    default: return 'Enter quantity'
+  }
+}
+
+const getResultClass = (type) => {
+  return (type === 'receive' || type === 'return') ? 'text-meta-3' : 'text-meta-1'
+}
+
+const getResultQuantity = (item, index) => {
+  if (!item.selectedProduct || !item.adjustmentQuantity) return item.selectedProduct?.currentStock || 0
+  
+  if (item.adjustmentType === 'receive' || item.adjustmentType === 'return') {
+    return item.selectedProduct.currentStock + item.adjustmentQuantity
+  } else {
+    return Math.max(0, item.selectedProduct.currentStock - item.adjustmentQuantity)
   }
 }
 const createStockAdjustment = async () => {
@@ -186,6 +243,63 @@ const createStockAdjustment = async () => {
 
     // Process each adjustment item
     const adjustmentPromises = adjustmentItems.value.map((item) => {
+      // Determine if serials are required
+      const categoryName = (item.selectedProduct?.category?.name || '').trim().toLowerCase()
+      const requiresSerials = [
+        'printer',
+        'printers',
+        'scanner',
+        'laptop',
+        'laptops',
+        'scanners',
+        'monitor',
+        'monitors'
+      ].includes(categoryName)
+      const diff = Math.abs(item.adjustmentQuantity || 0)
+      const serials = (item.affectedSerialsText || '')
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+
+      if (requiresSerials && diff > 0) {
+        if (serials.length !== diff) {
+          throw new Error(
+            `Please provide exactly ${diff} serial number(s) for ${
+              item.selectedProduct?.name || 'this item'
+            }`
+          )
+        }
+        const dupes = findDuplicates(serials)
+        if (dupes.length) {
+          throw new Error(`Remove duplicate serial(s): ${dupes.join(', ')}`)
+        }
+        const existingSerials = Array.isArray(item.selectedProduct?.serialNumbers)
+          ? item.selectedProduct.serialNumbers
+          : []
+        const isIncrease =
+          item.adjustmentType === 'receive' ||
+          (Number(item.newQuantity) || 0) > (Number(item.previousQuantity) || 0)
+        if (isIncrease) {
+          const alreadyPresent = serials.filter((s) => existingSerials.includes(s))
+          if (alreadyPresent.length) {
+            throw new Error(
+              `These serial(s) already exist on ${
+                item.selectedProduct?.name || 'this product'
+              }: ${alreadyPresent.join(', ')}`
+            )
+          }
+        } else {
+          const missing = serials.filter((s) => !existingSerials.includes(s))
+          if (missing.length) {
+            throw new Error(
+              `These serial(s) are not on ${
+                item.selectedProduct?.name || 'this product'
+              }: ${missing.join(', ')}`
+            )
+          }
+        }
+      }
+
       return axios.post(
         'http://localhost:5000/api/inventory/adjustments',
         {
@@ -196,7 +310,8 @@ const createStockAdjustment = async () => {
               ? item.previousQuantity + item.adjustmentQuantity
               : item.newQuantity,
           reason: item.reason,
-          notes: item.notes
+          notes: item.notes,
+          affectedSerials: requiresSerials && diff > 0 ? serials : undefined
         },
         {
           headers: {
@@ -241,7 +356,8 @@ const resetForm = () => {
       adjustmentQuantity: 0,
       reason: '',
       notes: '',
-      selectedProduct: null
+      selectedProduct: null,
+      affectedSerialsText: ''
     }
   ]
 
@@ -403,41 +519,24 @@ onMounted(async () => {
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label class="mb-1 block text-sm text-black dark:text-white">
-                {{ item.adjustmentType === 'receive' ? 'Quantity Received' : 'New Quantity' }}
+                {{ getQuantityLabel(item.adjustmentType) }}
                 <span class="text-meta-1">*</span>
               </label>
               <div class="flex items-center">
                 <input
                   type="number"
-                  v-model.number="item.newQuantity"
-                  @input="calculateAdjustmentQuantity(index)"
-                  min="0"
-                  :max="
-                    item.adjustmentType === 'return'
-                      ? 9999
-                      : item.selectedProduct?.currentStock || 0
-                  "
+                  v-model.number="item.adjustmentQuantity"
+                  @input="updateNewQuantity(index)"
+                  min="1"
                   class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 text-sm font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
-                  :placeholder="
-                    item.adjustmentType === 'receive'
-                      ? 'Enter quantity received'
-                      : 'Enter new quantity'
-                  "
+                  :placeholder="getQuantityPlaceholder(item.adjustmentType)"
                 />
-                <span
-                  v-if="item.selectedProduct && item.adjustmentType !== 'receive'"
-                  class="ml-2 text-xs whitespace-nowrap"
-                >
-                  <span
-                    v-if="item.adjustmentType === 'damage' || item.adjustmentType === 'loss'"
-                    class="text-meta-1"
-                  >
-                    (-{{ item.selectedProduct.currentStock - item.newQuantity }})
-                  </span>
-                  <span v-else-if="item.adjustmentType === 'return'" class="text-meta-3">
-                    (+{{ item.newQuantity - item.selectedProduct.currentStock }})
-                  </span>
-                </span>
+                <div v-if="item.selectedProduct" class="ml-2 text-xs whitespace-nowrap">
+                  <div class="text-gray-500">Current: {{ item.selectedProduct.currentStock }}</div>
+                  <div v-if="item.adjustmentQuantity > 0" :class="getResultClass(item.adjustmentType)">
+                    Result: {{ getResultQuantity(item, index) }}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -461,6 +560,56 @@ onMounted(async () => {
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 text-sm font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
                 placeholder="Notes"
               />
+            </div>
+          </div>
+
+          <!-- Serial numbers and ACN handling -->
+          <div v-if="item.selectedProduct && item.adjustmentQuantity > 0" class="mt-3">
+            <!-- Serial numbers for serialized items -->
+            <div
+              v-if="[
+                'printer',
+                'printers', 
+                'scanner',
+                'scanners',
+                'monitor', 
+                'monitors',
+                'laptops',
+                'laptop'
+              ].includes((item.selectedProduct.category?.name || '').trim().toLowerCase())"
+            >
+              <label class="mb-1 block text-sm text-black dark:text-white">
+                Serial Numbers (required)
+              </label>
+              <textarea
+                v-model="item.affectedSerialsText"
+                rows="3"
+                class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 text-sm font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
+                :placeholder="getSerialPlaceholder(item.adjustmentType)"
+              ></textarea>
+              <p class="mt-1 text-xs text-gray-500">
+                Required: {{ item.adjustmentQuantity }} serial(s) for this adjustment.
+              </p>
+              <div
+                v-if="item.adjustmentType === 'receive'"
+                class="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800"
+              >
+                <strong>ACN Auto-generation:</strong> ACNs will be automatically generated for each new serial number.
+              </div>
+            </div>
+            
+            <!-- ACN info for non-serialized items with ACN -->
+            <div
+              v-else-if="item.selectedProduct.hasAssetControlNumber"
+              class="p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800"
+            >
+              <strong>ACN Management:</strong> 
+              <span v-if="item.adjustmentType === 'receive'">
+                {{ item.adjustmentQuantity }} new ACN(s) will be auto-generated.
+              </span>
+              <span v-else>
+                {{ item.adjustmentQuantity }} ACN(s) will be removed from inventory.
+              </span>
             </div>
           </div>
         </div>

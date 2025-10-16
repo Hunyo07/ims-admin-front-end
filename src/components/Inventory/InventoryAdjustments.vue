@@ -20,9 +20,12 @@ const newAdjustment = ref({
   productId: '',
   adjustmentType: 'addition', // Default type
   newQuantity: 0,
+  currentQuantity: 0,
   reason: '',
   notes: '',
-  reference: ''
+  reference: '',
+  selectedProduct: null,
+  affectedSerialsText: ''
 })
 
 // Fetch all stock adjustments
@@ -76,10 +79,53 @@ const setCurrentQuantity = async () => {
       // Store the current quantity for reference
       newAdjustment.value.currentQuantity = response.data.product.currentStock || 0
       newAdjustment.value.newQuantity = response.data.product.currentStock || 0
+      newAdjustment.value.selectedProduct = response.data.product
     } catch (error) {
       console.error('Error fetching product inventory:', error)
     }
   }
+}
+
+// Parsed serials text into array
+const parsedAffectedSerials = computed(() => {
+  const text = newAdjustment.value.affectedSerialsText || ''
+  return text
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+})
+
+// Determine if serials are required based on category
+const requiresSerials = computed(() => {
+  const name = (newAdjustment.value.selectedProduct?.category?.name || '').trim().toLowerCase()
+  return [
+    'printer',
+    'printers',
+    'scanner',
+    'scanners',
+    'monitor',
+    'monitors',
+    'laptop',
+    'laptops'
+  ].includes(name)
+})
+
+// Quantity difference for validation
+const adjustmentDiff = computed(() => {
+  const currentQty = Number(newAdjustment.value.currentQuantity) || 0
+  const newQty = Number(newAdjustment.value.newQuantity) || 0
+  return Math.abs(newQty - currentQty)
+})
+
+// Utility: find duplicate values in an array
+const findDuplicates = (arr) => {
+  const seen = new Set()
+  const dups = new Set()
+  for (const s of arr) {
+    if (seen.has(s)) dups.add(s)
+    else seen.add(s)
+  }
+  return Array.from(dups)
 }
 
 // Create a new stock adjustment
@@ -114,6 +160,61 @@ const createAdjustment = async () => {
       reason: newAdjustment.value.reason,
       notes: newAdjustment.value.notes,
       reference: newAdjustment.value.reference
+    }
+    // Validate serials requirement for specific categories
+    if (requiresSerials.value && adjustmentDiff.value > 0) {
+      if (parsedAffectedSerials.value.length !== adjustmentDiff.value) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Serials Required',
+          text: `Please provide exactly ${adjustmentDiff.value} serial number(s) for this adjustment.`
+        })
+        isLoading.value = false
+        return
+      }
+      // No duplicates within entered serials
+      const dupes = findDuplicates(parsedAffectedSerials.value)
+      if (dupes.length) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Duplicate Serials',
+          text: `Remove duplicate serial(s): ${dupes.join(', ')}`
+        })
+        isLoading.value = false
+        return
+      }
+      const existingSerials = Array.isArray(newAdjustment.value.selectedProduct?.serialNumbers)
+        ? newAdjustment.value.selectedProduct.serialNumbers
+        : []
+      const isIncrease =
+        (Number(newAdjustment.value.newQuantity) || 0) >
+        (Number(newAdjustment.value.currentQuantity) || 0)
+      if (isIncrease) {
+        const alreadyPresent = parsedAffectedSerials.value.filter((s) =>
+          existingSerials.includes(s)
+        )
+        if (alreadyPresent.length) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Existing Serials',
+            text: `These serial(s) already exist on the product: ${alreadyPresent.join(', ')}`
+          })
+          isLoading.value = false
+          return
+        }
+      } else {
+        const missing = parsedAffectedSerials.value.filter((s) => !existingSerials.includes(s))
+        if (missing.length) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Missing Serials',
+            text: `These serial(s) are not on the product: ${missing.join(', ')}`
+          })
+          isLoading.value = false
+          return
+        }
+      }
+      payload.affectedSerials = parsedAffectedSerials.value
     }
 
     const response = await axios.post('http://localhost:5000/api/inventory/adjustments', payload, {
@@ -155,7 +256,9 @@ const resetForm = () => {
     currentQuantity: 0,
     reason: '',
     notes: '',
-    reference: ''
+    reference: '',
+    selectedProduct: null,
+    affectedSerialsText: ''
   }
 }
 
@@ -512,6 +615,25 @@ onMounted(async () => {
               class="w-full rounded border-[1.5px] border-stroke bg-transparent py-3 px-5 font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
               placeholder="Optional reference number or document"
             />
+          </div>
+
+          <!-- Serial numbers input for printer/scanner/monitor when quantity changes -->
+          <div
+            v-if="newAdjustment.selectedProduct && requiresSerials && adjustmentDiff > 0"
+            class="mb-4.5"
+          >
+            <label class="mb-2.5 block text-black dark:text-white">
+              Serial Numbers (required)
+            </label>
+            <textarea
+              v-model="newAdjustment.affectedSerialsText"
+              rows="3"
+              class="w-full rounded border-[1.5px] border-stroke bg-transparent py-3 px-5 font-medium outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
+              placeholder="Enter serial numbers separated by newline or comma"
+            ></textarea>
+            <p class="mt-1 text-xs text-gray-500">
+              Required: {{ adjustmentDiff }} serial(s) for this adjustment.
+            </p>
           </div>
 
           <div class="mb-4.5">

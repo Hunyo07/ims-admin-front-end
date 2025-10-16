@@ -61,7 +61,7 @@ const handleSubmit = async (e) => {
   <div
     class="flex min-h-screen items-center justify-center bg-gray-100 px-4 py-12 dark:bg-boxdark sm:px-6 lg:px-8"
   >
-    <DefaultAuthCard subtitle="" title="Inventory Management System">
+    <DefaultAuthCard subtitle="" title="MIS - Inventory Management System">
       <form @submit="handleSubmit" class="space-y-6">
         <InputGroup
           label="Email Address"
@@ -127,7 +127,7 @@ const handleSubmit = async (e) => {
           <button
             type="submit"
             :disabled="isLoading"
-            class="group relative flex w-full justify-center rounded-lg bg-rose-400 px-4 py-3 text-sm font-medium text-white transition hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 dark:focus:ring-offset-boxdark"
+            class="group relative flex w-full justify-center rounded-lg bg-blue-400 px-4 py-3 text-sm font-medium text-white transition hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 dark:focus:ring-offset-boxdark"
           >
             <span class="absolute inset-y-0 left-0 flex items-center pl-3">
               <svg

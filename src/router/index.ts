@@ -4,6 +4,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 // import CreatSaleView from '../views/Sales/CreateSaleView.vue'
 const RISListView = () => import('../views/Inventory/RISListView.vue')
 const RISDetailView = () => import('../views/Inventory/RISDetailView.vue')
+
 const RISPrintView = () => import('../views/Inventory/RISPrintView.vue')
 const CreateRISView = () => import('../views/Inventory/CreateRISView.vue')
 const DepartmentManagementView = () => import('../views/Department/DepartmentManagementView.vue')
@@ -127,11 +128,11 @@ const routes = [
     }
   },
   {
-    path: '/customer',
-    name: 'customer',
-    component: () => import('../views/Customer/CustomerManagementView.vue'),
+    path: '/employee',
+    name: 'employee',
+    component: () => import('../views/Employee/EmployeeManagementView.vue'),
     meta: {
-      title: 'Customer Management',
+      title: 'Employee',
       requiresAuth: true,
       roles: ['superadmin', 'admin', 'staff'],
       permissions: ['view_customers', 'manage_customers']
@@ -161,6 +162,12 @@ const routes = [
     name: 'ris-print',
     component: RISPrintView,
     meta: { title: 'Print RIS', requiresAuth: true }
+  },
+  {
+    path: '/inventory/record',
+    name: 'InventoryRecord',
+    component: () => import('../views/Inventory/InventoryRecord.vue'),
+    meta: { title: 'Inventory Records', requiresAuth: true }
   },
   {
     path: '/supplier',
@@ -234,7 +241,18 @@ const routes = [
     name: 'barcodes',
     component: () => import('../views/Barcodes/BarcodeManagementView.vue'),
     meta: {
-      title: 'Product Management',
+      title: 'Barcode Management',
+      requiresAuth: true,
+      roles: ['superadmin', 'admin'],
+      permissions: ['view_barcodes', 'manage_barcodes']
+    }
+  },
+  {
+    path: '/acn',
+    name: 'acn',
+    component: () => import('../views/Barcodes/ACNManagementView.vue'),
+    meta: {
+      title: 'ACN Management',
       requiresAuth: true,
       roles: ['superadmin', 'admin'],
       permissions: ['view_barcodes', 'manage_barcodes']
@@ -342,7 +360,7 @@ const router = createRouter({
 
 // Authentication Guard
 router.beforeEach(async (to, from, next) => {
-  document.title = `Books & Clothes House ${to.meta.title} | Cloud-Based IMS - Books & Clothes House`
+  document.title = `MIS - Inventory System ${to.meta.title} | `
 
   const { useAuthStore } = await import('../stores/auth')
   const authStore = useAuthStore()

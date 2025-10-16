@@ -11,8 +11,8 @@
             A comprehensive solution for managing your inventory efficiently and effectively.
           </p>
 
-          <span class="inline-block">
-            <img src="/src/assets/images/logo.png" alt="illustration" />
+          <span class="inline-block w-90">
+            <img src="/src/assets/images/favicon.ico" alt="illustration" />
           </span>
         </div>
       </div>
@@ -50,5 +50,4 @@ const props = defineProps({
 <style>
 /* Move styles to InputGroup component where they belong */
 /* Remove the scoped attribute to allow proper CSS inheritance */
-
 </style>

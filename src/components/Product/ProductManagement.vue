@@ -39,6 +39,10 @@ interface Product {
   }
   sku?: string
   barcode?: { text: string }
+  hasSerialNumbers?: boolean
+  serialNumbers?: string[]
+  hasAssetControlNumber?: boolean
+  assetControlNumbers?: string[]
 }
 // Update refs
 const imagePreview = ref<string | null>(null)
@@ -59,6 +63,48 @@ const isDeleting = ref(false)
 const products = ref<Product[]>([])
 const selectedProductId = ref<string | null>(null)
 const editingProduct = ref<Product | null>(null)
+const nextItemId = ref<number>(1)
+
+// Computer Desktop specifications
+const computerSpecs = ref({
+  processor: '',
+  storage: '',
+  ram: '',
+  videoCard: '',
+  psu: '',
+  motherboard: ''
+})
+
+// Check if selected category is Computer Desktop
+const isComputerDesktop = computed(() => {
+  const selectedCategory = categories.value.find((cat) => cat._id === newProduct.value.categoryId)
+  return (
+    selectedCategory?.name?.toLowerCase().includes('computer desktop') ||
+    selectedCategory?.name?.toLowerCase().includes('desktop computer') ||
+    selectedCategory?.name?.toLowerCase() === 'desktop'
+  )
+})
+
+const fetchNextItemId = async () => {
+  try {
+    const response = await axios.get('http://localhost:5000/api/products/', {
+      headers: {
+        Authorization: `Bearer ${authStore.token}`
+      }
+    })
+    const products = response.data.products || []
+    const maxItemId = products.reduce((max: number, product: any) => {
+      const itemId = product.itemId || 0
+      return Math.max(max, itemId)
+    }, 0)
+    nextItemId.value = maxItemId + 1
+  } catch (error) {
+    nextItemId.value = 1
+  }
+}
+// Details modal state
+const showDetailsModal = ref(false)
+const detailsProduct = ref<Product | null>(null)
 // Add these refs for validation errors (ensure not shadowed)
 const skuError = ref('')
 const barcodeError = ref('')
@@ -79,10 +125,14 @@ interface ProductForm {
   supplierId: string
   unit: string
   currentStock: string
-  specifications: [{ name: ''; value: '' }]
+  specifications: { name: string; value: string }[]
   images: File | null
   sku?: string
   barcodeText?: string
+  hasSerialNumbers: boolean
+  serialNumbersText?: string
+  hasAssetControlNumber: boolean
+  assetControlNumbersText?: string
 }
 const newProduct = ref<ProductForm>({
   name: '',
@@ -95,8 +145,63 @@ const newProduct = ref<ProductForm>({
   specifications: [{ name: '', value: '' }],
   images: null,
   sku: '',
-  barcodeText: ''
+  barcodeText: '',
+  hasSerialNumbers: false,
+  serialNumbersText: '',
+  hasAssetControlNumber: false,
+  assetControlNumbersText: ''
 })
+// Parse and validate serials against current stock on the client side
+const parsedSerials = computed<string[]>(() => {
+  const text = newProduct.value.serialNumbersText || ''
+  if (!newProduct.value.hasSerialNumbers || !text.trim()) return []
+  let arr: string[] = []
+  try {
+    // Try JSON parse first
+    const parsed = JSON.parse(text)
+    if (Array.isArray(parsed)) arr = parsed.map((s) => String(s))
+  } catch (_) {
+    // Fallback: split by newline or comma
+    arr = text
+      .split(/\r?\n|,/) // newline or comma
+      .map((s) => s.trim())
+      .filter(Boolean)
+  }
+  // Deduplicate and normalize
+  const deduped = Array.from(new Set(arr.map((s) => s.trim()))).filter(Boolean)
+  return deduped
+})
+const serialsCount = computed<number>(() => parsedSerials.value.length)
+const currentStockNumber = computed<number>(() => parseInt(newProduct.value.currentStock) || 0)
+const serialsError = computed<string>(() => {
+  if (!newProduct.value.hasSerialNumbers) return ''
+  if (serialsCount.value > currentStockNumber.value) {
+    return `Serials (${serialsCount.value}) exceed stock (${currentStockNumber.value}).`
+  }
+  return ''
+})
+
+const acnInfo = computed<string>(() => {
+  if (newProduct.value.hasSerialNumbers) {
+    return `${serialsCount.value} ACNs will be auto-generated, each paired with a serial number (Format: CAT-###-YY-###)`
+  } else if (newProduct.value.hasAssetControlNumber) {
+    const acnText = newProduct.value.assetControlNumbersText?.trim()
+    if (!acnText) {
+      return 'One ACN will be auto-generated for this item (Format: CAT-###-YY-###)'
+    } else {
+      const count = acnText.split(/\r?\n|,/).filter((s) => s.trim()).length
+      return `${count} custom ACN(s) provided`
+    }
+  }
+  return ''
+})
+const handleSerialToggle = () => {
+  // Rule 1: If hasSerialNumbers is true, require ACN automatically
+  if (newProduct.value.hasSerialNumbers) {
+    newProduct.value.hasAssetControlNumber = true
+  }
+}
+
 const handleImageChange = (event: Event) => {
   const target = event.target as HTMLInputElement
   const file = target.files?.[0]
@@ -274,11 +379,11 @@ const exportProductsPDF = () => {
     doc.setFontSize(14)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(60, 60, 60)
-    doc.text('Product List', marginLeft, currentY)
+    doc.text('Item list', marginLeft, currentY)
     currentY += 8
 
     // Table headers with background
-    const headers = ['Product Name', 'Category', 'Price', 'Cost', 'Stock', 'Status']
+    const headers = ['Item Name', 'Category', 'Price', 'Cost', 'Stock', 'Status']
     const colWidths = [50, 35, 25, 25, 20, 25]
 
     // Calculate positions for columns
@@ -417,6 +522,13 @@ const fetchProducts = async () => {
     })
     // Make sure we're setting an array
     products.value = response.data.products || []
+
+    // Calculate next item ID
+    const maxItemId = products.value.reduce((max, product) => {
+      const itemId = (product as any).itemId || 0
+      return Math.max(max, itemId)
+    }, 0)
+    nextItemId.value = maxItemId + 1
   } catch (error: any) {
     console.error('Error fetching products:', error)
     products.value = []
@@ -620,45 +732,148 @@ const resetForm = () => {
     specifications: [{ name: '', value: '' }],
     images: null,
     sku: '',
-    barcodeText: ''
+    barcodeText: '',
+    hasSerialNumbers: false,
+    serialNumbersText: '',
+    hasAssetControlNumber: false,
+    assetControlNumbersText: ''
+  }
+  computerSpecs.value = {
+    processor: '',
+    storage: '',
+    ram: '',
+    videoCard: '',
+    psu: '',
+    motherboard: ''
   }
   isEditing.value = false
   editingProduct.value = null
 }
 // Update CRUD functions
 
-const handleEditProduct = (product: Product) => {
+const handleEditProduct = async (product: Product) => {
   isEditing.value = true
-  editingProduct.value = product
-  newProduct.value = {
-    name: product.name,
-    description: product.description,
-    categoryId: product.category?._id || '',
-    brandId: product.brand?._id || '',
-    supplierId: product.supplier?._id || '',
-    unit: product.unit,
-    currentStock:
-      product.currentStock !== undefined && product.currentStock !== null
-        ? String(product.currentStock)
+  try {
+    // Fetch freshest product details to ensure serial numbers are available
+    const { data } = await axios.get(`http://localhost:5000/api/products/${product._id}`, {
+      headers: { Authorization: `Bearer ${authStore.token}` }
+    })
+    const fullProduct: Product = (data && (data.product || data)) || product
+    editingProduct.value = fullProduct
+
+    const hasSerials = !!fullProduct.hasSerialNumbers
+    const serialsText = Array.isArray(fullProduct.serialNumbers)
+      ? fullProduct.serialNumbers.join('\n')
+      : ''
+    const hasACN = !!(fullProduct as any).hasAssetControlNumber
+    const acnText = Array.isArray((fullProduct as any).assetControlNumbers)
+      ? (fullProduct as any).assetControlNumbers.join('\n')
+      : ''
+
+    const existingSpecs = (fullProduct as any).specifications || []
+
+    newProduct.value = {
+      name: fullProduct.name,
+      description: fullProduct.description,
+      categoryId: (fullProduct as any).category?._id || '',
+      brandId: (fullProduct as any).brand?._id || '',
+      supplierId: (fullProduct as any).supplier?._id || '',
+      unit: fullProduct.unit,
+      currentStock:
+        fullProduct.currentStock !== undefined && fullProduct.currentStock !== null
+          ? String(fullProduct.currentStock)
+          : '',
+      specifications: existingSpecs.length > 0 ? existingSpecs : [{ name: '', value: '' }],
+      images: null, // Set to null for editing since we don't handle image updates in edit mode
+      sku: fullProduct.sku || '',
+      barcodeText: fullProduct.barcode?.text || '',
+      hasSerialNumbers: hasSerials,
+      serialNumbersText: serialsText,
+      hasAssetControlNumber: hasACN,
+      assetControlNumbersText: acnText
+    }
+  } catch (error: any) {
+    // Fallback to existing product data if request fails
+    editingProduct.value = product
+    const fallbackSpecs = (product as any).specifications || []
+
+    newProduct.value = {
+      name: product.name,
+      description: product.description,
+      categoryId: product.category?._id || '',
+      brandId: product.brand?._id || '',
+      supplierId: product.supplier?._id || '',
+      unit: product.unit,
+      currentStock:
+        product.currentStock !== undefined && product.currentStock !== null
+          ? String(product.currentStock)
+          : '',
+      specifications: fallbackSpecs.length > 0 ? fallbackSpecs : [{ name: '', value: '' }],
+      images: null,
+      sku: product.sku || '',
+      barcodeText: product.barcode?.text || '',
+      hasSerialNumbers: !!product.hasSerialNumbers,
+      serialNumbersText: Array.isArray(product.serialNumbers)
+        ? product.serialNumbers!.join('\n')
         : '',
-    specifications: (product as any).specifications || [],
-    images: null, // Set to null for editing since we don't handle image updates in edit mode
-    sku: product.sku || '',
-    barcodeText: product.barcode?.text || ''
+      hasAssetControlNumber: !!(product as any).hasAssetControlNumber,
+      assetControlNumbersText: Array.isArray((product as any).assetControlNumbers)
+        ? ((product as any).assetControlNumbers as string[]).join('\n')
+        : ''
+    }
   }
   showModal.value = true
+}
+
+const handleViewProduct = async (product: Product) => {
+  try {
+    const { data } = await axios.get(`http://localhost:5000/api/products/${product._id}`, {
+      headers: { Authorization: `Bearer ${authStore.token}` }
+    })
+    detailsProduct.value = (data && (data.product || data)) || product
+  } catch (_) {
+    detailsProduct.value = product
+  }
+  showDetailsModal.value = true
 }
 const handleUpdateProduct = async () => {
   try {
     isSubmitting.value = true
-    // Don't use FormData since we're not handling files
+    // Build payload as JSON, including serial number fields
+    const payload: any = { ...newProduct.value }
+    if (payload.hasSerialNumbers) {
+      payload.serialNumbers = payload.serialNumbersText || ''
+    }
+    // Include ACN fields when enabled
+    if (payload.hasAssetControlNumber) {
+      payload.assetControlNumbers = payload.assetControlNumbersText || ''
+    }
+
+    // Client-side check: serials must not exceed stock
+    if (payload.hasSerialNumbers) {
+      const stock = parseInt(payload.currentStock) || 0
+      const count = parsedSerials.value.length
+      if (count > stock) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Invalid Serials',
+          text: `Serial numbers count (${count}) exceeds current stock (${stock}). Reduce serials or increase stock.`,
+          customClass: {
+            confirmButton:
+              'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
+          }
+        })
+        isSubmitting.value = false
+        return
+      }
+    }
     const response = await axios.put(
       `http://localhost:5000/api/products/${editingProduct.value!._id}`,
-      newProduct.value,
+      payload,
       {
         headers: {
           Authorization: `Bearer ${authStore.token}`,
-          'Content-Type': 'application/json' // Changed to JSON
+          'Content-Type': 'application/json'
         }
       }
     )
@@ -734,7 +949,7 @@ const handleDeleteProduct = async (productId: string) => {
         showConfirmButton: false
       })
     } catch (error: any) {
-      let errorMessage = 'Error deleting product'
+      let errorMessage = 'Error deleting item'
 
       if (error.response?.status === 403) {
         errorMessage = error.response.data.message
@@ -813,6 +1028,25 @@ const handleAddProduct = async () => {
     // Clone newProduct to avoid modifying reactive state
     const productToSend = { ...newProduct.value }
 
+    // Client-side check: serials must not exceed stock
+    if (productToSend.hasSerialNumbers) {
+      const stock = parseInt(productToSend.currentStock) || 0
+      const count = parsedSerials.value.length
+      if (count > stock) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Invalid Serials',
+          text: `Serial numbers count (${count}) exceeds current stock (${stock}). Reduce serials or increase stock.`,
+          customClass: {
+            confirmButton:
+              'swal2-confirm bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90'
+          }
+        })
+        isSubmitting.value = false
+        return
+      }
+    }
+
     // Only append SKU and barcodeText if they exist
     if (!productToSend.sku) delete productToSend.sku
     if (!productToSend.barcodeText)
@@ -836,9 +1070,20 @@ const handleAddProduct = async () => {
       }
     })
 
+    // Append serials-related fields
+    formData.append('hasSerialNumbers', String(productToSend.hasSerialNumbers))
+    if (productToSend.hasSerialNumbers && productToSend.serialNumbersText) {
+      formData.append('serialNumbers', productToSend.serialNumbersText)
+    }
+
+    // Append ACN-related fields
+    formData.append('hasAssetControlNumber', String(productToSend.hasAssetControlNumber))
+    if (productToSend.hasAssetControlNumber && productToSend.assetControlNumbersText) {
+      formData.append('assetControlNumbers', productToSend.assetControlNumbersText)
+    }
+
     // Append specifications as JSON string
-    const specs = JSON.parse(JSON.stringify(productToSend.specifications || []))
-    formData.append('specifications', JSON.stringify(specs))
+    formData.append('specifications', JSON.stringify(productToSend.specifications || []))
 
     // Append image if present
     if (productToSend.images) {
@@ -882,6 +1127,7 @@ onMounted(() => {
   fetchSuppliers()
   fetchSubCategories()
   fetchBrands()
+  fetchNextItemId()
 
   socket.on('productUpdated', (updatedProduct) => {
     if (updatedProduct && updatedProduct._id) {
@@ -902,6 +1148,44 @@ onMounted(() => {
     socket.off('productDeleted')
   }
 })
+// Auto-add required specifications when category changes
+watch(
+  () => newProduct.value.categoryId,
+  () => {
+    if (isComputerDesktop.value) {
+      const requiredSpecs = [
+        { name: 'Processor', value: '' },
+        { name: 'Storage', value: '' },
+        { name: 'RAM', value: '' },
+        { name: 'Video Card', value: '' },
+        { name: 'PSU', value: '' },
+        { name: 'Motherboard', value: '' }
+      ]
+
+      // Remove existing computer specs to avoid duplicates
+      newProduct.value.specifications = newProduct.value.specifications.filter(
+        (spec) =>
+          !['processor', 'storage', 'ram', 'video card', 'psu', 'motherboard'].includes(
+            spec.name?.toLowerCase()
+          )
+      )
+
+      // Add required specs at the beginning
+      newProduct.value.specifications = [...requiredSpecs, ...newProduct.value.specifications]
+
+      // Reset computer specs form
+      computerSpecs.value = {
+        processor: '',
+        storage: '',
+        ram: '',
+        videoCard: '',
+        psu: '',
+        motherboard: ''
+      }
+    }
+  }
+)
+
 watch(
   () => filters.value.priceRange,
   (newValue) => {
@@ -920,13 +1204,13 @@ watch(
     <!-- Header -->
     <div class="p-4 md:p-6 xl:p-7.5">
       <div class="flex flex-wrap items-center justify-between gap-4">
-        <h4 class="text-xl font-bold text-black dark:text-white">Product List</h4>
+        <h4 class="text-xl font-bold text-black dark:text-white">Item List</h4>
         <div class="flex items-center gap-4">
           <div class="relative">
             <input
               type="text"
               v-model="searchQuery"
-              placeholder="Search Products..."
+              placeholder="Search Item..."
               class="w-full rounded-lg border border-stroke bg-transparent py-2 pl-10 pr-4 outline-none focus:border-primary dark:border-strokedark"
             />
             <span class="absolute left-4 top-1/2 -translate-y-1/2">
@@ -970,7 +1254,7 @@ watch(
             @click="showModal = true"
             class="inline-flex items-center justify-center rounded-lg bg-primary px-6 py-2 text-sm font-medium text-white hover:bg-opacity-90"
           >
-            Create Product
+            Create Item
           </button>
         </div>
       </div>
@@ -1064,7 +1348,7 @@ watch(
         <!-- Update the table headers -->
         <thead>
           <tr class="bg-gray-2 text-left dark:bg-meta-4">
-            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Product Name</th>
+            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Item Name</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Barcode</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Category</th>
             <!-- <th class="py-4.5 px-4 font-medium text-black dark:text-white">SubCategory</th> -->
@@ -1166,6 +1450,23 @@ watch(
             <td class="py-4.5 px-4">
               <div class="flex items-center space-x-2">
                 <button
+                  v-if="authStore.hasPermission('view_products')"
+                  @click="handleViewProduct(product)"
+                  class="hover:text-primary"
+                  title="View details"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      d="M10 3C5 3 1.73 7.11 1 10c.73 2.89 4 7 9 7s8.27-4.11 9-7c-.73-2.89-4-7-9-7zm0 12a5 5 0 110-10 5 5 0 010 10z"
+                    />
+                  </svg>
+                </button>
+                <button
                   v-if="authStore.hasPermission('manage_products') && canEditProduct(product)"
                   @click="handleEditProduct(product)"
                   class="hover:text-primary"
@@ -1178,8 +1479,8 @@ watch(
                       product.createdBy.user._id === (authStore.user.id || authStore.user._id)) ||
                       (typeof product.createdBy.user === 'string' &&
                         product.createdBy.user === (authStore.user.id || authStore.user._id)))
-                      ? 'Edit your product'
-                      : 'Edit product (Super Admin)'
+                      ? 'Edit your item'
+                      : 'Edit item (Super Admin)'
                   "
                 >
                   <svg
@@ -1329,7 +1630,7 @@ watch(
         <!-- Header -->
         <div class="mb-6 flex items-center justify-between">
           <h3 class="text-xl font-semibold">
-            {{ isEditing ? 'Update Product' : 'Create Product' }}
+            {{ isEditing ? 'Update Item' : 'Create Item' }}
           </h3>
           <button
             @click="
@@ -1361,13 +1662,13 @@ watch(
             <!-- Product Name -->
             <div>
               <label class="mb-2.5 block text-black dark:text-white">
-                Product Name <span class="text-danger">*</span>
+                Item Name <span class="text-danger">*</span>
               </label>
               <input
                 v-model="newProduct.name"
                 type="text"
                 required
-                placeholder="Enter product name"
+                placeholder="Enter item name"
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               />
             </div>
@@ -1442,36 +1743,9 @@ watch(
             <!-- Specifications -->
             <div class="col-span-2">
               <label class="mb-2.5 block text-black dark:text-white">Specifications</label>
-              <div class="space-y-3">
-                <!-- <div
-                  v-for="(spec, idx) in newProduct.specifications"
-                  :key="idx"
-                  class="grid grid-cols-3 gap-1"
-                >
-                  <div class="col-span-1">
-                    <input
-                      v-model="spec.name"
-                      placeholder="Name (e.g., Socket)"
-                      class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-                    />
-                  </div>
-                  <div class="flex w-full col-span-2 gap-1">
-                    <input
-                      v-model="spec.value"
-                      placeholder="Value (e.g., LGA1700)"
-                      class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-                    />
-                    <button
-                      type="button"
-                      class="px-3 py-2 rounded bg-danger text-white"
-                      @click="newProduct.specifications.splice(idx, 1)"
-                    >
-                      Remove
-                    </button>
-                  </div>
 
-                  <div class="flex gap-2"></div>
-                </div> -->
+              <!-- Regular Specifications -->
+              <div class="space-y-3">
                 <div
                   v-for="(spec, index) in newProduct.specifications"
                   :key="index"
@@ -1500,7 +1774,7 @@ watch(
                   class="px-3 py-2 rounded bg-primary text-white"
                   @click="newProduct.specifications.push({ name: '', value: '' })"
                 >
-                  Add Specification
+                  Add Additional Specification
                 </button>
               </div>
             </div>
@@ -1537,6 +1811,96 @@ watch(
                 placeholder="Enter current stock"
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
               />
+            </div>
+
+            <!-- Serial Number Toggle -->
+            <div class="col-span-2">
+              <label class="mb-2.5 block text-black dark:text-white">Has Serial Numbers</label>
+              <div class="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  v-model="newProduct.hasSerialNumbers"
+                  @change="handleSerialToggle"
+                />
+                <span class="text-sm text-bodydark"
+                  >Enable if items require unique serials (automatically enables ACN)</span
+                >
+              </div>
+            </div>
+
+            <!-- Serial Numbers Textarea -->
+            <div v-if="newProduct.hasSerialNumbers" class="col-span-2">
+              <label class="mb-2.5 block text-black dark:text-white">Serial Numbers</label>
+              <textarea
+                v-model="newProduct.serialNumbersText"
+                placeholder="Enter one serial per line, or comma-separated"
+                class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+              ></textarea>
+              <div class="mt-1 text-xs" :class="serialsError ? 'text-danger' : 'text-bodydark2'">
+                Serials: {{ serialsCount }} of {{ currentStockNumber }} stock
+              </div>
+              <div v-if="serialsError" class="text-danger text-xs mt-1">{{ serialsError }}</div>
+            </div>
+
+            <!-- ACN Toggle -->
+            <div class="col-span-2">
+              <label class="mb-2.5 block text-black dark:text-white"
+                >Has Asset Control Number (ACN)</label
+              >
+              <div class="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  v-model="newProduct.hasAssetControlNumber"
+                  :disabled="newProduct.hasSerialNumbers"
+                />
+                <span class="text-sm text-bodydark">
+                  {{
+                    newProduct.hasSerialNumbers
+                      ? 'Automatically enabled (required for serialized items)'
+                      : 'Enable if items have ACNs to track'
+                  }}
+                </span>
+              </div>
+            </div>
+
+            <!-- ACN Textarea -->
+            <div v-if="newProduct.hasAssetControlNumber" class="col-span-2">
+              <label class="mb-2.5 block text-black dark:text-white"
+                >Asset Control Numbers (ACN)</label
+              >
+              <div
+                v-if="newProduct.hasSerialNumbers"
+                class="mb-2 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800"
+              >
+                <strong>Auto-generation:</strong> ACNs will be automatically generated for each
+                serial number ({{ serialsCount }} ACNs will be created).
+              </div>
+              <div v-else>
+                <textarea
+                  v-model="newProduct.assetControlNumbersText"
+                  placeholder="Enter ACNs (one per line or comma-separated). Leave empty to auto-generate one ACN."
+                  class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+                ></textarea>
+                <div class="mt-1 text-xs text-bodydark2">
+                  {{
+                    acnInfo ||
+                    'For non-serialized items: Provide custom ACNs or leave empty to auto-generate one ACN for the entire item.'
+                  }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Item ID (readonly) -->
+            <div>
+              <label class="mb-2.5 block text-black dark:text-white"> Item ID </label>
+              <input
+                :value="nextItemId"
+                readonly
+                class="w-full rounded border-[1.5px] border-stroke bg-gray-100 px-5 py-3 outline-none dark:border-form-strokedark dark:bg-form-input"
+              />
+              <div class="text-xs text-bodydark2 mt-1">
+                Used for ACN generation (format: XXX-###-YY-###)
+              </div>
             </div>
 
             <!-- SKU -->
@@ -1601,11 +1965,108 @@ watch(
             <button
               type="submit"
               class="rounded bg-primary px-6 py-2 text-white hover:bg-opacity-90 disabled:opacity-50"
+              :disabled="
+                isSubmitting || (newProduct.hasSerialNumbers && serialsCount > currentStockNumber)
+              "
             >
               {{ isSubmitting ? 'Saving...' : isEditing ? 'Update' : 'Create' }}
             </button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Details Modal -->
+    <div
+      v-if="showDetailsModal"
+      class="fixed inset-0 z-999 flex items-center justify-center overflow-y-auto bg-black bg-opacity-50"
+    >
+      <div
+        class="relative max-h-[85%] overflow-auto w-full max-w-3xl rounded-lg bg-white p-6 dark:bg-boxdark"
+      >
+        <div class="mb-4 flex items-center justify-between">
+          <h3 class="text-lg font-semibold">Product Details</h3>
+          <button @click="showDetailsModal = false" class="hover:text-danger">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+        <div v-if="detailsProduct" class="space-y-3">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <div class="text-sm text-bodydark2">Name</div>
+              <div class="font-medium">{{ detailsProduct.name }}</div>
+            </div>
+            <div>
+              <div class="text-sm text-bodydark2">SKU</div>
+              <div class="font-medium">{{ detailsProduct.sku || '—' }}</div>
+            </div>
+            <div>
+              <div class="text-sm text-bodydark2">Barcode</div>
+              <div class="font-medium">{{ detailsProduct.barcode?.text || '—' }}</div>
+            </div>
+            <div>
+              <div class="text-sm text-bodydark2">Stock</div>
+              <div class="font-medium">
+                {{ detailsProduct.currentStock }} {{ detailsProduct.unit }}
+              </div>
+            </div>
+            <div>
+              <div class="text-sm text-bodydark2">Category</div>
+              <div class="font-medium">
+                {{ (detailsProduct as any).category?.name || 'Not Assigned' }}
+              </div>
+            </div>
+            <div>
+              <div class="text-sm text-bodydark2">Supplier</div>
+              <div class="font-medium">{{ (detailsProduct as any).supplier?.name || '—' }}</div>
+            </div>
+          </div>
+
+          <div>
+            <div class="text-sm text-bodydark2">Description</div>
+            <div class="font-medium whitespace-pre-line">
+              {{ detailsProduct.description || '—' }}
+            </div>
+          </div>
+
+          <div>
+            <div class="text-sm text-bodydark2">Has Serials</div>
+            <div class="font-medium">{{ detailsProduct.hasSerialNumbers ? 'Yes' : 'No' }}</div>
+          </div>
+
+          <div v-if="detailsProduct.hasSerialNumbers" class="mt-2">
+            <div class="flex items-center justify-between">
+              <div class="text-sm text-bodydark2">Serial Numbers</div>
+              <div class="text-xs text-bodydark2">
+                {{ (detailsProduct.serialNumbers && detailsProduct.serialNumbers.length) || 0 }}
+                total
+              </div>
+            </div>
+            <div
+              class="mt-2 max-h-64 overflow-auto rounded border border-stroke p-3 text-sm dark:border-strokedark"
+            >
+              <ul class="list-disc pl-5">
+                <li v-for="s in detailsProduct.serialNumbers || []" :key="s">{{ s }}</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="flex justify-end">
+            <button
+              @click="showDetailsModal = false"
+              class="rounded border border-stroke px-6 py-2 text-black hover:shadow-1 dark:border-strokedark dark:text-white"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

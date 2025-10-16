@@ -5,11 +5,16 @@ import axios from '../../utils/axios'
 import { socket } from '../../socket'
 import DefaultLayout from '../../layouts/DefaultLayout.vue'
 import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
+import SerialPicker from '../../components/Inventory/SerialPicker.vue'
+import DeploymentEmployeeRows from '../../components/Inventory/DeploymentEmployeeRows.vue'
+import BulkDeploymentSelector from '../../components/Inventory/BulkDeploymentSelector.vue'
+import DeploymentDesktopACNFlow from '../../components/Inventory/DeploymentDesktopACNFlow.vue'
 
 const pageTitle = ref('Create Requisition Issue Slip')
 const router = useRouter()
 
 // Form data
+const risType = ref('Individual')
 const purpose = ref('')
 const requestor = ref('')
 const department = ref('')
@@ -22,10 +27,21 @@ const items = ref([
   }
 ])
 
+// Deployment-specific data
+const deploymentData = ref({ employees: [] })
+
 // Products for selection
 const products = ref([])
+// Available serials per productId
+const productSerials = ref({})
+// Selected serial numbers per productId
+const selectedSerials = ref({})
+// Filter text per productId for serial list
+const serialFilters = ref({})
 // Departments for dropdown
 const departments = ref([])
+// Employees for deployment
+const employees = ref([])
 const loading = ref(true) // Start with loading true
 const submitting = ref(false)
 const error = ref(null)
@@ -56,6 +72,16 @@ async function fetchDepartments() {
   }
 }
 
+// Fetch employees for deployment
+async function fetchEmployees() {
+  try {
+    const response = await axios.get('/employees')
+    employees.value = response.data?.employees || []
+  } catch (e) {
+    console.error('Failed to fetch employees', e)
+  }
+}
+
 // Add new item row
 function addItem() {
   items.value.push({ product: '', requestedQty: 1, remarks: '' })
@@ -74,29 +100,144 @@ function checkDuplicateProducts() {
   return new Set(productIds).size !== productIds.length
 }
 
+// When a product is selected, fetch details to determine serials
+async function onProductSelected(item) {
+  try {
+    if (!item.product) {
+      item.hasSerialNumbers = false
+      return
+    }
+    const { data } = await axios.get(`/products/${item.product}`)
+    const p = data.product
+    item.hasSerialNumbers = !!p?.hasSerialNumbers
+    productSerials.value[item.product] = Array.isArray(p?.serialNumbers) ? p.serialNumbers : []
+    selectedSerials.value[item.product] = []
+    serialFilters.value[item.product] = ''
+  } catch (e) {
+    item.hasSerialNumbers = false
+    productSerials.value[item.product] = []
+    selectedSerials.value[item.product] = []
+    serialFilters.value[item.product] = ''
+  }
+}
+
+// Enforce selection cap and uniqueness for serials
+function onSerialChange(item) {
+  const pid = item.product
+  const max = parseInt(item.requestedQty) || 0
+  const arr = Array.isArray(selectedSerials.value[pid]) ? selectedSerials.value[pid] : []
+  const unique = Array.from(new Set(arr))
+  if (unique.length > max) unique.splice(max)
+  selectedSerials.value[pid] = unique
+}
+
+// Auto-select up to requestedQty serials from filtered options
+function autoSelectSerials(item) {
+  const pid = item.product
+  const max = parseInt(item.requestedQty) || 0
+  const current = Array.isArray(selectedSerials.value[pid]) ? selectedSerials.value[pid] : []
+  const needed = Math.max(0, max - current.length)
+  const filter = (serialFilters.value[pid] || '').toLowerCase()
+  const candidates = (productSerials.value[pid] || [])
+    .filter((sn) => !filter || sn.toLowerCase().includes(filter))
+    .filter((sn) => !current.includes(sn))
+    .slice(0, needed)
+  selectedSerials.value[pid] = current.concat(candidates)
+}
+
 // Submit form
 async function submitRIS() {
-  if (!purpose.value || !requestor.value || items.value.some((item) => !item.product)) {
+  if (!purpose.value || !requestor.value) {
     error.value = 'Please fill in all required fields'
     return
   }
 
-  if (checkDuplicateProducts()) {
-    error.value = 'Duplicate products selected. Please select each product only once.'
-    return
+  if (risType.value === 'Individual') {
+    if (items.value.some((item) => !item.product)) {
+      error.value = 'Please select products for all items'
+      return
+    }
+    if (checkDuplicateProducts()) {
+      error.value = 'Duplicate products selected. Please select each product only once.'
+      return
+    }
+  } else if (risType.value === 'Deployment') {
+    if (!deploymentData.value.employees.length) {
+      error.value = 'Please select at least one employee for deployment'
+      return
+    }
   }
 
   submitting.value = true
   error.value = null
 
   try {
-    const response = await axios.post('/ris', {
+    const payload = {
+      risType: risType.value,
       purpose: purpose.value,
       requestor: requestor.value,
       department: department.value,
       notes: notes.value,
-      items: items.value
-    })
+      directIssue: true
+    }
+
+    if (risType.value === 'Individual') {
+      // Build serial numbers payload for items that require them
+      const serialsPayload = {}
+      for (const item of items.value) {
+        if (item.hasSerialNumbers) {
+          const selected = selectedSerials.value[item.product] || []
+          const qty = parseInt(item.requestedQty) || 0
+          if (selected.length !== qty) {
+            error.value = `Select ${qty} serial number(s) for ${products.value.find((p) => p._id === item.product)?.name || 'item'}`
+            submitting.value = false
+            return
+          }
+          serialsPayload[item.product] = selected
+        }
+      }
+      payload.items = items.value
+      payload.serialNumbers = serialsPayload
+    } else {
+      // Deployment RIS
+      payload.deploymentData = deploymentData.value
+      
+      // Create items array from all employee items
+      const allItems = []
+      deploymentData.value.employees.forEach(employee => {
+        employee.items.forEach(item => {
+          const existingItem = allItems.find(i => i.product === item.product)
+          if (existingItem) {
+            existingItem.requestedQty += 1
+          } else {
+            allItems.push({
+              product: item.product,
+              requestedQty: 1,
+              remarks: item.remarks
+            })
+          }
+        })
+      })
+      payload.items = allItems
+
+      // Build serialNumbers mapping for products that have selected serials
+      const serialsPayload = {}
+      deploymentData.value.employees.forEach(employee => {
+        employee.items.forEach(item => {
+          if (item && item.product && item.serialNumber) {
+            const pid = item.product
+            if (!serialsPayload[pid]) serialsPayload[pid] = []
+            // Avoid duplicates across employees
+            if (!serialsPayload[pid].includes(item.serialNumber)) {
+              serialsPayload[pid].push(item.serialNumber)
+            }
+          }
+        })
+      })
+      payload.serialNumbers = serialsPayload
+    }
+
+    const response = await axios.post('/ris', payload)
 
     if (response.data.success) {
       // Socket.IO will handle the update in the list view
@@ -119,6 +260,7 @@ async function submitRIS() {
 onMounted(() => {
   fetchProducts()
   fetchDepartments()
+  fetchEmployees()
 
   // Listen for socket connection events
   socket.on('connect', () => {
@@ -159,6 +301,20 @@ onUnmounted(() => {
           </div>
 
           <form @submit.prevent="submitRIS">
+            <!-- RIS Type Selection -->
+            <div class="mb-6">
+              <label class="mb-2.5 block text-black dark:text-white">
+                RIS Type <span class="text-meta-1">*</span>
+              </label>
+              <select
+                v-model="risType"
+                class="w-full rounded border-[1.5px] border-stroke bg-transparent py-3 px-5 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+              >
+                <option value="Individual">Individual Request</option>
+                <option value="Deployment">Deployment Request</option>
+              </select>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div>
                 <label class="mb-2.5 block text-black dark:text-white">
@@ -210,7 +366,20 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div class="mb-6">
+
+
+            <!-- Deployment Section -->
+            <div v-if="risType === 'Deployment'" class="mb-6 space-y-6">
+              <!-- Desktop-first ACN flow with per-unit assignment -->
+              <DeploymentDesktopACNFlow
+                :employees="employees"
+                :products="products"
+                @update:deploymentData="deploymentData = $event"
+              />
+            </div>
+
+            <!-- Individual Items Section -->
+            <div v-if="risType === 'Individual'" class="mb-6">
               <div class="flex justify-between items-center mb-4">
                 <h3 class="text-lg font-semibold">Items</h3>
                 <button
@@ -244,9 +413,10 @@ onUnmounted(() => {
                     <label class="mb-2.5 block text-black dark:text-white">
                       Product <span class="text-meta-1">*</span>
                     </label>
-                    <select
+                  <select
                       v-model="item.product"
                       required
+                      @change="onProductSelected(item)"
                       class="w-full rounded border-[1.5px] border-stroke bg-transparent py-3 px-5 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
                     >
                       <option value="">Select Product</option>
@@ -276,6 +446,16 @@ onUnmounted(() => {
                       type="text"
                       placeholder="Optional remarks"
                       class="w-full rounded border-[1.5px] border-stroke bg-transparent py-3 px-5 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                    />
+                  </div>
+
+                  <!-- Serial numbers selection when product has serial tracking -->
+                  <div v-if="item.hasSerialNumbers" class="md:col-span-12">
+                    <label class="mb-1 block text-black dark:text-white"> Serial Numbers </label>
+                    <SerialPicker
+                      v-model="selectedSerials[item.product]"
+                      :serials="productSerials[item.product] || []"
+                      :limit="parseInt(item.requestedQty) || 0"
                     />
                   </div>
 

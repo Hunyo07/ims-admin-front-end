@@ -5,6 +5,7 @@ import axios from '../../utils/axios'
 import { socket } from '../../socket'
 import DefaultLayout from '../../layouts/DefaultLayout.vue'
 import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
+import SerialPicker from '../../components/Inventory/SerialPicker.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,6 +20,12 @@ const downloading = ref(false)
 
 // key: productId (string), value: quantity to issue
 const issueQuantities = ref({})
+// Serial selection per productId
+const selectedSerials = ref({})
+// Available serials fetched per productId
+const productSerials = ref({})
+// Filter text per productId for serial list
+const serialFilters = ref({})
 
 // Format date
 const formatDate = (dateString) => {
@@ -81,6 +88,29 @@ async function fetchRIS() {
       const remaining = item.requestedQty - item.issuedQty
       issueQuantities.value[item.productId] = remaining > 0 ? remaining : 0
     })
+
+    // Fetch product details to know if serials are required and available
+    await Promise.all(
+      (ris.value.items || []).map(async (item) => {
+        try {
+          const { data } = await axios.get(`/products/${item.productId}`)
+          const p = data.product
+          // Attach flag to item
+          item.hasSerialNumbers = !!p?.hasSerialNumbers
+          // Store available serials
+          productSerials.value[item.productId] = Array.isArray(p?.serialNumbers)
+            ? p.serialNumbers
+            : []
+          // Initialize selected serials
+          selectedSerials.value[item.productId] = []
+        } catch (e) {
+          // Non-blocking: default to no serials
+          item.hasSerialNumbers = false
+          productSerials.value[item.productId] = []
+          selectedSerials.value[item.productId] = []
+        }
+      })
+    )
   } catch (e) {
     error.value = e?.response?.data?.message || e.message
   } finally {
@@ -110,7 +140,26 @@ const issue = async () => {
   successMessage.value = null
 
   try {
-    const { data } = await axios.post(`/ris/${ris.value._id}/issue`, { issueQuantities: payload })
+    // Build serial numbers payload for items that require them
+    const serialsPayload = {}
+    for (const item of ris.value.items) {
+      const productId = typeof item.product === 'string' ? item.product : item.product._id
+      const qty = issueQuantities.value[productId] || 0
+      if (qty > 0 && item.hasSerialNumbers) {
+        const selected = selectedSerials.value[productId] || []
+        if (selected.length !== qty) {
+          error.value = `Select ${qty} serial number(s) for ${item.name}`
+          issuing.value = false
+          return
+        }
+        serialsPayload[productId] = selected
+      }
+    }
+
+    const { data } = await axios.post(`/ris/${ris.value._id}/issue`, {
+      issueQuantities: payload,
+      serialNumbers: serialsPayload
+    })
     successMessage.value = 'Items issued successfully'
 
     // Update local issuedQty
@@ -125,6 +174,56 @@ const issue = async () => {
 
     // Reset inputs
     Object.keys(issueQuantities.value).forEach((key) => (issueQuantities.value[key] = 0))
+  } catch (e) {
+    error.value = e?.response?.data?.message || e.message
+  } finally {
+    issuing.value = false
+  }
+}
+
+// Enforce selection cap and uniqueness for serials during issuance
+function onSerialChangeForProduct(productId, requestedQty) {
+  const max = parseInt(requestedQty) || 0
+  const arr = Array.isArray(selectedSerials.value[productId])
+    ? selectedSerials.value[productId]
+    : []
+  const unique = Array.from(new Set(arr))
+  if (unique.length > max) unique.splice(max)
+  selectedSerials.value[productId] = unique
+}
+
+// Auto-select up to requestedQty serials from filtered options for issuance
+function autoSelectSerialsForProduct(productId, requestedQty) {
+  const max = parseInt(requestedQty) || 0
+  const current = Array.isArray(selectedSerials.value[productId])
+    ? selectedSerials.value[productId]
+    : []
+  const needed = Math.max(0, max - current.length)
+  const filter = (serialFilters.value[productId] || '').toLowerCase()
+  const candidates = (productSerials.value[productId] || [])
+    .filter((sn) => !filter || sn.toLowerCase().includes(filter))
+    .filter((sn) => !current.includes(sn))
+    .slice(0, needed)
+  selectedSerials.value[productId] = current.concat(candidates)
+}
+
+// Approve RIS
+const approve = async () => {
+  if (!ris.value) return
+  try {
+    issuing.value = true
+    error.value = null
+    const { data } = await axios.post(`/ris/${ris.value._id}/approve`)
+    successMessage.value = 'RIS approved successfully'
+    // Refresh RIS state with response
+    ris.value = {
+      ...data.ris,
+      items: data.ris.items.map((item) => ({
+        ...item,
+        productId: typeof item.product === 'string' ? item.product : item.product._id,
+        issuedQty: item.issuedQty || 0
+      }))
+    }
   } catch (e) {
     error.value = e?.response?.data?.message || e.message
   } finally {
@@ -155,6 +254,7 @@ onUnmounted(() => {
 
 // Download RIS Excel
 async function downloadExcel() {
+  console.log(ris.value)
   if (!ris.value) return
   downloading.value = true
   error.value = null
@@ -201,9 +301,7 @@ function printRIS() {
 
   const remainingFor = (item) => {
     const id = typeof item.product === 'string' ? item.product : item.product._id
-    return (
-      (item.requestedQty || 0) - (item.issuedQty || 0)
-    )
+    return (item.requestedQty || 0) - (item.issuedQty || 0)
   }
 
   const rows = ris.value.items
@@ -212,9 +310,15 @@ function printRIS() {
         <tr>
           <td style="padding:8px;border:1px solid #ddd;">${item.name || ''}</td>
           <td style="padding:8px;border:1px solid #ddd;">${item.sku || ''}</td>
-          <td style="padding:8px;border:1px solid #ddd; text-align:right;">${item.requestedQty || 0}</td>
-          <td style="padding:8px;border:1px solid #ddd; text-align:right;">${item.issuedQty || 0}</td>
-          <td style="padding:8px;border:1px solid #ddd; text-align:right;">${remainingFor(item)}</td>
+          <td style="padding:8px;border:1px solid #ddd; text-align:right;">${
+            item.requestedQty || 0
+          }</td>
+          <td style="padding:8px;border:1px solid #ddd; text-align:right;">${
+            item.issuedQty || 0
+          }</td>
+          <td style="padding:8px;border:1px solid #ddd; text-align:right;">${remainingFor(
+            item
+          )}</td>
           <td style="padding:8px;border:1px solid #ddd;">${item.remarks || ''}</td>
         </tr>`
     )
@@ -243,11 +347,21 @@ function printRIS() {
           <div class="title">Requisition Issue Slip (RIS)</div>
           <div>RIS #${ris.value.risNumber}</div>
         </div>
-        <div class="meta">Created: ${formatDate(ris.value.createdAt)} | Status: ${ris.value.status}</div>
+        <div class="meta">Created: ${formatDate(ris.value.createdAt)} | Status: ${
+          ris.value.status
+        }</div>
         <div class="section"><span class="label">Purpose:</span> ${ris.value.purpose}</div>
         <div class="section"><span class="label">Requestor:</span> ${ris.value.requestor}</div>
-        ${ris.value.department ? `<div class="section"><span class="label">Department:</span> ${ris.value.department}</div>` : ''}
-        ${ris.value.notes ? `<div class="section"><span class="label">Notes:</span> ${ris.value.notes}</div>` : ''}
+        ${
+          ris.value.department
+            ? `<div class="section"><span class="label">Department:</span> ${ris.value.department}</div>`
+            : ''
+        }
+        ${
+          ris.value.notes
+            ? `<div class="section"><span class="label">Notes:</span> ${ris.value.notes}</div>`
+            : ''
+        }
         <table>
           <thead>
             <tr>
@@ -432,9 +546,11 @@ function printRIS() {
               {{ downloading ? 'Preparing...' : 'Download RIS' }}
             </button>
 
-            <button
+            <!-- <button
               type="button"
-              @click="router.push({ name: 'ris-print', params: { id: ris._id || route.params.id } })"
+              @click="
+                router.push({ name: 'ris-print', params: { id: ris._id || route.params.id } })
+              "
               class="bg-primary text-white px-4 py-2 rounded hover:bg-opacity-90 flex items-center"
             >
               <svg
@@ -447,13 +563,38 @@ function printRIS() {
                 <path d="M4 9a2 2 0 00-2 2v3h4v2h8v-2h4v-3a2 2 0 00-2-2H4zm2 3h8v2H6v-2z" />
               </svg>
               Print RIS
-            </button>
+            </button> -->
 
             <span
               :class="['px-3 py-1 rounded-full text-xs font-medium', getStatusClass(ris.status)]"
             >
               {{ ris.status }}
             </span>
+          </div>
+        </div>
+
+        <!-- RIS Type and Deployment Info -->
+        <div class="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <h3 class="text-lg font-semibold mb-2">RIS Type</h3>
+            <span
+              :class="[
+                'px-3 py-1 rounded-full text-sm font-medium',
+                ris.risType === 'Deployment' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+              ]"
+            >
+              {{ ris.risType || 'Individual' }}
+            </span>
+          </div>
+          
+          <div v-if="ris.risType === 'Deployment' && ris.deploymentData?.employees?.length">
+            <h3 class="text-lg font-semibold mb-2">Deployed Employees ({{ ris.deploymentData.employees.length }})</h3>
+            <div class="bg-gray-50 dark:bg-meta-4 p-3 rounded max-h-32 overflow-y-auto">
+              <div v-for="employee in ris.deploymentData.employees" :key="employee.id" class="flex justify-between items-center py-1">
+                <span class="font-medium">{{ employee.name }}</span>
+                <span class="text-sm text-gray-500">{{ employee.items?.length || 0 }} items</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -467,8 +608,69 @@ function printRIS() {
           <p class="bg-gray-50 dark:bg-meta-4 p-3 rounded">{{ ris.notes }}</p>
         </div>
 
+        <!-- Approval / Issuance Info -->
+        <div class="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="p-3 rounded bg-gray-50 dark:bg-meta-4">
+            <div class="text-sm font-semibold mb-1">Approved By</div>
+            <div class="text-sm">
+              {{
+                ris.approvedBy?.firstName
+                  ? `${ris.approvedBy.firstName} ${ris.approvedBy.lastName || ''}`
+                  : '—'
+              }}
+            </div>
+          </div>
+          <div class="p-3 rounded bg-gray-50 dark:bg-meta-4">
+            <div class="text-sm font-semibold mb-1">Issued By</div>
+            <div class="text-sm">
+              {{
+                ris.issuedBy?.firstName
+                  ? `${ris.issuedBy.firstName} ${ris.issuedBy.lastName || ''}`
+                  : '—'
+              }}
+            </div>
+          </div>
+          <div class="p-3 rounded bg-gray-50 dark:bg-meta-4">
+            <div class="text-sm font-semibold mb-1">Received By</div>
+            <div class="text-sm">{{ ris.requestor }}</div>
+          </div>
+        </div>
+
+        <!-- Deployment Summary -->
+        <div v-if="ris.risType === 'Deployment' && ris.deploymentData?.employees?.length" class="mb-6">
+          <h3 class="text-lg font-semibold mb-4">Deployment Summary</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full bg-white dark:bg-boxdark rounded-sm">
+              <thead>
+                <tr class="text-left bg-gray-50 dark:bg-meta-4">
+                  <th class="p-4 border-b border-stroke">Employee</th>
+                  <th class="p-4 border-b border-stroke">Product</th>
+                  <th class="p-4 border-b border-stroke">Property Number</th>
+                  <th class="p-4 border-b border-stroke">Quantity</th>
+                  <th class="p-4 border-b border-stroke">Remarks</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template v-for="employee in ris.deploymentData.employees" :key="employee.id">
+                  <tr
+                    v-for="item in employee.items"
+                    :key="`${employee.id}-${item.product}`"
+                    class="border-b border-stroke last:border-0"
+                  >
+                    <td class="p-4">{{ employee.name }}</td>
+                    <td class="p-4">{{ item.productName || 'Product' }}</td>
+                    <td class="p-4">{{ item.propertyNumber || '—' }}</td>
+                    <td class="p-4">{{ item.quantity || 1 }}</td>
+                    <td class="p-4">{{ item.remarks || '—' }}</td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="mb-6">
-          <h3 class="text-lg font-semibold mb-4">Items</h3>
+          <h3 class="text-lg font-semibold mb-4">{{ ris.risType === 'Deployment' ? 'Summary Items' : 'Items' }}</h3>
           <div class="overflow-x-auto">
             <table class="w-full bg-white dark:bg-boxdark rounded-sm">
               <thead>
@@ -518,6 +720,29 @@ function printRIS() {
                       "
                       :disabled="isFullyIssued || item.issuedQty >= item.requestedQty"
                     />
+                    <!-- Serial numbers selection when required -->
+                    <div v-if="item.hasSerialNumbers" class="mt-2">
+                      <label class="mb-1 block text-xs text-black dark:text-white"
+                        >Serial Numbers</label
+                      >
+                      <SerialPicker
+                        v-model="
+                          selectedSerials[
+                            typeof item.product === 'string' ? item.product : item.product._id
+                          ]
+                        "
+                        :serials="
+                          productSerials[
+                            typeof item.product === 'string' ? item.product : item.product._id
+                          ] || []
+                        "
+                        :limit="
+                          issueQuantities[
+                            typeof item.product === 'string' ? item.product : item.product._id
+                          ] || 0
+                        "
+                      />
+                    </div>
                     <div v-if="item.remarks" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       Remarks: {{ item.remarks }}
                     </div>
@@ -535,6 +760,16 @@ function printRIS() {
             class="bg-gray-300 text-gray-700 px-6 py-2 rounded hover:bg-gray-400"
           >
             Back to List
+          </button>
+
+          <button
+            v-if="ris.status === 'requested' && !ris.approvedBy"
+            type="button"
+            @click="approve"
+            class="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-opacity-90 mr-3"
+            :disabled="issuing"
+          >
+            Approve
           </button>
 
           <button

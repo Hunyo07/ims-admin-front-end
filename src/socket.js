@@ -1,6 +1,6 @@
 import { io } from 'socket.io-client'
 
-export const socket = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', {
+export const socket = io('http://localhost:5000', {
   autoConnect: true,
   reconnection: true,
   reconnectionAttempts: 5,
@@ -15,11 +15,15 @@ socket.on('connect_error', (error) => {
   console.error('Socket connection error:', error)
 })
 
-socket.on('disconnect', (reason) => {})
+socket.on('disconnect', (reason) => {
+  console.log('Socket disconnected:', reason)
+})
 
 // Test socket connection
 setTimeout(() => {
   if (socket.connected) {
+    console.log('Socket connected successfully')
   } else {
+    console.error('Socket connection failed')
   }
 }, 2000)

@@ -1,10 +1,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import axios from '../../utils/axios'
 
 const route = useRoute()
-const router = useRouter()
 
 const ris = ref(null)
 const loading = ref(true)
@@ -108,12 +107,29 @@ onMounted(async () => {
         <div class="signature">
           <div class="line"></div>
           <div class="role">Approved By</div>
-          <div class="name">__________________________</div>
+          <div class="name">
+            {{
+              ris?.approvedBy?.firstName
+                ? `${ris.approvedBy.firstName} ${ris.approvedBy.lastName || ''}`
+                : '__________________________'
+            }}
+          </div>
         </div>
         <div class="signature">
           <div class="line"></div>
           <div class="role">Issued By</div>
-          <div class="name">__________________________</div>
+          <div class="name">
+            {{
+              ris?.issuedBy?.firstName
+                ? `${ris.issuedBy.firstName} ${ris.issuedBy.lastName || ''}`
+                : '__________________________'
+            }}
+          </div>
+        </div>
+        <div class="signature">
+          <div class="line"></div>
+          <div class="role">Received By</div>
+          <div class="name">{{ ris.requestor }}</div>
         </div>
       </section>
 
@@ -132,7 +148,8 @@ onMounted(async () => {
   margin: 18mm 15mm;
 }
 
-html, body {
+html,
+body {
   background: #f5f5f5;
 }
 
@@ -147,7 +164,7 @@ html, body {
   color: #111;
   width: 210mm;
   min-height: 297mm;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
   padding: 18mm 15mm;
 }
 
@@ -158,21 +175,60 @@ html, body {
   border-bottom: 2px solid #222;
   padding-bottom: 12px;
 }
-.brand-left { display:flex; align-items:center; gap: 12px; }
-.brand-logo { width: 48px; height: 48px; }
-.brand-name { font-size: 18px; font-weight: 700; }
-.brand-sub { font-size: 12px; color: #666; }
-.doc-meta { text-align: right; }
-.doc-title { font-size: 16px; font-weight: 600; }
-.doc-number { font-size: 14px; color: #333; }
+.brand-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand-logo {
+  width: 48px;
+  height: 48px;
+}
+.brand-name {
+  font-size: 18px;
+  font-weight: 700;
+}
+.brand-sub {
+  font-size: 12px;
+  color: #666;
+}
+.doc-meta {
+  text-align: right;
+}
+.doc-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+.doc-number {
+  font-size: 14px;
+  color: #333;
+}
 
-.meta { display:grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; margin: 16px 0; }
-.label { font-weight: 600; }
+.meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 24px;
+  margin: 16px 0;
+}
+.label {
+  font-weight: 600;
+}
 
-table.items { width: 100%; border-collapse: collapse; }
-table.items th, table.items td { border: 1px solid #ddd; padding: 8px; }
-table.items thead th { background: #fafafa; }
-.num { text-align: right; }
+table.items {
+  width: 100%;
+  border-collapse: collapse;
+}
+table.items th,
+table.items td {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+table.items thead th {
+  background: #fafafa;
+}
+.num {
+  text-align: right;
+}
 
 .signature-block {
   display: grid;
@@ -181,9 +237,19 @@ table.items thead th { background: #fafafa; }
   margin-top: 24px;
   page-break-inside: avoid;
 }
-.signature .line { height: 24px; border-bottom: 1px solid #444; margin-bottom: 6px; }
-.signature .role { font-size: 12px; color: #555; }
-.signature .name { font-size: 12px; color: #111; }
+.signature .line {
+  height: 24px;
+  border-bottom: 1px solid #444;
+  margin-bottom: 6px;
+}
+.signature .role {
+  font-size: 12px;
+  color: #555;
+}
+.signature .name {
+  font-size: 12px;
+  color: #111;
+}
 
 .footer {
   display: flex;
@@ -195,10 +261,20 @@ table.items thead th { background: #fafafa; }
 
 /* Print-specific */
 @media print {
-  html, body { background: #fff; }
-  .sheet { box-shadow: none; padding: 0; }
-  .print-container { padding: 0; }
+  html,
+  body {
+    background: #fff;
+  }
+  .sheet {
+    box-shadow: none;
+    padding: 0;
+  }
+  .print-container {
+    padding: 0;
+  }
 }
 
-.page-break { page-break-after: always; }
+.page-break {
+  page-break-after: always;
+}
 </style>
