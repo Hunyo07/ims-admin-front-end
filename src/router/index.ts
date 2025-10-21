@@ -170,6 +170,18 @@ const routes = [
     meta: { title: 'Inventory Records', requiresAuth: true }
   },
   {
+    path: '/inventory/record/create',
+    name: 'InventoryRecordCreate',
+    component: () => import('../views/Inventory/CreateInventoryRecordFlow.vue'),
+    meta: { title: 'Create Inventory Record', requiresAuth: true }
+  },
+  {
+    path: '/inventory/list',
+    name: 'InventoryList',
+    component: () => import('../views/Inventory/InventoryListView.vue'),
+    meta: { title: 'Inventory List', requiresAuth: true }
+  },
+  {
     path: '/supplier',
     name: 'supllier',
     component: () => import('../views/Supplier/SupplierManagementView.vue'),

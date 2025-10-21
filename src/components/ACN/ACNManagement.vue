@@ -14,6 +14,12 @@
         </div>
         <div class="flex gap-2">
           <button
+            @click="openAcnGenerateModal"
+            class="bg-primary text-white px-4 py-2 rounded hover:bg-opacity-90 disabled:opacity-50"
+          >
+            Generate ACN
+          </button>
+          <button
             @click="bulkPrint"
             :disabled="selectedACNs.length === 0"
             class="bg-success text-white px-4 py-2 rounded hover:bg-opacity-90 disabled:opacity-50"
@@ -143,6 +149,36 @@
         </tbody>
       </table>
     </div>
+    <div
+      v-if="showAcnGenerateModal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    >
+      <div class="bg-white dark:bg-boxdark rounded-lg p-6 w-full max-w-2xl mx-4">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-semibold text-black dark:text-white">Generate ACN</h3>
+          <button @click="closeAcnGenerateModal" class="text-gray-500 hover:text-gray-700">
+            ×
+          </button>
+        </div>
+        <DeploymentItemSelector
+          v-model="acnForm"
+          :products="products"
+          title="Item"
+          type="general"
+          required
+          @remove="closeAcnGenerateModal"
+          @generationComplete="onGenerationComplete"
+        />
+        <div class="flex justify-end mt-4">
+          <button
+            @click="closeAcnGenerateModal"
+            class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-opacity-90"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Barcode Modal -->
     <div
@@ -221,13 +257,15 @@
 </template>
 
 <script>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
 import { useAuthStore } from '@/stores'
+import DeploymentItemSelector from '../Inventory/DeploymentItemSelector.vue'
 const authStore = useAuthStore()
 
 export default {
   name: 'ACNManagement',
+  components: { DeploymentItemSelector },
   setup() {
     const acns = ref([])
     const products = ref([])
@@ -235,8 +273,18 @@ export default {
     const selectedProduct = ref('')
     const loading = ref(false)
     const selectedACNs = ref([])
+    const acnForm = ref({
+      productId: '',
+      serialNumber: '',
+      quantity: 1,
+      serials: [],
+      acn: '',
+      propertyNumber: '',
+      remarks: ''
+    })
 
     // Modal states
+    const showAcnGenerateModal = ref(false)
     const showBarcodeModal = ref(false)
     const showEditModal = ref(false)
     const selectedACN = ref(null)
@@ -299,7 +347,10 @@ export default {
             Authorization: `Bearer ${authStore.token}`
           }
         })
-        products.value = response.data.products.filter((p) => p.hasAssetControlNumber)
+        // Allow selecting serialized products and those already tracking ACNs
+        products.value = response.data.products.filter(
+          (p) => p.hasSerialNumbers || p.hasAssetControlNumber
+        )
       } catch (error) {
         console.error('Error fetching products:', error)
       }
@@ -446,6 +497,21 @@ export default {
         selectedACNs.value = filteredACNs.value.map((acn) => acn._id)
       }
     }
+    const openAcnGenerateModal = () => {
+      acnForm.value = {
+        productId: '',
+        serialNumber: '',
+        quantity: 1,
+        serials: [],
+        acn: '',
+        propertyNumber: '',
+        remarks: ''
+      }
+      showAcnGenerateModal.value = true
+    }
+    const closeAcnGenerateModal = () => {
+      showAcnGenerateModal.value = false
+    }
 
     const bulkPrint = async () => {
       if (selectedACNs.value.length === 0) return
@@ -494,6 +560,20 @@ export default {
       fetchProducts()
     })
 
+    // Auto-close modal and refresh ACN list only after successful generation
+    watch([() => acnForm.value.acn, () => acnForm.value.propertyNumber], ([newAcn, newProp]) => {
+      const isGenerated = newAcn && newProp && newAcn === newProp
+      if (isGenerated && showAcnGenerateModal.value) {
+        closeAcnGenerateModal()
+        fetchACNs()
+      }
+    })
+
+    const onGenerationComplete = (count) => {
+      closeAcnGenerateModal()
+      fetchACNs()
+    }
+
     return {
       acns,
       products,
@@ -501,6 +581,8 @@ export default {
       selectedProduct,
       loading,
       selectedACNs,
+      showAcnGenerateModal,
+      acnForm,
       filteredACNs,
       isAllSelected,
       showBarcodeModal,
@@ -518,7 +600,10 @@ export default {
       toggleSelectAll,
       bulkPrint,
       closeBarcodeModal,
-      closeEditModal
+      closeEditModal,
+      openAcnGenerateModal,
+      closeAcnGenerateModal,
+      onGenerationComplete
     }
   }
 }

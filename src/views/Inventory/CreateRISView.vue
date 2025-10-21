@@ -6,8 +6,8 @@ import { socket } from '../../socket'
 import DefaultLayout from '../../layouts/DefaultLayout.vue'
 import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
 import SerialPicker from '../../components/Inventory/SerialPicker.vue'
-import DeploymentEmployeeRows from '../../components/Inventory/DeploymentEmployeeRows.vue'
-import BulkDeploymentSelector from '../../components/Inventory/BulkDeploymentSelector.vue'
+// import DeploymentEmployeeRows from '../../components/Inventory/DeploymentEmployeeRows.vue'
+// import BulkDeploymentSelector from '../../components/Inventory/BulkDeploymentSelector.vue'
 import DeploymentDesktopACNFlow from '../../components/Inventory/DeploymentDesktopACNFlow.vue'
 
 const pageTitle = ref('Create Requisition Issue Slip')
@@ -122,28 +122,28 @@ async function onProductSelected(item) {
 }
 
 // Enforce selection cap and uniqueness for serials
-function onSerialChange(item) {
-  const pid = item.product
-  const max = parseInt(item.requestedQty) || 0
-  const arr = Array.isArray(selectedSerials.value[pid]) ? selectedSerials.value[pid] : []
-  const unique = Array.from(new Set(arr))
-  if (unique.length > max) unique.splice(max)
-  selectedSerials.value[pid] = unique
-}
+// function onSerialChange(item) {
+//   const pid = item.product
+//   const max = parseInt(item.requestedQty) || 0
+//   const arr = Array.isArray(selectedSerials.value[pid]) ? selectedSerials.value[pid] : []
+//   const unique = Array.from(new Set(arr))
+//   if (unique.length > max) unique.splice(max)
+//   selectedSerials.value[pid] = unique
+// }
 
 // Auto-select up to requestedQty serials from filtered options
-function autoSelectSerials(item) {
-  const pid = item.product
-  const max = parseInt(item.requestedQty) || 0
-  const current = Array.isArray(selectedSerials.value[pid]) ? selectedSerials.value[pid] : []
-  const needed = Math.max(0, max - current.length)
-  const filter = (serialFilters.value[pid] || '').toLowerCase()
-  const candidates = (productSerials.value[pid] || [])
-    .filter((sn) => !filter || sn.toLowerCase().includes(filter))
-    .filter((sn) => !current.includes(sn))
-    .slice(0, needed)
-  selectedSerials.value[pid] = current.concat(candidates)
-}
+// function autoSelectSerials(item) {
+//   const pid = item.product
+//   const max = parseInt(item.requestedQty) || 0
+//   const current = Array.isArray(selectedSerials.value[pid]) ? selectedSerials.value[pid] : []
+//   const needed = Math.max(0, max - current.length)
+//   const filter = (serialFilters.value[pid] || '').toLowerCase()
+//   const candidates = (productSerials.value[pid] || [])
+//     .filter((sn) => !filter || sn.toLowerCase().includes(filter))
+//     .filter((sn) => !current.includes(sn))
+//     .slice(0, needed)
+//   selectedSerials.value[pid] = current.concat(candidates)
+// }
 
 // Submit form
 async function submitRIS() {
@@ -189,7 +189,9 @@ async function submitRIS() {
           const selected = selectedSerials.value[item.product] || []
           const qty = parseInt(item.requestedQty) || 0
           if (selected.length !== qty) {
-            error.value = `Select ${qty} serial number(s) for ${products.value.find((p) => p._id === item.product)?.name || 'item'}`
+            error.value = `Select ${qty} serial number(s) for ${
+              products.value.find((p) => p._id === item.product)?.name || 'item'
+            }`
             submitting.value = false
             return
           }
@@ -201,12 +203,12 @@ async function submitRIS() {
     } else {
       // Deployment RIS
       payload.deploymentData = deploymentData.value
-      
+
       // Create items array from all employee items
       const allItems = []
-      deploymentData.value.employees.forEach(employee => {
-        employee.items.forEach(item => {
-          const existingItem = allItems.find(i => i.product === item.product)
+      deploymentData.value.employees.forEach((employee) => {
+        employee.items.forEach((item) => {
+          const existingItem = allItems.find((i) => i.product === item.product)
           if (existingItem) {
             existingItem.requestedQty += 1
           } else {
@@ -222,8 +224,8 @@ async function submitRIS() {
 
       // Build serialNumbers mapping for products that have selected serials
       const serialsPayload = {}
-      deploymentData.value.employees.forEach(employee => {
-        employee.items.forEach(item => {
+      deploymentData.value.employees.forEach((employee) => {
+        employee.items.forEach((item) => {
           if (item && item.product && item.serialNumber) {
             const pid = item.product
             if (!serialsPayload[pid]) serialsPayload[pid] = []
@@ -235,6 +237,21 @@ async function submitRIS() {
         })
       })
       payload.serialNumbers = serialsPayload
+
+      // Pre-submit validation: ensure serialized products have matching serial counts
+      for (const ai of allItems) {
+        const pid = ai.product
+        const product = products.value.find((p) => p._id === pid)
+        if (product?.hasSerialNumbers) {
+          const provided = (serialsPayload[pid] || []).length
+          const required = ai.requestedQty
+          if (provided !== required) {
+            error.value = `Serials count mismatch for ${product.name}: expected ${required}, provided ${provided}. Add or remove serial selections per unit before submitting.`
+            submitting.value = false
+            return
+          }
+        }
+      }
     }
 
     const response = await axios.post('/ris', payload)
@@ -287,7 +304,7 @@ onUnmounted(() => {
     <div class="p-6">
       <BreadcrumbDefault :pageTitle="pageTitle" />
 
-      <div class="bg-white dark:bg-boxdark rounded-sm border border-stroke shadow-default p-6 mt-4">
+      <div class="bg-white dark:bg-boxdark rounded-sm   shadow-default p-6 mt-4">
         <div v-if="loading" class="flex justify-center items-center p-8">
           <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
@@ -366,8 +383,6 @@ onUnmounted(() => {
               </div>
             </div>
 
-
-
             <!-- Deployment Section -->
             <div v-if="risType === 'Deployment'" class="mb-6 space-y-6">
               <!-- Desktop-first ACN flow with per-unit assignment -->
@@ -413,7 +428,7 @@ onUnmounted(() => {
                     <label class="mb-2.5 block text-black dark:text-white">
                       Product <span class="text-meta-1">*</span>
                     </label>
-                  <select
+                    <select
                       v-model="item.product"
                       required
                       @change="onProductSelected(item)"

@@ -1289,7 +1289,7 @@ watch(
         </div>
 
         <!-- Price Range Filter -->
-        <div class="flex-1 min-w-[200px]">
+        <!-- <div class="flex-1 min-w-[200px]">
           <label class="mb-2 block text-sm font-medium text-black dark:text-white"
             >Price Range</label
           >
@@ -1303,7 +1303,7 @@ watch(
             <option value="over5000">Over ₱5,000</option>
             <option value="custom">Custom Range</option>
           </select>
-        </div>
+        </div> -->
 
         <!-- Clear Filters Button -->
         <div class="flex items-end pt-6">

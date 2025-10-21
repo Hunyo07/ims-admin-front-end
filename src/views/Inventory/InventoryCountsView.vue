@@ -1,4 +1,4 @@
-<script setup >
+<script setup>
 import { ref } from 'vue'
 import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
 import InventoryCounts from '../../components/Inventory/InventoryCounts.vue'

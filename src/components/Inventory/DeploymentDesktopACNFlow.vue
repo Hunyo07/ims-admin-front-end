@@ -2,16 +2,26 @@
   <div class="space-y-6">
     <!-- Step 1: Select Computer Desktop and Quantity -->
     <div class="border border-stroke rounded-lg p-4 dark:border-strokedark">
-      <h4 class="font-medium mb-3">Select Computer Desktop</h4>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <h4 class="font-medium mb-3">Select Computer Desktop / Laptop</h4>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div>
-          <label class="block text-sm font-medium mb-1">Desktop Product</label>
+          <label class="block text-sm font-medium mb-1">Device Type</label>
+          <select
+            v-model="deviceType"
+            class="w-full rounded border-[1.5px] border-stroke bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-strokedark"
+          >
+            <option value="desktop">Desktop</option>
+            <option value="laptop">Laptop</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Product</label>
           <select
             v-model="desktopProductId"
             class="w-full rounded border-[1.5px] border-stroke bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-strokedark"
           >
-            <option value="">Select Computer Desktop</option>
-            <option v-for="p in desktopProducts" :key="p._id" :value="p._id">
+            <option value="">Select Desktop/Laptop</option>
+            <option v-for="p in primaryProducts" :key="p._id" :value="p._id">
               {{ p.name }} (Stock: {{ p.currentStock }})
             </option>
           </select>
@@ -85,7 +95,7 @@
       >
         <div class="flex justify-between items-start mb-3">
           <div>
-            <div class="font-medium">Desktop Unit #{{ idx + 1 }}</div>
+            <div class="font-medium">{{ primaryLabel }} Unit #{{ idx + 1 }}</div>
             <div class="text-sm text-gray-600">ACN: {{ unit.acn || 'Unselected' }}</div>
           </div>
           <div class="w-64 relative">
@@ -146,7 +156,7 @@
         <!-- Default desktop item preview -->
         <div class="bg-gray-50 dark:bg-meta-4 p-3 rounded mb-3">
           <div class="text-sm">
-            <span class="font-medium">Desktop:</span>
+            <span class="font-medium">{{ primaryLabel }}:</span>
             {{ getProductName(desktopProductId) }}
             <span v-if="unit.acn" class="ml-2">(ACN: {{ unit.acn }})</span>
           </div>
@@ -283,16 +293,31 @@ const hasAcn = ref(false)
 const acnList = ref([])
 const selectedACNs = ref([])
 
+// Primary device type selection
+const deviceType = ref('desktop')
+
 // Unit cards derived from qty and selected ACNs
 const unitCards = ref([])
 
 // Filter desktop products
-const desktopProducts = computed(() => {
+// const desktopProducts = computed(() => {
+//   return props.products.filter((p) => {
+//     const cname = (p.category?.name || '').toLowerCase()
+//     return cname.includes('desktop') || cname.includes('computer')
+//   })
+// })
+
+// Products filtered by the selected device type (desktop or laptop)
+const primaryProducts = computed(() => {
   return props.products.filter((p) => {
     const cname = (p.category?.name || '').toLowerCase()
-    return cname.includes('desktop') || cname.includes('computer')
+    return deviceType.value === 'desktop'
+      ? cname.includes('desktop') || cname.includes('computer')
+      : cname.includes('laptop')
   })
 })
+
+const primaryLabel = computed(() => (deviceType.value === 'laptop' ? 'Laptop' : 'Desktop'))
 
 // Current stock of the selected desktop product
 const desktopProductStock = computed(() => {
@@ -391,6 +416,14 @@ const rebuildUnitCards = () => {
 watch(selectedACNs, rebuildUnitCards, { deep: true })
 watch(desktopQty, rebuildUnitCards)
 
+// Reset product and ACN list when device type changes
+watch(deviceType, () => {
+  const list = primaryProducts.value
+  desktopProductId.value = list.length ? list[0]._id : ''
+  fetchDesktopDetails()
+  rebuildUnitCards()
+})
+
 // Clamp quantity to available stock and keep it >= 1
 watch([desktopQty, desktopProductStock], ([qty, stock]) => {
   let q = parseInt(qty) || 1
@@ -442,23 +475,16 @@ const onItemProductChange = async (unitIndex, itemIndex) => {
     // Build serial-to-ACN map if both serials and ACNs are tracked
     it.serialToAcnMap = {}
     if (it.hasSerialNumbers && it.hasAssetControlNumber) {
-      // Fallback: pair arrays by index from product details
-      const baseMap = {}
-      const len = Math.min(it.availableSerials.length, it.availableACNs.length)
-      for (let i = 0; i < len; i++) {
-        const sn = it.availableSerials[i]
-        const acn = it.availableACNs[i]
-        if (sn && acn) baseMap[sn] = acn
-      }
-      it.serialToAcnMap = baseMap
-      // Prefer explicit ACN records when available
+      // Build mapping only from explicit ACN records to avoid index-based pairing
       try {
         const { data: acnResp } = await axios.get(`/acns/product/${it.product}`)
+        const map = {}
         for (const a of acnResp?.acns || []) {
-          if (a?.serialNumber) it.serialToAcnMap[a.serialNumber] = a.acnCode
+          if (a?.serialNumber && a?.acnCode) map[a.serialNumber] = a.acnCode
         }
+        it.serialToAcnMap = map
       } catch (_) {
-        // keep baseMap
+        it.serialToAcnMap = {}
       }
     }
     // Reset selections when product changes
@@ -560,7 +586,7 @@ const emitDeploymentData = () => {
         remarks: finalRemarks,
         // emit explicit fields so CreateRIS can build serialNumbers mapping
         serialNumber: it.selectedSerial || undefined,
-        acn: (it.selectedACN || (acnFromSerial || undefined))
+        acn: it.selectedACN || acnFromSerial || undefined
       })
     }
   }
@@ -570,8 +596,8 @@ const emitDeploymentData = () => {
 
 // Auto-select first desktop product on mount if available
 onMounted(() => {
-  if (!desktopProductId.value && desktopProducts.value.length) {
-    desktopProductId.value = desktopProducts.value[0]._id
+  if (!desktopProductId.value && primaryProducts.value.length) {
+    desktopProductId.value = primaryProducts.value[0]._id
   }
 })
 

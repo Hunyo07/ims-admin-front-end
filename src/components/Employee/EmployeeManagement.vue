@@ -1,49 +1,32 @@
-<script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
-import axios from 'axios'
+<script setup>
+import { ref, onMounted, computed } from 'vue'
+import api from '../../utils/axios.js'
 import { useAuthStore } from '../../stores'
 import { socket } from '../../socket'
 import Swal from 'sweetalert2'
 
 const authStore = useAuthStore()
 
-// Employee interfaces
-interface Employee {
-  _id: string
-  firstName: string
-  lastName: string
-  email?: string
-  phoneNumber?: string
-  isActive: boolean
-  createdAt: string
-  updatedAt: string
-}
-
-// Form type for new/edit employee
-interface EmployeeForm {
-  firstName: string
-  lastName: string
-  email: string
-  phoneNumber: string
-}
-
 // Update refs
-const employees = ref<Employee[]>([])
+const employees = ref([])
 const isLoading = ref(true)
 const searchQuery = ref('')
 const showModal = ref(false)
 const isDeleting = ref(false)
 const isTogglingStatus = ref(false)
-const selectedEmployeeId = ref<string | null>(null)
+const selectedEmployeeId = ref(null)
 const currentPage = ref(1)
+const departments = ref([])
+
 const itemsPerPage = ref(10)
 const isEditing = ref(false)
-const editingEmployee = ref<Employee | null>(null)
+const editingEmployee = ref(null)
 const isSubmitting = ref(false)
-const newEmployee = ref<EmployeeForm>({
+const newEmployee = ref({
   firstName: '',
   lastName: '',
   email: '',
+  department: '',
   phoneNumber: ''
 })
 
@@ -59,16 +42,26 @@ const filteredEmployees = computed(() => {
   })
 })
 
+async function fetchDepartments() {
+  try {
+    const response = await api.get('/departments')
+    const list = response.data.departments || []
+    // Prefer active departments first
+
+    departments.value = list
+    // departments.value = list.filter((d) => d.isActive !== false)
+  } catch (e) {
+    // Non-blocking error; department is optional
+    console.error('Failed to fetch departments', e)
+  }
+}
+
 const fetchEmployees = async () => {
   try {
     isLoading.value = true
-    const response = await axios.get('http://localhost:5000/api/employees', {
-      headers: {
-        Authorization: `Bearer ${authStore.token}`
-      }
-    })
+    const response = await api.get('/employees')
     employees.value = response.data.employees || response.data
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error fetching employees:', error)
     Swal.fire({
       icon: 'error',
@@ -94,7 +87,8 @@ const hasUnsavedChanges = computed(() => {
     ne.firstName !== '' ||
     ne.lastName !== '' ||
     ne.email !== '' ||
-    ne.phoneNumber !== ''
+    ne.phoneNumber !== '' ||
+    ne.department !== ''
   )
 })
 
@@ -124,7 +118,7 @@ const handleCloseModal = async () => {
 }
 
 // Edit and delete functions
-const handleEditEmployee = (employee: Employee) => {
+const handleEditEmployee = (employee) => {
   isEditing.value = true
   editingEmployee.value = employee
   newEmployee.value = {
@@ -136,7 +130,7 @@ const handleEditEmployee = (employee: Employee) => {
   showModal.value = true
 }
 
-const handleToggleEmployeeStatus = async (employee: Employee) => {
+const handleToggleEmployeeStatus = async (employee) => {
   const action = employee.isActive ? 'deactivate' : 'activate'
   const result = await Swal.fire({
     title: `Are you sure?`,
@@ -157,15 +151,7 @@ const handleToggleEmployeeStatus = async (employee: Employee) => {
     try {
       isTogglingStatus.value = true
       selectedEmployeeId.value = employee._id
-      const response = await axios.patch(
-        `http://localhost:5000/api/employees/${employee._id}/toggle-status`,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${authStore.token}`
-          }
-        }
-      )
+      const response = await api.patch(`/employees/${employee._id}/toggle-status`, {})
 
       // Update the employee in the local array with the response data
       const updatedEmployee = response.data.employee
@@ -175,7 +161,7 @@ const handleToggleEmployeeStatus = async (employee: Employee) => {
       socket.emit('employeeStatusToggled', updatedEmployee)
 
       Swal.fire('Success!', `Employee has been ${action}d.`, 'success')
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error toggling employee status:', error)
       Swal.fire({
         icon: 'error',
@@ -189,7 +175,7 @@ const handleToggleEmployeeStatus = async (employee: Employee) => {
   }
 }
 
-const handleDeleteEmployee = async (employeeId: string) => {
+const handleDeleteEmployee = async (employeeId) => {
   selectedEmployeeId.value = employeeId
   const result = await Swal.fire({
     title: 'Are you sure?',
@@ -209,15 +195,11 @@ const handleDeleteEmployee = async (employeeId: string) => {
   if (result.isConfirmed) {
     try {
       isDeleting.value = true
-      await axios.delete(`http://localhost:5000/api/employees/${employeeId}`, {
-        headers: {
-          Authorization: `Bearer ${authStore.token}`
-        }
-      })
+      await api.delete(`/employees/${employeeId}`)
       socket.emit('deleteEmployee', employeeId)
       Swal.fire('Deleted!', 'Employee has been deleted.', 'success')
       employees.value = employees.value.filter((employee) => employee._id !== employeeId)
-    } catch (error: any) {
+    } catch (error) {
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -233,16 +215,8 @@ const handleDeleteEmployee = async (employeeId: string) => {
 const handleAddEmployee = async () => {
   try {
     isSubmitting.value = true
-    const response = await axios.post(
-      'http://localhost:5000/api/employees/register',
-      newEmployee.value,
-      {
-        headers: {
-          Authorization: `Bearer ${authStore.token}`
-        }
-      }
-    )
-
+    const response = await api.post('/employees/register', newEmployee.value)
+    console.log(newEmployee.value)
     socket.emit('createEmployee', response.data.employee)
 
     showModal.value = false
@@ -253,7 +227,7 @@ const handleAddEmployee = async () => {
       text: 'Employee created successfully',
       timer: 1500
     })
-  } catch (error: any) {
+  } catch (error) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -270,15 +244,7 @@ const handleUpdateEmployee = async () => {
     if (!editingEmployee.value) {
       throw new Error('No employee selected for editing.')
     }
-    const response = await axios.put(
-      `http://localhost:5000/api/employees/${editingEmployee.value._id}`,
-      newEmployee.value,
-      {
-        headers: {
-          Authorization: `Bearer ${authStore.token}`
-        }
-      }
-    )
+    const response = await api.put(`/employees/${editingEmployee.value._id}`, newEmployee.value)
 
     const updatedEmployee = response.data.employee
     employees.value = employees.value.map((employee) =>
@@ -295,7 +261,7 @@ const handleUpdateEmployee = async () => {
       text: 'Employee updated successfully',
       timer: 1500
     })
-  } catch (error: any) {
+  } catch (error) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
@@ -311,6 +277,7 @@ const resetForm = () => {
     firstName: '',
     lastName: '',
     email: '',
+    department: '',
     phoneNumber: ''
   }
   isEditing.value = false
@@ -319,7 +286,7 @@ const resetForm = () => {
 
 onMounted(() => {
   fetchEmployees()
-
+  fetchDepartments()
   // Ensure socket is connected
   if (!socket.connected) {
     socket.connect()
@@ -424,6 +391,7 @@ onMounted(() => {
           <tr class="bg-gray-2 text-left dark:bg-meta-4">
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Employee Name</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Email</th>
+            <th class="py-4.5 px-4 font-medium text-black dark:text-white">Department</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Phone Number</th>
             <th class="py-4.5 px-4 font-medium text-black dark:text-white">Status</th>
             <th
@@ -458,6 +426,7 @@ onMounted(() => {
               </div>
             </td>
             <td class="py-4.5 px-4">{{ employee.email || '—' }}</td>
+            <td class="py-4.5 px-4">{{ employee.department || '—' }}</td>
             <td class="py-4.5 px-4">{{ employee.phoneNumber || '—' }}</td>
             <td class="py-4.5 px-4">
               <span
@@ -674,7 +643,17 @@ onMounted(() => {
               />
             </div>
           </div>
-
+          <div>
+            <select
+              v-model="newEmployee.department"
+              class="w-full rounded border-[1.5px] border-stroke bg-transparent py-3 px-5 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+            >
+              <option value="">Select department</option>
+              <option v-for="dept in departments" :key="dept._id" :value="dept.code">
+                {{ dept.name }}<span v-if="dept.code"> ({{ dept.code }})</span>
+              </option>
+            </select>
+          </div>
           <!-- Contact Information -->
           <div class="grid grid-cols-2 gap-4">
             <div>

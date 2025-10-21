@@ -1,9 +1,11 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import axios from '../../utils/axios'
 import DefaultLayout from '../../layouts/DefaultLayout.vue'
 import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
+import BaseCombobox from '../../components/Forms/BaseCombobox.vue'
 import { useAuthStore } from '../../stores/auth'
+import { useRouter } from 'vue-router'
 
 const pageTitle = ref('Inventory Records')
 
@@ -18,6 +20,9 @@ const filterDepartment = ref('')
 const filterDate = ref('')
 const filterSource = ref('')
 const textSearch = ref('')
+// Item-level server filters
+const serialSearch = ref('')
+const acnSearch = ref('')
 
 // Pagination
 const currentPage = ref(1)
@@ -27,6 +32,9 @@ const pageSize = ref(10)
 const departments = ref([])
 const authStore = useAuthStore()
 const createdByName = computed(() => authStore?.user?.name || authStore?.user?.email || '')
+
+// Lifecycle status options
+const statusOptions = ['deployed', 'returned', 'repair', 'retired']
 
 // Details Modal
 const isDetailsOpen = ref(false)
@@ -47,17 +55,860 @@ const newRecord = ref({
       ram: '',
       videoCard: '',
       monitorAndSerial: '',
+      acn: '',
       propertyNumber: '',
       printerOrScanner: '',
       endUserOrMR: '',
-      remarksYears: ''
+      remarksYears: '',
+      // identifiers & lifecycle
+      serialNumber: '',
+      status: 'deployed',
+      statusNotes: ''
     }
   ]
+})
+
+// Primary device and employee selectors for Add modal
+const deviceType = ref('desktop')
+const products = ref([])
+const employees = ref([])
+const primaryProductId = ref('')
+const selectedEmployeeId = ref('')
+// Loading and error states for selectors
+const productsLoading = ref(false)
+const employeesLoading = ref(false)
+const productsError = ref(null)
+const employeesError = ref(null)
+
+// ACN selection state (RIS-style: use product.assetControlNumbers)
+const acnOptionsByProduct = ref({})
+const serialByAcnByProduct = ref({})
+const acnLoading = ref(false)
+const acnError = ref(null)
+const selectedPrimaryAcn = ref('')
+// RIS-style ACN combobox
+const acnQuery = ref('')
+const showAcnOptions = ref(false)
+const acnHighlightIndex = ref(0)
+
+async function fetchACNsForProduct(productId) {
+  if (!productId) return
+  acnLoading.value = true
+  acnError.value = null
+  try {
+    // 1) Fetch product to get legacy ACN array and serials
+    const { data: prodResp } = await axios.get(`/products/${productId}`)
+    const product = prodResp?.product || {}
+    const legacyCodes = Array.isArray(product.assetControlNumbers)
+      ? product.assetControlNumbers.filter(Boolean)
+      : []
+    const serials = Array.isArray(product.serialNumbers) ? product.serialNumbers : []
+
+    // 2) Fetch ACN records that may include serial numbers
+    const { data: acnResp } = await axios.get(`/acns/product/${productId}`)
+    const records = Array.isArray(acnResp?.acns) ? acnResp.acns : []
+    const active = records.filter((r) => r?.isActive !== false)
+
+    // Build union of ACN codes from product and records
+    const codeSet = new Set([
+      ...legacyCodes.map((c) => String(c).trim()).filter(Boolean),
+      ...active.map((r) => String(r?.acnCode || '').trim()).filter(Boolean)
+    ])
+    const codes = Array.from(codeSet)
+
+    // Build ACN → serial map from records
+    const map = {}
+    for (const r of active) {
+      const code = String(r?.acnCode || '').trim()
+      const sn = String(r?.serialNumber || '').trim()
+      if (code) map[code] = sn
+    }
+
+    // Fallback: derive mapping by index if product tracks both arrays but no record serials
+    if (serials.length && legacyCodes.length && Object.values(map).every((s) => !s)) {
+      const max = Math.min(serials.length, legacyCodes.length)
+      for (let i = 0; i < max; i++) {
+        const code = String(legacyCodes[i] || '').trim()
+        const sn = String(serials[i] || '').trim()
+        if (code && sn) map[code] = sn
+      }
+    }
+
+    acnOptionsByProduct.value[productId] = codes
+    serialByAcnByProduct.value[productId] = map
+  } catch (err) {
+    // Preserve any existing options to avoid clearing UI unexpectedly
+    acnOptionsByProduct.value[productId] = acnOptionsByProduct.value[productId] || []
+    serialByAcnByProduct.value[productId] = serialByAcnByProduct.value[productId] || {}
+    acnError.value = err?.response?.data?.message || err.message || 'Failed to load ACNs'
+  } finally {
+    acnLoading.value = false
+  }
+}
+
+const currentItemAcnOptions = computed(() => {
+  const pid = tempItem.value?.product
+  const list = pid ? acnOptionsByProduct.value[pid] || [] : []
+  // Exclude ACNs already used in other items, keep current selection visible
+  const used = newRecord.value.items
+    .map((it, idx) =>
+      idx !== editingItemIndex.value ? String(it.propertyNumber || it.acn || '') : ''
+    )
+    .filter(Boolean)
+  return list.filter(
+    (code) =>
+      !used.includes(String(code)) || String(code) === String(tempItem.value?.propertyNumber)
+  )
+})
+
+// Inline editor ACN combobox
+const acnEditorQuery = ref('')
+const showAcnEditorOptions = ref(false)
+const acnEditorHighlightIndex = ref(0)
+const filteredItemAcnOptions = computed(() => {
+  const q = acnEditorQuery.value.trim().toLowerCase()
+  const base = currentItemAcnOptions.value || []
+  if (!q) return base
+  return base.filter((code) => String(code).toLowerCase().includes(q))
+})
+
+const primaryAcnOptions = computed(() => {
+  const pid = primaryProductId.value
+  const list = pid ? acnOptionsByProduct.value[pid] || [] : []
+  const used = newRecord.value.items.map((it) => String(it.acn || '')).filter(Boolean)
+  return list.filter((code) => !used.includes(String(code)))
+})
+
+const filteredPrimaryAcnOptions = computed(() => {
+  const q = acnQuery.value.trim().toLowerCase()
+  const base = primaryAcnOptions.value || []
+  if (!q) return base
+  return base.filter((code) => String(code).toLowerCase().includes(q))
+})
+
+const requiresAcn = computed(() => {
+  const pid = primaryProductId.value
+  const product = products.value.find((p) => String(p._id) === String(pid))
+  if (product && product.hasAssetControlNumber === true) return true
+  // Fallback: require ACN if there are ACNs available for this product
+  return (acnOptionsByProduct.value[pid] || []).length > 0
+})
+
+function applySelectedACN() {
+  const code = String(tempItem.value?.propertyNumber || '').trim()
+  tempItem.value.acn = code || undefined
+  const pid = tempItem.value?.product
+  const map = pid ? serialByAcnByProduct.value?.[pid] || {} : {}
+  const serial = code ? map[code] || '' : ''
+  tempItem.value.serialNumber = serial || ''
+  // Best-effort: update derived preview fields based on product type
+  try {
+    const p = products.value.find((x) => String(x._id) === String(pid))
+    const brand = p ? p.name : ''
+    const cname = String(p?.category?.name || '').toLowerCase()
+    if (cname.includes('monitor')) {
+      tempItem.value.monitorAndSerial = brand ? (serial ? `${brand} - ${serial}` : brand) : ''
+    } else if (cname.includes('printer') || cname.includes('scanner')) {
+      tempItem.value.printerOrScanner = brand ? (serial ? `${brand} - ${serial}` : brand) : ''
+    }
+  } catch (_) {
+    console.log(_)
+  }
+}
+
+// Selected department name for filtering employees
+const selectedDeptName = computed(() => {
+  const depId = newRecord.value.departmentId
+  if (!depId) return String(newRecord.value.department || '').trim() || ''
+  const dep = departments.value.find((d) => String(d._id) === String(depId))
+  return dep?.name || ''
+})
+
+// Batch builder state
+const batchQuantity = ref('')
+const batchUnits = ref([])
+
+// Auto-fetch ACNs when secondary product selection changes
+watch(
+  batchUnits,
+  (units) => {
+    try {
+      for (const u of units || []) {
+        const pid = String(u?._newSecondaryProductId || '').trim()
+        if (
+          pid &&
+          (!acnOptionsByProduct.value[pid] || acnOptionsByProduct.value[pid].length === 0)
+        ) {
+          fetchACNsForProduct(pid)
+        }
+      }
+    } catch (_) {
+      /* no-op */
+    }
+  },
+  { deep: true }
+)
+
+const desktopProductId = ref('')
+const desktopQuantity = ref('')
+const desktopNotes = ref('')
+const laptopProductId = ref('')
+const laptopQuantity = ref('')
+const laptopNotes = ref('')
+
+function requiresAcnForProduct(pid) {
+  const product = products.value.find((p) => String(p._id) === String(pid))
+  if (!product) return false
+  if (product.hasAssetControlNumber === true) return true
+  return (acnOptionsByProduct.value[pid] || []).length > 0
+}
+
+// Filter ACN options for a batch unit: exclude ACNs already selected in other units
+// and those already used in items of the current record. Keep the unit's current
+// selection visible so it doesn't disappear from the list.
+function getFilteredAcnOptions(unit, idx) {
+  try {
+    const pid = String(unit?.productId || '').trim()
+    const base = pid ? acnOptionsByProduct.value[pid] || [] : []
+    if (!base || base.length === 0) return base
+
+    const usedInRecord = (newRecord.value.items || [])
+      .map((it) => String(it.propertyNumber || it.acn || ''))
+      .filter(Boolean)
+
+    const usedInBatch = (batchUnits.value || [])
+      .map((u, uidx) => (uidx !== idx ? String(u.acn || u.propertyNumber || '') : ''))
+      .filter(Boolean)
+
+    const usedSet = new Set([...usedInRecord, ...usedInBatch].map((s) => String(s)))
+    const current = String(unit?.acn || unit?.propertyNumber || '')
+
+    return base.filter((code) => {
+      const c = String(code)
+      return !usedSet.has(c) || c === current
+    })
+  } catch (_) {
+    return acnOptionsByProduct.value[unit?.productId] || []
+  }
+}
+
+function buildBatchUnits() {
+  const qty = Number(batchQuantity.value)
+  if (!qty || qty < 1) {
+    alert('Enter a valid quantity (>= 1).')
+    return
+  }
+  batchUnits.value = Array.from({ length: qty }).map(() => ({
+    productId: primaryProductId.value || '',
+    employeeId: selectedEmployeeId.value || '',
+    remarksYears: '',
+    acn: '',
+    propertyNumber: '',
+    secondary: [],
+    _newSecondaryType: '',
+    _newSecondaryProductId: '',
+    _newSecondaryAcn: '',
+    _newSecondaryPropertyNumber: '',
+    _newSecondaryRemarks: '',
+    _newSecondaryDuplicate: false
+  }))
+  // Preload ACNs for the default product
+  const pid = primaryProductId.value
+  if (pid) fetchACNsForProduct(pid)
+}
+
+function copyPreviousUnit(uidx) {
+  if (uidx <= 0) return
+  const prev = batchUnits.value[uidx - 1]
+  const curr = batchUnits.value[uidx]
+  if (!prev || !curr) return
+  batchUnits.value[uidx] = {
+    ...curr,
+    productId: prev.productId,
+    employeeId: prev.employeeId,
+    remarksYears: prev.remarksYears || '',
+    acn: prev.acn || '',
+    propertyNumber: prev.propertyNumber || '',
+    secondary: Array.isArray(prev.secondary) ? JSON.parse(JSON.stringify(prev.secondary)) : []
+  }
+}
+
+function generateUnitsFor(productId, qty, notes) {
+  const count = Number(qty)
+  if (!productId || !count || count < 1) {
+    alert('Select product and valid quantity.')
+    return
+  }
+  const arr = Array.from({ length: count }).map(() => ({
+    productId,
+    employeeId: selectedEmployeeId.value || '',
+    remarksYears: notes || '',
+    acn: '',
+    propertyNumber: '',
+    secondary: [],
+    _newSecondaryType: '',
+    _newSecondaryProductId: '',
+    _newSecondaryAcn: '',
+    _newSecondaryPropertyNumber: '',
+    _newSecondaryRemarks: '',
+    _newSecondaryDuplicate: false
+  }))
+  if (productId) fetchACNsForProduct(productId)
+  batchUnits.value = [...batchUnits.value, ...arr]
+}
+
+function generateDesktopUnits() {
+  generateUnitsFor(desktopProductId.value, desktopQuantity.value, desktopNotes.value)
+}
+function generateLaptopUnits() {
+  generateUnitsFor(laptopProductId.value, laptopQuantity.value, laptopNotes.value)
+}
+
+function removeUnit(idx) {
+  batchUnits.value.splice(idx, 1)
+}
+
+function onUnitProductChange(unit) {
+  // Clear ACN and fetch options for the selected product
+  unit.acn = ''
+  unit.propertyNumber = ''
+  if (unit?.productId) fetchACNsForProduct(unit.productId)
+}
+
+function applyBatchToItems() {
+  if (!batchUnits.value.length) return
+  const usedAcn = new Set(newRecord.value.items.map((it) => String(it.acn || '')).filter(Boolean))
+  const itemsToAdd = []
+  for (const unit of batchUnits.value) {
+    const product = products.value.find((p) => String(p._id) === String(unit.productId))
+    if (!product) {
+      alert('Each unit must have a product selected.')
+      return
+    }
+    const requires = requiresAcnForProduct(unit.productId)
+    const code = String(unit.acn || '')
+    if (requires && !code) {
+      alert(`Product "${product.name}" requires an ACN.`)
+      return
+    }
+    if (code && usedAcn.has(code)) {
+      alert(`ACN ${code} is already used in items.`)
+      return
+    }
+    const employee = employees.value.find((e) => String(e._id) === String(unit.employeeId))
+    const employeeName = employee
+      ? [employee.firstName, employee.lastName].filter(Boolean).join(' ') ||
+        employee.name ||
+        employee.email
+      : ''
+    const primarySerial =
+      code && serialByAcnByProduct.value?.[product._id]?.[code]
+        ? serialByAcnByProduct.value[product._id][code]
+        : ''
+    itemsToAdd.push({
+      description: product.name,
+      product: product._id,
+      processor: '',
+      storage: '',
+      ram: '',
+      videoCard: '',
+      monitorAndSerial: (() => {
+        const monitors = (unit.secondary || [])
+          .filter((s) => s.type === 'monitor')
+          .map((s) => {
+            const brand = getProductName(s.productId)
+            const acn = s?.acn ? String(s.acn) : ''
+            const serial =
+              acn && serialByAcnByProduct.value?.[s.productId]?.[acn]
+                ? serialByAcnByProduct.value[s.productId][acn]
+                : ''
+            return brand ? (serial ? `${brand} - ${serial}` : brand) : null
+          })
+          .filter(Boolean)
+        return monitors.length ? monitors.join(', ') : '—'
+      })(),
+      acn: code || undefined,
+      propertyNumber: unit.propertyNumber || '',
+      printerOrScanner: (() => {
+        const buildItems = (type) => {
+          return (unit.secondary || [])
+            .filter((s) => s.type === type)
+            .map((s) => {
+              const brand = getProductName(s.productId)
+              const acn = s?.acn ? String(s.acn) : ''
+              const serial =
+                acn && serialByAcnByProduct.value?.[s.productId]?.[acn]
+                  ? serialByAcnByProduct.value[s.productId][acn]
+                  : ''
+              return brand ? (serial ? `${brand} - ${serial}` : brand) : null
+            })
+            .filter(Boolean)
+        }
+        const printers = buildItems('printer')
+        const scanners = buildItems('scanner')
+        const parts = []
+        if (printers.length) parts.push('Printer - ' + printers.join(', '))
+        if (scanners.length) parts.push('Scanner - ' + scanners.join(', '))
+        return parts.join(' ') || '—'
+      })(),
+      endUserOrMR: employeeName,
+      employeeId: employee ? employee._id : undefined,
+      remarksYears: unit.remarksYears || '',
+      serialNumber: primarySerial,
+      status: 'deployed',
+      statusNotes: ''
+    })
+    if (code) usedAcn.add(code)
+
+    // Append secondary items for this unit
+    const secList = Array.isArray(unit.secondary) ? unit.secondary : []
+    for (const sec of secList) {
+      const secProduct = products.value.find((p) => String(p._id) === String(sec.productId))
+      if (!secProduct) {
+        alert('Each secondary item must have a product selected.')
+        return
+      }
+      const secRequires = requiresAcnForProduct(sec.productId)
+      const secCode = String(sec.acn || '')
+      if (secRequires && !secCode) {
+        alert(`Secondary product "${secProduct.name}" requires an ACN.`)
+        return
+      }
+      if (secCode && usedAcn.has(secCode)) {
+        alert(`ACN ${secCode} is already used in items.`)
+        return
+      }
+      const secSerial =
+        secCode && serialByAcnByProduct.value?.[secProduct._id]?.[secCode]
+          ? serialByAcnByProduct.value[secProduct._id][secCode]
+          : ''
+      itemsToAdd.push({
+        description: secProduct.name,
+        product: secProduct._id,
+        processor: '',
+        storage: '',
+        ram: '',
+        videoCard: '',
+        monitorAndSerial: '',
+        propertyNumber: sec.propertyNumber || '',
+        acn: secCode || undefined,
+        printerOrScanner: sec.type === 'printer' || sec.type === 'scanner' ? sec.type : '',
+        endUserOrMR: employeeName,
+        employeeId: employee ? employee._id : undefined,
+        remarksYears: sec.remarksYears || '',
+        serialNumber: secSerial,
+        status: 'deployed',
+        statusNotes: ''
+      })
+      if (secCode) usedAcn.add(secCode)
+    }
+  }
+  // // Append and open editor for last item
+  newRecord.value.items.push(...itemsToAdd)
+  if (newRecord.value.items.length) {
+    const idx = newRecord.value.items.length - 1
+    tempItem.value = { ...newRecord.value.items[idx] }
+    editingItemIndex.value = idx
+  }
+}
+
+function secondaryProductsByType(type) {
+  const t = String(type || '')
+    .trim()
+    .toLowerCase()
+  return products.value.filter((p) => {
+    const cname = String(p?.category?.name || '')
+      .trim()
+      .toLowerCase()
+    if (t === 'monitor') return cname.includes('monitor')
+    if (t === 'printer') return cname.includes('printer')
+    if (t === 'scanner') return cname.includes('scanner')
+    return false
+  })
+}
+
+function onSecondaryProductChange(unit) {
+  unit._newSecondaryAcn = ''
+  const pid = unit._newSecondaryProductId
+  if (pid) fetchACNsForProduct(pid)
+}
+
+// Filter ACN options for a new secondary item: exclude ACNs already selected
+// in other batch units (unless duplication across units is enabled) and ACNs
+// already used in current record items. Keep the current selection visible.
+function getFilteredSecondaryAcnOptions(unit, uidx) {
+  try {
+    const pid = String(unit?._newSecondaryProductId || '').trim()
+    const base = pid ? acnOptionsByProduct.value[pid] || [] : []
+    if (!base || base.length === 0) return base
+
+    const usedInRecord = (newRecord.value.items || [])
+      .flatMap((it) => [String(it.propertyNumber || ''), String(it.acn || '')])
+      .filter(Boolean)
+
+    const current = String(unit?._newSecondaryAcn || unit?._newSecondaryPropertyNumber || '')
+
+    // If duplication across units is enabled for this secondary, allow duplicates across
+    // other units but still exclude ACNs that are already present in the record items.
+    const allowDupeAcrossUnits = !!unit?._newSecondaryDuplicate
+
+    // ACNs in other batch units (primary selections)
+    const usedPrimaryInBatch = allowDupeAcrossUnits
+      ? []
+      : (batchUnits.value || [])
+          .map((u, i) => (i !== uidx ? String(u.acn || u.propertyNumber || '') : ''))
+          .filter(Boolean)
+
+    // ACNs in other batch units' secondary items
+    const usedSecondaryInBatch = allowDupeAcrossUnits
+      ? []
+      : (batchUnits.value || []).flatMap((u, i) =>
+          i !== uidx
+            ? (u.secondary || [])
+                .flatMap((s) => [String(s.acn || ''), String(s.propertyNumber || '')])
+                .filter(Boolean)
+            : []
+        )
+
+    const usedSet = new Set(
+      [...usedInRecord, ...usedPrimaryInBatch, ...usedSecondaryInBatch].map((s) => String(s))
+    )
+
+    return base.filter((code) => {
+      const c = String(code)
+      return !usedSet.has(c) || c === current
+    })
+  } catch (_) {
+    return acnOptionsByProduct.value[unit?._newSecondaryProductId] || []
+  }
+}
+
+function addSecondary(unit) {
+  const type = String(unit._newSecondaryType || '').trim()
+  const productId = String(unit._newSecondaryProductId || '').trim()
+  const acn = String(unit._newSecondaryAcn || '').trim()
+  const propertyNumber = String(unit._newSecondaryPropertyNumber || '').trim()
+
+  const remarks = String(unit._newSecondaryRemarks || '')
+  if (!type) {
+    alert('Select a secondary type.')
+    return
+  }
+  const secProduct = products.value.find((p) => String(p._id) === String(productId))
+  if (!secProduct) {
+    alert('Select a secondary product.')
+    return
+  }
+  if (requiresAcnForProduct(productId) && !acn) {
+    alert('This secondary product requires an ACN.')
+    return
+  }
+  const newSec = { type, productId, acn, propertyNumber, remarksYears: remarks }
+  unit.secondary = unit.secondary || []
+  unit.secondary.push(newSec)
+  if (unit._newSecondaryDuplicate) {
+    for (const u of batchUnits.value) {
+      if (u === unit) continue
+      u.secondary = u.secondary || []
+      const hasDupe = (u.secondary || []).some(
+        (s) =>
+          String(s.productId) === String(productId) &&
+          String(s.type) === String(type) &&
+          String(s.acn || '') === String(acn || '')
+      )
+      if (!hasDupe) u.secondary.push({ ...newSec })
+    }
+  }
+  unit._newSecondaryType = ''
+  unit._newSecondaryProductId = ''
+  unit._newSecondaryAcn = ''
+  unit._newSecondaryPropertyNumber = ''
+
+  unit._newSecondaryRemarks = ''
+  unit._newSecondaryDuplicate = false
+}
+
+function removeSecondary(unit, idx) {
+  if (!unit.secondary) return
+  unit.secondary.splice(idx, 1)
+}
+
+// Combobox helpers: Employee
+const showEmpOptions = ref(false)
+const empHighlightIndex = ref(0)
+function openEmpOptions() {
+  showEmpOptions.value = true
+  empHighlightIndex.value = 0
+}
+function closeEmpOptions() {
+  showEmpOptions.value = false
+}
+function closeEmpOptionsLater() {
+  setTimeout(() => (showEmpOptions.value = false), 150)
+}
+function moveEmpHighlight(delta) {
+  const list = filteredEmployeeOptions.value || []
+  if (!list.length) return
+  empHighlightIndex.value = (empHighlightIndex.value + delta + list.length) % list.length
+}
+function selectEmpFromHighlight() {
+  const list = filteredEmployeeOptions.value || []
+  const choice = list[empHighlightIndex.value]
+  if (choice) selectEmployee(choice)
+}
+function selectEmployee(e) {
+  if (!e) return
+  selectedEmployeeId.value = e.id
+  employeeQuery.value = e.name || ''
+  showEmpOptions.value = false
+}
+function clearEmployeeSelection() {
+  selectedEmployeeId.value = ''
+  employeeQuery.value = ''
+}
+
+// Combobox helpers: ACN (primary)
+function openAcnOptions() {
+  showAcnOptions.value = true
+  acnHighlightIndex.value = 0
+}
+function closeAcnOptions() {
+  showAcnOptions.value = false
+}
+function closeAcnOptionsLater() {
+  setTimeout(() => (showAcnOptions.value = false), 150)
+}
+function moveAcnHighlight(delta) {
+  const list = filteredPrimaryAcnOptions.value || []
+  if (!list.length) return
+  acnHighlightIndex.value = (acnHighlightIndex.value + delta + list.length) % list.length
+}
+function selectAcnFromHighlight() {
+  const list = filteredPrimaryAcnOptions.value || []
+  const choice = list[acnHighlightIndex.value]
+  if (choice) selectPrimaryAcn(choice)
+}
+function selectPrimaryAcn(code) {
+  selectedPrimaryAcn.value = String(code || '')
+  acnQuery.value = selectedPrimaryAcn.value
+  showAcnOptions.value = false
+}
+function clearPrimaryAcn() {
+  selectedPrimaryAcn.value = ''
+  acnQuery.value = ''
+}
+
+// Combobox helpers: ACN (inline editor)
+function openAcnEditorOptions() {
+  showAcnEditorOptions.value = true
+  acnEditorHighlightIndex.value = 0
+}
+function closeAcnEditorOptions() {
+  showAcnEditorOptions.value = false
+}
+function closeAcnEditorOptionsLater() {
+  setTimeout(() => (showAcnEditorOptions.value = false), 150)
+}
+function moveAcnEditorHighlight(delta) {
+  const list = filteredItemAcnOptions.value || []
+  if (!list.length) return
+  acnEditorHighlightIndex.value =
+    (acnEditorHighlightIndex.value + delta + list.length) % list.length
+}
+function selectAcnEditorFromHighlight() {
+  const list = filteredItemAcnOptions.value || []
+  const choice = list[acnEditorHighlightIndex.value]
+  if (choice) selectInlineAcn(choice)
+}
+function selectInlineAcn(code) {
+  const val = String(code || '')
+  // Keep propertyNumber in sync with chosen ACN for mapping
+  tempItem.value.propertyNumber = val
+  // Derive ACN + serial + preview fields based on selected ACN
+  applySelectedACN()
+  showAcnEditorOptions.value = false
+}
+const primaryProducts = computed(() => {
+  const byName = (n) => String(n || '').toLowerCase()
+  return products.value.filter((p) => {
+    const cname = byName(p?.category?.name)
+    return cname.includes('desktop') || cname.includes('computer') || cname.includes('laptop')
+  })
+})
+
+const desktopProducts = computed(() => {
+  const byName = (n) => String(n || '').toLowerCase()
+  return products.value.filter((p) => {
+    const cname = byName(p?.category?.name)
+    return cname.includes('desktop') || cname.includes('computer')
+  })
+})
+
+const laptopProducts = computed(() => {
+  const byName = (n) => String(n || '').toLowerCase()
+  return products.value.filter((p) => {
+    const cname = byName(p?.category?.name)
+    return cname.includes('laptop')
+  })
+})
+
+const employeeOptions = computed(() => {
+  return (employees.value || []).map((e) => ({
+    id: e._id,
+    name: [e.firstName, e.lastName].filter(Boolean).join(' ') || e.name || e.email,
+    email: e.email || '',
+    phoneNumber: e.phoneNumber || '',
+    department: e.department || ''
+  }))
+})
+
+const employeeQuery = ref('')
+const filteredEmployeeOptions = computed(() => {
+  const q = employeeQuery.value.trim().toLowerCase()
+  const toKey = (s) => {
+    const t = String(s || '')
+      .trim()
+      .toLowerCase()
+    const words = t
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+    const init = words.map((w) => w[0]).join('')
+    const acro = words.length === 1 && t.length <= 5 ? t : init
+    return { t, init, acro }
+  }
+  const dept = toKey(selectedDeptName.value)
+  const baseByDept = dept.t
+    ? employeeOptions.value.filter((e) => {
+        const ed = toKey(e.department)
+        return (
+          ed.t === dept.t ||
+          ed.t.includes(dept.t) ||
+          dept.t.includes(ed.t) ||
+          ed.init === dept.init ||
+          ed.acro === dept.acro ||
+          ed.acro === dept.init ||
+          dept.acro === ed.init
+        )
+      })
+    : employeeOptions.value
+
+  const usedInRecord = (newRecord.value?.items || [])
+    .map((it) => String(it.employeeId || ''))
+    .filter(Boolean)
+  const usedInBatch = (batchUnits.value || [])
+    .map((u) => String(u.employeeId || ''))
+    .filter(Boolean)
+  const usedSet = new Set([...usedInRecord, ...usedInBatch])
+  const currentId = String(selectedEmployeeId.value || '')
+
+  const base = baseByDept.filter((e) => {
+    const id = String(e.id || e._id || '')
+    return !usedSet.has(id) || id === currentId
+  })
+
+  if (!q) return base
+  return base.filter(
+    (e) =>
+      String(e.name || '')
+        .toLowerCase()
+        .includes(q) ||
+      String(e.email || '')
+        .toLowerCase()
+        .includes(q) ||
+      String(e.phoneNumber || '')
+        .toLowerCase()
+        .includes(q)
+  )
+})
+
+const employeesBySelectedDepartment = computed(() => {
+  const toKey = (s) => {
+    const t = String(s || '')
+      .trim()
+      .toLowerCase()
+    const words = t
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+    const init = words.map((w) => w[0]).join('')
+    const acro = words.length === 1 && t.length <= 5 ? t : init
+    return { t, init, acro }
+  }
+  const dept = toKey(selectedDeptName.value)
+  if (!dept.t) return employeeOptions.value
+  return employeeOptions.value.filter((e) => {
+    const ed = toKey(e.department)
+    return (
+      ed.t === dept.t ||
+      ed.t.includes(dept.t) ||
+      dept.t.includes(ed.t) ||
+      ed.init === dept.init ||
+      ed.acro === dept.acro ||
+      ed.acro === dept.init ||
+      dept.acro === ed.init
+    )
+  })
+})
+
+function getFilteredEmployeeOptionsForUnit(unit, uidx) {
+  const base = employeesBySelectedDepartment.value || []
+  const usedInRecord = (newRecord.value?.items || [])
+    .map((it) => String(it.employeeId || ''))
+    .filter(Boolean)
+  const usedInBatch = (batchUnits.value || [])
+    .map((u, i) => (i !== uidx ? String(u.employeeId || '') : ''))
+    .filter(Boolean)
+  const usedSet = new Set([...usedInRecord, ...usedInBatch])
+  const currentId = String(unit?.employeeId || '')
+
+  return base.filter((e) => {
+    const id = String(e.id || e._id || '')
+    return !usedSet.has(id) || id === currentId
+  })
+}
+
+function getProductName(id) {
+  const p = products.value.find((x) => String(x._id) === String(id))
+  return p ? p.name : ''
+}
+
+const isValidPreview = computed(() => {
+  const dep = newRecord.value.departmentId || newRecord.value.department
+  if (!dep || !newRecord.value.date) return false
+  const items = newRecord.value.items || []
+  for (const it of items) {
+    if (!it.description) return false
+    if (requiresAcnForProduct(it.product) && !it.acn) return false
+  }
+  const acns = items.map((it) => String(it.acn || it.propertyNumber || '')).filter(Boolean)
+  const seenA = new Set()
+  for (const code of acns) {
+    if (seenA.has(code)) return false
+    seenA.add(code)
+  }
+  const serials = items.map((it) => String(it.serialNumber || '')).filter(Boolean)
+  const seenS = new Set()
+  for (const sn of serials) {
+    if (seenS.has(sn)) return false
+    seenS.add(sn)
+  }
+  return true
 })
 
 // Inline row editor state for Add modal
 const editingItemIndex = ref(null)
 const tempItem = ref(null)
+
+// Auto-apply ACN→serial mapping whenever Property Number changes in the inline editor
+watch(
+  () => tempItem.value && tempItem.value.propertyNumber,
+  () => {
+    applySelectedACN()
+  }
+)
 
 function resetAddForm() {
   newRecord.value = {
@@ -76,29 +927,60 @@ function resetAddForm() {
         propertyNumber: '',
         printerOrScanner: '',
         endUserOrMR: '',
-        remarksYears: ''
+        remarksYears: '',
+        serialNumber: '',
+        status: 'deployed',
+        statusNotes: ''
       }
     ]
   }
+  deviceType.value = 'desktop'
+  primaryProductId.value = ''
+  selectedEmployeeId.value = ''
+  selectedPrimaryAcn.value = ''
+  employeeQuery.value = ''
 }
 
 function addItemRow() {
+  const product = products.value.find((p) => String(p._id) === String(primaryProductId.value))
+  const employee = employees.value.find((e) => String(e._id) === String(selectedEmployeeId.value))
+  const employeeName = employee
+    ? [employee.firstName, employee.lastName].filter(Boolean).join(' ') ||
+      employee.name ||
+      employee.email
+    : ''
+  let acnCode = ''
+  let acnSerial = ''
+  let acnProductId = product ? product._id : undefined
+  if (requiresAcn.value && selectedPrimaryAcn.value) {
+    acnCode = selectedPrimaryAcn.value
+    const map = serialByAcnByProduct.value?.[acnProductId] || {}
+    acnSerial = map[acnCode] || ''
+  }
   newRecord.value.items.push({
-    description: '',
+    description: product ? product.name : '',
+    product: acnProductId,
     processor: '',
     storage: '',
     ram: '',
     videoCard: '',
     monitorAndSerial: '',
-    propertyNumber: '',
+    propertyNumber: acnCode || '',
+    acn: acnCode || undefined,
     printerOrScanner: '',
-    endUserOrMR: '',
-    remarksYears: ''
+    endUserOrMR: employeeName,
+    employeeId: employee ? employee._id : undefined,
+    remarksYears: '',
+    serialNumber: acnSerial || '',
+    status: 'deployed',
+    statusNotes: ''
   })
   // Immediately open editor for the newly added row
   const idx = newRecord.value.items.length - 1
   tempItem.value = { ...newRecord.value.items[idx] }
   editingItemIndex.value = idx
+  // Reset selected ACN to prevent duplicate adds
+  selectedPrimaryAcn.value = ''
 }
 
 function removeItemRow(idx) {
@@ -114,12 +996,36 @@ function removeItemRow(idx) {
 function startEditItem(idx) {
   tempItem.value = { ...newRecord.value.items[idx] }
   editingItemIndex.value = idx
+  // Fetch ACNs for the item's product to support ACN-based selection
+  if (tempItem.value?.product) {
+    fetchACNsForProduct(tempItem.value.product)
+  }
 }
 
 function saveEditItem() {
   if (editingItemIndex.value === null) return
   const idx = editingItemIndex.value
-  newRecord.value.items[idx] = { ...tempItem.value }
+  const t = tempItem.value || {}
+  // Ensure ACN/serial/derived preview fields reflect the current Property Number
+  applySelectedACN()
+  const required = [
+    { key: 'description', label: 'Description' },
+    { key: 'processor', label: 'Processor' },
+    { key: 'storage', label: 'Storage' },
+    { key: 'ram', label: 'RAM' },
+    { key: 'videoCard', label: 'Video Card' },
+    { key: 'monitorAndSerial', label: 'Brand of Monitor & Serial Number' },
+    { key: 'printerOrScanner', label: 'Printer or Scanner' },
+    { key: 'endUserOrMR', label: 'End User or MR' },
+    { key: 'remarksYears', label: 'Remarks / Years' }
+  ]
+  for (const f of required) {
+    if (!String(t[f.key] || '').trim()) {
+      alert(`Please provide ${f.label} for this item.`)
+      return
+    }
+  }
+  newRecord.value.items[idx] = { ...t }
   editingItemIndex.value = null
   tempItem.value = null
 }
@@ -129,11 +1035,27 @@ function cancelEditItem() {
   tempItem.value = null
 }
 
+function printPreview() {
+  window.print()
+}
+
 async function fetchRecords() {
   isLoading.value = true
   errorMessage.value = null
   try {
-    const { data } = await axios.get('/inventory-records')
+    const params = {}
+    if (filterDepartment.value) params['department'] = filterDepartment.value
+    if (filterSource.value) {
+      const map = { manual: 'Manual', deployment: 'Deployment' }
+      params['sourceType'] = map[filterSource.value] || filterSource.value
+    }
+    if (filterDate.value) {
+      params['startDate'] = filterDate.value
+      params['endDate'] = filterDate.value
+    }
+    if (serialSearch.value) params['serialNumber'] = serialSearch.value.trim()
+    if (acnSearch.value) params['acn'] = acnSearch.value.trim()
+    const { data } = await axios.get('/inventory-records', { params })
     records.value = Array.isArray(data) ? data : data?.records || []
   } catch (err) {
     console.error('Failed to fetch inventory records:', err)
@@ -169,18 +1091,119 @@ async function saveRecord() {
     const dep = newRecord.value.departmentId
       ? departments.value.find((d) => String(d._id) === String(newRecord.value.departmentId))
       : null
+
+    // Normalize items and ensure End User/MR matches selected employee
+    const baseItems = (newRecord.value.items || [])
+      .filter((it) => String(it.description || '').trim())
+      .map((it) => {
+        const emp = employees.value.find((e) => String(e._id) === String(it.employeeId))
+        const empName = emp
+          ? [emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.name || emp.email
+          : it.endUserOrMR
+        return {
+          description: it.description,
+          product: it.product,
+          processor: it.processor,
+          storage: it.storage,
+          ram: it.ram,
+          videoCard: it.videoCard,
+          monitorAndSerial: it.monitorAndSerial,
+          serialNumber: it.serialNumber,
+          acn: it.acn,
+          propertyNumber: it.propertyNumber,
+          printerOrScanner: it.printerOrScanner,
+          endUserOrMR: empName,
+          employeeId: it.employeeId,
+          remarksYears: it.remarksYears,
+          status: it.status,
+          statusNotes: it.statusNotes
+        }
+      })
+
     const payload = {
       departmentId: newRecord.value.departmentId || undefined,
       department: dep?.name || newRecord.value.department,
       notes: newRecord.value.notes,
       date: newRecord.value.date,
-      items: newRecord.value.items.filter((it) => it.description?.trim())
+      items: baseItems
     }
 
     if (!payload.department || !payload.date || payload.items.length === 0) {
       alert('Please provide department, date, and at least one item with description.')
       return
     }
+
+    // Require employee relation for each item
+    const missingEmp = payload.items.filter((it) => !it.employeeId)
+    if (missingEmp.length) {
+      alert('Please select an employee for all items to establish relations.')
+      return
+    }
+
+    // Client-side required field validation per item (type-aware)
+    const invalid = payload.items.filter((it) => {
+      const product = products.value.find((p) => String(p._id) === String(it.product))
+      const cname = String(
+        product?.category?.name || product?.name || it.description || ''
+      ).toLowerCase()
+      const isDesktop = cname.includes('desktop')
+      const isLaptop = cname.includes('laptop')
+      const isMonitor = cname.includes('monitor')
+      const isPrinter = cname.includes('printer')
+      const isScanner = cname.includes('scanner')
+
+      // Always require description and End User/MR
+      const baseRequired = [it.description, it.endUserOrMR]
+
+      // Additional requireds based on type
+      const computerRequired = [it.processor, it.storage, it.ram, it.videoCard, it.remarksYears]
+      const monitorRequired = [it.monitorAndSerial]
+      const printerScannerRequired = [it.printerOrScanner]
+
+      const checks = [...baseRequired]
+      if (isDesktop || isLaptop) checks.push(...computerRequired)
+      else if (isMonitor) checks.push(...monitorRequired)
+      else if (isPrinter || isScanner) checks.push(...printerScannerRequired)
+      // For other types, only baseRequired applies
+
+      return !checks.every((v) => (typeof v === 'string' ? v.trim() : v))
+    })
+
+    if (invalid.length) {
+      alert(
+        'Some items are missing required fields based on type. Computers need specs and Remarks/Years; monitors need Brand & Serial; printers/scanners need Printer/Scanner. Also ensure End User/MR.'
+      )
+      return
+    }
+
+    // Derive employee assignments to help backend establish relations
+    const empMap = {}
+    for (const it of payload.items) {
+      const eid = String(it.employeeId)
+      if (!empMap[eid]) {
+        const emp = employees.value.find((e) => String(e._id) === eid)
+        empMap[eid] = {
+          employeeId: eid,
+          employeeName: emp
+            ? [emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.name || emp.email
+            : it.endUserOrMR || '',
+          department: emp?.department || '',
+          items: []
+        }
+      }
+      empMap[eid].items.push({
+        description: it.description,
+        product: it.product,
+        serialNumber: it.serialNumber,
+        acn: it.acn,
+        propertyNumber: it.propertyNumber,
+        printerOrScanner: it.printerOrScanner,
+        remarksYears: it.remarksYears,
+        status: it.status
+      })
+    }
+    payload.employeeAssignments = Object.values(empMap)
+    payload.employeeIds = payload.employeeAssignments.map((a) => a.employeeId)
 
     await axios.post('/inventory-records', payload)
     isAddOpen.value = false
@@ -194,41 +1217,180 @@ async function saveRecord() {
   }
 }
 
+async function saveDraft() {
+  try {
+    const dep = newRecord.value.departmentId
+      ? departments.value.find((d) => String(d._id) === String(newRecord.value.departmentId))
+      : null
+
+    // Prepare items and normalize End User/MR from employee when available
+    const baseItems = (newRecord.value.items || []).map((it) => {
+      const emp = employees.value.find((e) => String(e._id) === String(it.employeeId))
+      const empName = emp
+        ? [emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.name || emp.email
+        : it.endUserOrMR || ''
+      return {
+        description: it.description || 'N/A',
+        product: it.product,
+        processor: it.processor || 'N/A',
+        storage: it.storage || 'N/A',
+        ram: it.ram || 'N/A',
+        videoCard: it.videoCard || 'N/A',
+        monitorAndSerial: it.monitorAndSerial || 'N/A',
+        serialNumber: it.serialNumber || undefined,
+        acn: it.acn || undefined,
+        propertyNumber: it.propertyNumber || 'N/A',
+        printerOrScanner: it.printerOrScanner || '',
+        endUserOrMR: empName,
+        employeeId: it.employeeId,
+        remarksYears: it.remarksYears || '',
+        status: it.status || 'deployed',
+        statusNotes: it.statusNotes || ''
+      }
+    })
+
+    const payload = {
+      departmentId: newRecord.value.departmentId || undefined,
+      department: dep?.name || newRecord.value.department,
+      notes: newRecord.value.notes,
+      date: newRecord.value.date,
+      items: baseItems
+    }
+
+    // Derive employee assignments for draft (skip items without employeeId)
+    const empMap = {}
+    for (const it of payload.items) {
+      if (!it.employeeId) continue
+      const eid = String(it.employeeId)
+      if (!empMap[eid]) {
+        const emp = employees.value.find((e) => String(e._id) === eid)
+        empMap[eid] = {
+          employeeId: eid,
+          employeeName: emp
+            ? [emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.name || emp.email
+            : it.endUserOrMR || '',
+          department: emp?.department || '',
+          items: []
+        }
+      }
+      empMap[eid].items.push({
+        description: it.description,
+        product: it.product,
+        serialNumber: it.serialNumber,
+        acn: it.acn,
+        propertyNumber: it.propertyNumber,
+        printerOrScanner: it.printerOrScanner,
+        remarksYears: it.remarksYears,
+        status: it.status
+      })
+    }
+    payload.employeeAssignments = Object.values(empMap)
+    payload.employeeIds = payload.employeeAssignments.map((a) => a.employeeId)
+
+    const draft = { payload, savedAt: new Date().toISOString(), author: createdByName.value }
+    localStorage.setItem('imsInventoryRecordDraft', JSON.stringify(draft))
+    successMessage.value = 'Draft saved locally'
+    setTimeout(() => (successMessage.value = null), 2000)
+  } catch (err) {
+    console.error('Failed to save draft:', err)
+    alert('Failed to save draft locally')
+  }
+}
+
+// Update per-item lifecycle status
+async function updateItemStatus(recordId, item) {
+  try {
+    if (!recordId || !item?._nextStatus) return
+    const body = {
+      status: item._nextStatus,
+      serialNumber: item.serialNumber || undefined,
+      acn: item.acn || item.propertyNumber || undefined,
+      notes: 'Updated via Inventory UI'
+    }
+    const { data } = await axios.patch(`/inventory-records/${recordId}/items/status`, body)
+    const updated = data?.record || data?.updatedRecord || data
+    if (updated && updated.items) {
+      // Update selectedRecord reference to reflect changes
+      if (selectedRecord.value && String(selectedRecord.value._id) === String(recordId)) {
+        selectedRecord.value = updated
+      }
+      // Also refresh list to keep consistency
+      await fetchRecords()
+    }
+    successMessage.value = 'Item status updated'
+    setTimeout(() => (successMessage.value = null), 2000)
+    item._nextStatus = ''
+  } catch (err) {
+    console.error('Failed to update item status:', err)
+    alert(err?.response?.data?.message || 'Failed to update item status')
+  }
+}
+
 function cancelAdd() {
   isAddOpen.value = false
   resetAddForm()
 }
 
 onMounted(async () => {
-  await Promise.all([fetchRecords(), fetchDepartments()])
+  async function fetchProducts() {
+    productsLoading.value = true
+    productsError.value = null
+    try {
+      const { data } = await axios.get('/products')
+      products.value = data?.products || data?.data?.products || []
+      // Initialize primary product to first matching type
+      const list = primaryProducts.value
+      if (!primaryProductId.value && list.length) primaryProductId.value = list[0]._id
+    } catch (err) {
+      products.value = []
+      productsError.value = err?.response?.data?.message || err.message || 'Failed to load products'
+    } finally {
+      productsLoading.value = false
+    }
+  }
+  async function fetchEmployees() {
+    employeesLoading.value = true
+    employeesError.value = null
+    try {
+      const { data } = await axios.get('/employees')
+      employees.value = data?.employees || []
+    } catch (err) {
+      employees.value = []
+      employeesError.value =
+        err?.response?.data?.message || err.message || 'Failed to load employees'
+    } finally {
+      employeesLoading.value = false
+    }
+  }
+  await Promise.all([fetchRecords(), fetchDepartments(), fetchProducts(), fetchEmployees()])
 })
 
-// Derived
-const filteredRecords = computed(() => {
-  const dept = filterDepartment.value.trim().toLowerCase()
-  const date = filterDate.value.trim()
-  const source = filterSource.value.trim().toLowerCase()
-  const q = textSearch.value.trim().toLowerCase()
+// Refetch when filters change
+watch([filterDepartment, filterSource, filterDate, serialSearch, acnSearch], () => {
+  fetchRecords()
+})
 
-  return records.value.filter((r) => {
-    const matchesDept = dept
-      ? String(r.department || '')
-          .toLowerCase()
-          .includes(dept)
-      : true
-    const matchesDate = date ? new Date(r.date).toISOString().slice(0, 10) === date : true
-    const matchesSource = source
-      ? String(r.sourceType || 'manual')
-          .toLowerCase()
-          .includes(source)
-      : true
-    const matchesText = q
-      ? [r.department, r.notes, r?.createdBy?.name]
-          .map((v) => String(v || '').toLowerCase())
-          .some((v) => v.includes(q))
-      : true
-    return matchesDept && matchesDate && matchesSource && matchesText
-  })
+// Reset product selection when device type changes
+watch(deviceType, () => {
+  const list = primaryProducts.value
+  primaryProductId.value = list[0]?._id || ''
+})
+
+// Fetch ACNs when primary product changes
+watch(primaryProductId, (pid) => {
+  selectedPrimaryAcn.value = ''
+  if (pid) fetchACNsForProduct(pid)
+})
+
+// Derived - client text search only; other filters are server-backed
+const filteredRecords = computed(() => {
+  const q = textSearch.value.trim().toLowerCase()
+  if (!q) return records.value
+  return records.value.filter((r) =>
+    [r.department, r.notes, r?.createdBy?.name]
+      .map((v) => String(v || '').toLowerCase())
+      .some((v) => v.includes(q))
+  )
 })
 
 const totalPages = computed(() =>
@@ -274,6 +1436,137 @@ function initials(name) {
       .join('') || 'U'
   )
 }
+
+// Group records by department for accordion view
+const expandedDept = ref({})
+const expandedRecord = ref({})
+const groupedByDepartment = computed(() => {
+  const groups = {}
+  for (const r of filteredRecords.value) {
+    const dept = r.department || '—'
+    if (!groups[dept]) groups[dept] = []
+    groups[dept].push(r)
+  }
+  // Sort each group's records by date descending
+  Object.keys(groups).forEach((d) => {
+    groups[d].sort((a, b) => new Date(b.date) - new Date(a.date))
+  })
+  return groups
+})
+const mergedPreviewRows = computed(() => {
+  const groups = {}
+  const items = Array.isArray(newRecord.value.items) ? newRecord.value.items : []
+  console.log(items)
+  const byName = (s) =>
+    String(s || '')
+      .trim()
+      .toLowerCase()
+  for (const it of items) {
+    const endUser = String(it.endUserOrMR || '').trim() || '—'
+    if (!groups[endUser]) {
+      groups[endUser] = {
+        endUserOrMR: endUser,
+        description: '',
+        processor: '',
+        storage: '',
+        ram: '',
+        videoCard: '',
+        monitors: [],
+        propertyNumber: '',
+        printerOrScannerList: [],
+        remarksYearsList: []
+      }
+    }
+    const row = groups[endUser]
+    const product = products.value.find((p) => String(p._id) === String(it.product))
+    const cname = byName(product?.category?.name)
+    const isDesktop = cname.includes('desktop') || cname.includes('computer')
+    const isLaptop = cname.includes('laptop')
+    const isMonitor = cname.includes('monitor')
+    const isPrinter = cname.includes('printer')
+    const isScanner = cname.includes('scanner')
+
+    const specsArr = Array.isArray(product?.specifications) ? product.specifications : []
+    const specVal = (n) => {
+      const s = specsArr.find(
+        (x) => String(x?.name || '').toLowerCase() === String(n).toLowerCase()
+      )
+      return s?.value || ''
+    }
+    const serial = it.serialNumber || ''
+    const monitorStr = [product?.name || it.description || 'Monitor', serial]
+      .filter(Boolean)
+      .join(' - ')
+    if (isDesktop || (!row.description && isLaptop)) {
+      row.description = product?.name || it.description || ''
+      row.processor = it.processor || specVal('Processor') || ''
+      row.storage = it.storage || specVal('Storage') || ''
+      row.ram = it.ram || specVal('RAM') || ''
+      row.videoCard = it.videoCard || specVal('Video Card') || ''
+      if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
+    } else if (isMonitor) {
+      if (monitorStr) row.monitors.push(monitorStr)
+      if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
+    } else if (isPrinter || isScanner || String(it.printerOrScanner || '').trim()) {
+      const t = isPrinter ? 'Printer' : isScanner ? 'Scanner' : String(it.printerOrScanner).trim()
+      const name = product?.name || it.description || ''
+      const serialPS = it.serialNumber || ''
+      const psStr = [t, name, serialPS].filter(Boolean).join(' - ')
+      row.printerOrScannerList.push(psStr)
+      if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
+    } else {
+      // Fallback: if this item carries specs (or product specs), use as primary if none yet
+      if (
+        !row.description &&
+        (it.processor ||
+          it.storage ||
+          it.ram ||
+          it.videoCard ||
+          specVal('Processor') ||
+          specVal('Storage') ||
+          specVal('RAM') ||
+          specVal('Video Card'))
+      ) {
+        row.description = product?.name || it.description || ''
+        row.processor = it.processor || specVal('Processor') || ''
+        row.storage = it.storage || specVal('Storage') || ''
+        row.ram = it.ram || specVal('RAM') || ''
+        row.videoCard = it.videoCard || specVal('Video Card') || ''
+        if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
+      }
+    }
+
+    if (String(it.remarksYears || '').trim()) {
+      row.remarksYearsList.push(String(it.remarksYears).trim())
+    }
+  }
+  const merged = Object.values(groups).map((row) => ({
+    description: row.description || '—',
+    processor: row.processor || '—',
+    storage: row.storage || '—',
+    ram: row.ram || '—',
+    videoCard: row.videoCard || '—',
+    monitorAndSerial: row.monitors.length ? row.monitors.join('\n') : '—',
+    propertyNumber: row.propertyNumber || '—',
+    printerOrScanner: row.printerOrScannerList.length ? row.printerOrScannerList.join('\n') : '—',
+    endUserOrMR: row.endUserOrMR || '—',
+    remarksYears: row.remarksYearsList.length ? row.remarksYearsList.join('\n') : '—'
+  }))
+  // Remove completely blank rows from preview (no device/spec/monitor/printer/remarks/property)
+  return merged.filter((r) => {
+    return !(
+      r.description === '—' &&
+      r.processor === '—' &&
+      r.storage === '—' &&
+      r.ram === '—' &&
+      r.videoCard === '—' &&
+      r.monitorAndSerial === '—' &&
+      r.propertyNumber === '—' &&
+      r.printerOrScanner === '—' &&
+      r.remarksYears === '—'
+    )
+  })
+})
 </script>
 
 <template>
@@ -326,18 +1619,42 @@ function initials(name) {
           <div class="w-full md:w-1/2">
             <label class="mb-2.5 block text-black dark:text-white">Filters</label>
             <div class="flex gap-2">
-              <select v-model="filterDepartment" class="w-1/3 rounded border border-stroke p-2">
-                <option value="">All Departments</option>
-                <option v-for="d in departments" :key="d._id" :value="d.name">{{ d.name }}</option>
-              </select>
-              <select v-model="filterSource" class="w-1/3 rounded border border-stroke p-2">
-                <option value="">All Sources</option>
-                <option value="manual">Manual</option>
-                <option value="deployment">Deployment</option>
-              </select>
+              <BaseCombobox
+                v-model="filterDepartment"
+                :options="[
+                  { label: 'All Departments', value: '' },
+                  ...departments.map((d) => ({ label: d.name, value: d.name }))
+                ]"
+                labelKey="label"
+                valueKey="value"
+                placeholder="All Departments"
+              />
+              <BaseCombobox
+                v-model="filterSource"
+                :options="[
+                  { label: 'All Sources', value: '' },
+                  { label: 'Manual', value: 'manual' },
+                  { label: 'Deployment', value: 'deployment' }
+                ]"
+                labelKey="label"
+                valueKey="value"
+                placeholder="All Sources"
+              />
               <input
                 v-model="filterDate"
                 type="date"
+                class="w-1/3 rounded border border-stroke p-2"
+              />
+              <input
+                v-model="serialSearch"
+                type="text"
+                placeholder="Serial No."
+                class="w-1/3 rounded border border-stroke p-2"
+              />
+              <input
+                v-model="acnSearch"
+                type="text"
+                placeholder="ACN"
                 class="w-1/3 rounded border border-stroke p-2"
               />
             </div>
@@ -376,110 +1693,149 @@ function initials(name) {
         <div v-if="isLoading" class="text-gray-500">Loading...</div>
         <div v-else-if="errorMessage" class="text-danger">Error: {{ errorMessage }}</div>
 
-        <!-- Table -->
-        <div v-else class="overflow-x-auto">
-          <table class="min-w-full text-sm">
-            <thead class="bg-gray-100 dark:bg-meta-4 sticky top-0 z-10">
-              <tr>
-                <th class="px-4 py-2 text-left">Department</th>
-                <th class="px-4 py-2 text-left">Source</th>
-                <th class="px-4 py-2 text-left">Notes</th>
-                <th class="px-4 py-2 text-left">Created By</th>
-                <th class="px-4 py-2 text-left">Date</th>
-                <th class="px-4 py-2 text-left">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="rec in paginatedRecords"
-                :key="rec._id"
-                class="border-t odd:bg-gray-50 dark:odd:bg-meta-4 hover:bg-gray-100 transition-colors"
+        <!-- Department-grouped list -->
+        <div v-else>
+          <div v-if="filteredRecords?.length === 0" class="px-4 py-10 text-center">
+            <div class="flex flex-col items-center gap-2 text-gray-600">
+              <div class="text-sm">No records match your filters.</div>
+              <button
+                class="bg-primary text-white px-4 py-2 rounded hover:bg-opacity-90"
+                @click="isAddOpen = true"
               >
-                <td class="px-4 py-2">
-                  <span
-                    class="inline-flex items-center rounded-full bg-sky-100 text-sky-700 px-2 py-0.5 text-xs font-medium"
-                    :title="rec.department"
-                  >
-                    {{ rec.department || '—' }}
-                  </span>
-                </td>
-                <td class="px-4 py-2">
-                  <span
-                    :class="[
-                      'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                      rec.sourceType === 'Deployment' 
-                        ? 'bg-purple-100 text-purple-700' 
-                        : 'bg-gray-100 text-gray-700'
-                    ]"
-                  >
-                    {{ rec.sourceType || 'Manual' }}
-                    <svg v-if="rec.sourceRIS" class="ml-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                  </span>
-                </td>
-                <td class="px-4 py-2">
-                  <div class="max-w-[22rem] truncate" :title="rec.notes">
-                    {{ rec.notes || '—' }}
-                  </div>
-                </td>
-                <td class="px-4 py-2">
-                  <div class="flex items-center gap-2">
-                    <div
-                      class="w-6 h-6 rounded-full bg-indigo-500 text-white flex items-center justify-center text-xs"
-                      :title="rec?.createdBy?.name || rec?.createdBy?.role || ''"
+                Add New Record
+              </button>
+            </div>
+          </div>
+
+          <!-- Build grouped structure -->
+          <div
+            v-for="dept in Object.keys(groupedByDepartment)"
+            :key="dept"
+            class="mb-4 border border-stroke rounded"
+          >
+            <button
+              class="w-full flex items-center justify-between px-4 py-2 bg-gray-50"
+              @click="expandedDept[dept] = !expandedDept[dept]"
+              :title="dept"
+            >
+              <div class="flex items-center gap-2">
+                <span
+                  class="inline-flex items-center rounded-full bg-sky-100 text-sky-700 px-2 py-0.5 text-xs font-medium"
+                >
+                  {{ dept || '—' }}
+                </span>
+                <span class="text-xs text-gray-600"
+                  >{{ (groupedByDepartment[dept] || []).length }} RIS</span
+                >
+              </div>
+              <span class="text-xs text-gray-500">{{ expandedDept[dept] ? 'Hide' : 'Show' }}</span>
+            </button>
+            <div v-show="expandedDept[dept]" class="p-2">
+              <div v-for="rec in groupedByDepartment[dept]" :key="rec._id" class="border-t">
+                <div class="flex items-center justify-between px-2 py-2">
+                  <div class="flex items-center gap-3">
+                    <span
+                      :class="[
+                        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                        rec.sourceType === 'Deployment'
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'bg-gray-100 text-gray-700'
+                      ]"
                     >
-                      {{ initials(rec?.createdBy?.name || rec?.createdBy?.role || '') }}
+                      {{ rec.sourceType || 'Manual' }}
+                    </span>
+                    <div class="max-w-[28rem] truncate" :title="rec.notes">
+                      {{ rec.notes || '—' }}
                     </div>
-                    <span class="truncate max-w-[12rem]">{{
-                      rec?.createdBy?.name || rec?.createdBy?.role || '—'
-                    }}</span>
                   </div>
-                </td>
-                <td class="px-4 py-2">{{ new Date(rec.date).toLocaleDateString() }}</td>
-                <td class="px-4 py-2">
-                  <button
-                    class="border border-stroke px-3 py-1 rounded hover:bg-gray-50"
-                    @click="openDetails(rec)"
-                    title="View record details"
-                  >
-                    View
-                  </button>
-                </td>
-              </tr>
-              <tr v-if="filteredRecords?.length === 0">
-                <td colspan="6" class="px-4 py-10 text-center">
-                  <div class="flex flex-col items-center gap-2 text-gray-600">
-                    <div class="text-sm">No records match your filters.</div>
+                  <div class="flex items-center gap-3">
+                    <span class="text-sm text-gray-600">{{
+                      new Date(rec.date).toLocaleDateString()
+                    }}</span>
                     <button
-                      class="bg-primary text-white px-4 py-2 rounded hover:bg-opacity-90"
-                      @click="isAddOpen = true"
+                      class="border border-stroke px-3 py-1 rounded hover:bg-gray-50"
+                      @click="expandedRecord[rec._id] = !expandedRecord[rec._id]"
+                      :title="expandedRecord[rec._id] ? 'Hide details' : 'View details'"
                     >
-                      Add New Record
+                      {{ expandedRecord[rec._id] ? 'Hide' : 'View' }}
                     </button>
                   </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <!-- Pagination -->
-          <div class="flex items-center justify-between mt-4">
-            <div class="text-sm text-gray-500">Page {{ currentPage }} of {{ totalPages }}</div>
-            <div class="flex gap-2">
-              <button
-                class="border border-stroke px-3 py-1 rounded disabled:opacity-50"
-                @click="prevPage"
-                :disabled="currentPage === 1"
-              >
-                Prev
-              </button>
-              <button
-                class="border border-stroke px-3 py-1 rounded disabled:opacity-50"
-                @click="nextPage"
-                :disabled="currentPage === totalPages"
-              >
-                Next
-              </button>
+                </div>
+                <div v-if="expandedRecord[rec._id]" class="px-2 pb-4">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3 text-sm">
+                    <div>
+                      <span class="font-semibold">Created By:</span>
+                      <span class="ml-1">{{
+                        rec?.createdBy?.name || rec?.createdBy?.role || '—'
+                      }}</span>
+                    </div>
+                    <div>
+                      <span class="font-semibold">Source RIS:</span>
+                      <span class="ml-1">{{ rec?.sourceRIS || '—' }}</span>
+                    </div>
+                  </div>
+                  <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                      <thead class="bg-gray-100">
+                        <tr>
+                          <th class="px-4 py-2 text-left">Description</th>
+                          <th class="px-4 py-2 text-left">Serial No.</th>
+                          <th class="px-4 py-2 text-left">Processor</th>
+                          <th class="px-4 py-2 text-left">Storage</th>
+                          <th class="px-4 py-2 text-left">RAM</th>
+                          <th class="px-4 py-2 text-left">Video Card</th>
+                          <th class="px-4 py-2 text-left">Brand of Monitor & Serial Number</th>
+                          <th class="px-4 py-2 text-left">Property Number</th>
+                          <th class="px-4 py-2 text-left">Printer or Scanner</th>
+                          <th class="px-4 py-2 text-left">End User or MR</th>
+                          <th class="px-4 py-2 text-left">Remarks / Years</th>
+                          <th class="px-4 py-2 text-left">Status</th>
+                          <th class="px-4 py-2 text-left">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(item, idx) in rec?.items || []" :key="idx" class="border-t">
+                          <td class="px-4 py-2">{{ item.description }}</td>
+                          <td class="px-4 py-2">{{ item.serialNumber || '—' }}</td>
+                          <td class="px-4 py-2">{{ item.processor }}</td>
+                          <td class="px-4 py-2">{{ item.storage }}</td>
+                          <td class="px-4 py-2">{{ item.ram }}</td>
+                          <td class="px-4 py-2">{{ item.videoCard }}</td>
+                          <td class="px-4 py-2">{{ item.monitorAndSerial }}</td>
+                          <td class="px-4 py-2">{{ item.propertyNumber }}</td>
+                          <td class="px-4 py-2">{{ item.printerOrScanner }}</td>
+                          <td class="px-4 py-2">{{ item.endUserOrMR }}</td>
+                          <td class="px-4 py-2">{{ item.remarksYears }}</td>
+                          <td class="px-4 py-2">{{ item.status || '—' }}</td>
+                          <td class="px-4 py-2">
+                            <div class="flex gap-2 items-center">
+                              <BaseCombobox
+                                v-model="item._nextStatus"
+                                :options="statusOptions"
+                                placeholder="Change..."
+                              />
+                              <button
+                                class="text-xs px-2 py-1 border border-stroke rounded hover:bg-gray-50 disabled:opacity-50"
+                                :disabled="
+                                  !item._nextStatus || !(item.serialNumber || item.propertyNumber)
+                                "
+                                @click="updateItemStatus(rec?._id, item)"
+                              >
+                                Apply
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr v-if="!rec || (rec.items || []).length === 0">
+                          <td colspan="13" class="px-4 py-6 text-center text-gray-500">
+                            No items in this record.
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -491,7 +1847,7 @@ function initials(name) {
         class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50"
       >
         <div
-          class="bg-white max-h-[80%] overflow-auto dark:bg-boxdark rounded-md shadow-lg w-full max-w-4xl p-6"
+          class="bg-white max-h-[80%] overflow-auto dark:bg-boxdark rounded-md shadow-lg w-full max-w-[90%] p-6"
         >
           <div class="flex justify-between items-center mb-4">
             <h2 class="text-lg font-semibold">Record Details</h2>
@@ -517,6 +1873,7 @@ function initials(name) {
               <thead class="bg-gray-100">
                 <tr>
                   <th class="px-4 py-2 text-left">Description</th>
+                  <th class="px-4 py-2 text-left">Serial No.</th>
                   <th class="px-4 py-2 text-left">Processor</th>
                   <th class="px-4 py-2 text-left">Storage</th>
                   <th class="px-4 py-2 text-left">RAM</th>
@@ -526,11 +1883,14 @@ function initials(name) {
                   <th class="px-4 py-2 text-left">Printer or Scanner</th>
                   <th class="px-4 py-2 text-left">End User or MR</th>
                   <th class="px-4 py-2 text-left">Remarks / Years</th>
+                  <th class="px-4 py-2 text-left">Status</th>
+                  <th class="px-4 py-2 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="(item, idx) in selectedRecord?.items || []" :key="idx" class="border-t">
                   <td class="px-4 py-2">{{ item.description }}</td>
+                  <td class="px-4 py-2">{{ item.serialNumber || '—' }}</td>
                   <td class="px-4 py-2">{{ item.processor }}</td>
                   <td class="px-4 py-2">{{ item.storage }}</td>
                   <td class="px-4 py-2">{{ item.ram }}</td>
@@ -540,6 +1900,23 @@ function initials(name) {
                   <td class="px-4 py-2">{{ item.printerOrScanner }}</td>
                   <td class="px-4 py-2">{{ item.endUserOrMR }}</td>
                   <td class="px-4 py-2">{{ item.remarksYears }}</td>
+                  <td class="px-4 py-2">{{ item.status || '—' }}</td>
+                  <td class="px-4 py-2">
+                    <div class="flex gap-2 items-center">
+                      <BaseCombobox
+                        v-model="item._nextStatus"
+                        :options="statusOptions"
+                        placeholder="Change..."
+                      />
+                      <button
+                        class="text-xs px-2 py-1 border border-stroke rounded hover:bg-gray-50 disabled:opacity-50"
+                        :disabled="!item._nextStatus || !(item.serialNumber || item.propertyNumber)"
+                        @click="updateItemStatus(selectedRecord?._id, item)"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </td>
                 </tr>
                 <tr v-if="!selectedRecord || (selectedRecord.items || []).length === 0">
                   <td colspan="10" class="px-4 py-6 text-center text-gray-500">
@@ -555,23 +1932,23 @@ function initials(name) {
       <!-- Add Modal -->
       <div
         v-if="isAddOpen"
-        class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50"
+        class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-1000"
       >
         <div
-          class="bg-white max-h-[80%] overflow-auto dark:bg-boxdark rounded-md shadow-lg w-full max-w-4xl p-6"
+          class="bg-white left-35 top-10 relative max-h-[80%] overflow-auto dark:bg-boxdark rounded-md shadow-lg w-full max-w-[75%] p-6"
         >
           <h2 class="text-lg font-semibold mb-4">Add Record</h2>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium mb-1">Department</label>
               <div v-if="departments.length">
-                <select
+                <BaseCombobox
                   v-model="newRecord.departmentId"
-                  class="w-full rounded border border-stroke p-2"
-                >
-                  <option value="">Select Department</option>
-                  <option v-for="d in departments" :key="d._id" :value="d._id">{{ d.name }}</option>
-                </select>
+                  :options="departments"
+                  labelKey="name"
+                  valueKey="_id"
+                  placeholder="Select Department"
+                />
               </div>
               <div v-else>
                 <input
@@ -605,179 +1982,559 @@ function initials(name) {
             </div>
           </div>
 
+          <!-- Primary device and employee selectors -->
+          <div class="mt-4 border border-stroke rounded p-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <div v-if="productsLoading" class="text-sm text-gray-500">Loading products…</div>
+                <div v-else-if="productsError" class="text-sm text-red-600">
+                  {{ productsError }}
+                </div>
+                <BaseCombobox
+                  v-else
+                  v-model="primaryProductId"
+                  :options="primaryProducts"
+                  labelKey="name"
+                  valueKey="_id"
+                  placeholder="Select product"
+                />
+              </div>
+              <div>
+                <div v-if="acnLoading" class="text-sm text-gray-500">Loading ACNs…</div>
+                <div v-else-if="acnError" class="text-sm text-red-600">{{ acnError }}</div>
+                <div v-else class="relative">
+                  <div class="flex items-center space-x-2">
+                    <input
+                      v-model="acnQuery"
+                      @focus="openAcnOptions"
+                      @input="openAcnOptions"
+                      @keydown.down.prevent="moveAcnHighlight(1)"
+                      @keydown.up.prevent="moveAcnHighlight(-1)"
+                      @keydown.enter.prevent="selectAcnFromHighlight()"
+                      @keydown.esc.prevent="closeAcnOptions()"
+                      @blur="closeAcnOptionsLater()"
+                      type="text"
+                      placeholder=""
+                      class="w-full rounded border border-stroke p-2"
+                    />
+                    <button
+                      v-if="selectedPrimaryAcn"
+                      type="button"
+                      @click="clearPrimaryAcn"
+                      class="text-xs px-2 py-1 rounded border border-stroke hover:bg-gray-50"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <ul
+                    v-if="showAcnOptions"
+                    class="absolute z-10 mt-1 w-full bg-white dark:bg-boxdark border border-stroke dark:border-strokedark rounded shadow max-h-48 overflow-auto"
+                  >
+                    <li v-for="(code, aidx) in filteredPrimaryAcnOptions" :key="code">
+                      <button
+                        type="button"
+                        @mousedown.prevent="selectPrimaryAcn(code)"
+                        :class="[
+                          'w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-meta-4',
+                          aidx === acnHighlightIndex ? 'bg-gray-100 dark:bg-meta-3' : ''
+                        ]"
+                      >
+                        {{ code }}
+                      </button>
+                    </li>
+                    <li
+                      v-if="filteredPrimaryAcnOptions.length === 0"
+                      class="px-3 py-2 text-sm text-gray-500"
+                    >
+                      No matches
+                    </li>
+                  </ul>
+                  <div v-if="selectedPrimaryAcn" class="text-xs text-gray-600 mt-1">
+                    Selected: {{ selectedPrimaryAcn }}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div v-if="employeesLoading" class="text-sm text-gray-500">Loading employees…</div>
+                <div v-else-if="employeesError" class="text-sm text-red-600">
+                  {{ employeesError }}
+                </div>
+                <div v-else class="relative">
+                  <div class="flex items-center space-x-2">
+                    <input
+                      v-model="employeeQuery"
+                      @focus="openEmpOptions"
+                      @input="openEmpOptions"
+                      @keydown.down.prevent="moveEmpHighlight(1)"
+                      @keydown.up.prevent="moveEmpHighlight(-1)"
+                      @keydown.enter.prevent="selectEmpFromHighlight()"
+                      @keydown.esc.prevent="closeEmpOptions()"
+                      @blur="closeEmpOptionsLater()"
+                      type="text"
+                      placeholder=""
+                      class="w-full rounded border border-stroke p-2"
+                    />
+                    <button
+                      v-if="selectedEmployeeId"
+                      type="button"
+                      @click="clearEmployeeSelection"
+                      class="text-xs px-2 py-1 rounded border border-stroke hover:bg-gray-50"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <ul
+                    v-if="showEmpOptions"
+                    class="absolute z-10 mt-1 w-full bg-white dark:bg-boxdark border border-stroke dark:border-strokedark rounded shadow max-h-48 overflow-auto"
+                  >
+                    <li v-for="(e, eidx) in filteredEmployeeOptions" :key="e.id">
+                      <button
+                        type="button"
+                        @mousedown.prevent="selectEmployee(e)"
+                        :class="[
+                          'w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-meta-4',
+                          eidx === empHighlightIndex ? 'bg-gray-100 dark:bg-meta-3' : ''
+                        ]"
+                      >
+                        {{ e.name }}
+                        <span v-if="e.email" class="text-xs text-gray-500"> — {{ e.email }}</span>
+                      </button>
+                    </li>
+                    <li
+                      v-if="filteredEmployeeOptions.length === 0"
+                      class="px-3 py-2 text-sm text-gray-500"
+                    >
+                      No matches
+                    </li>
+                  </ul>
+                  <div v-if="selectedEmployeeId" class="text-xs text-gray-600 mt-1">
+                    Selected: {{ employeeQuery }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Batch Builder -->
+          <div class="mt-6 border border-stroke rounded p-4">
+            <h3 class="font-semibold mb-3">Batch Builder</h3>
+            <div class="grid grid-cols-1 gap-4">
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div>
+                  <label class="block text-sm font-medium mb-1">Desktop Product</label>
+                  <BaseCombobox
+                    v-model="desktopProductId"
+                    :options="desktopProducts"
+                    labelKey="name"
+                    valueKey="_id"
+                    placeholder="Select desktop"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium mb-1">Quantity</label>
+                  <input
+                    v-model="desktopQuantity"
+                    type="number"
+                    min="1"
+                    class="w-full rounded border border-stroke p-2"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium mb-1">Optional Notes</label>
+                  <input v-model="desktopNotes" class="w-full rounded border border-stroke p-2" />
+                </div>
+                <div class="flex items-end">
+                  <button
+                    class="text-sm px-3 py-2 border border-stroke rounded hover:bg-gray-50"
+                    @click="generateDesktopUnits"
+                  >
+                    Generate Units
+                  </button>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div>
+                  <label class="block text-sm font-medium mb-1">Laptop Product</label>
+                  <BaseCombobox
+                    v-model="laptopProductId"
+                    :options="laptopProducts"
+                    labelKey="name"
+                    valueKey="_id"
+                    placeholder="Select laptop"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium mb-1">Quantity</label>
+                  <input
+                    v-model="laptopQuantity"
+                    type="number"
+                    min="1"
+                    class="w-full rounded border border-stroke p-2"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium mb-1">Optional Notes</label>
+                  <input v-model="laptopNotes" class="w-full rounded border border-stroke p-2" />
+                </div>
+                <div class="flex items-end">
+                  <button
+                    class="text-sm px-3 py-2 border border-stroke rounded hover:bg-gray-50"
+                    @click="generateLaptopUnits"
+                  >
+                    Generate Units
+                  </button>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  class="text-sm px-3 py-2 border border-stroke rounded hover:bg-gray-50 disabled:opacity-50"
+                  :disabled="batchUnits.length === 0"
+                  @click="applyBatchToItems"
+                >
+                  Apply Units to Items
+                </button>
+              </div>
+            </div>
+
+            <div v-if="batchUnits.length" class="mt-4 space-y-4">
+              <div
+                v-for="(unit, uidx) in batchUnits"
+                :key="uidx"
+                class="border border-sky-200 bg-sky-50 rounded p-4"
+              >
+                <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center gap-2">
+                    <h4 class="font-medium">Unit #{{ uidx + 1 }}</h4>
+                    <button
+                      v-if="uidx > 0"
+                      class="text-xs underline"
+                      @click="copyPreviousUnit(uidx)"
+                    >
+                      Copy Previous Unit
+                    </button>
+                  </div>
+                  <button
+                    class="text-xs px-2 py-1 border border-stroke rounded hover:bg-gray-50"
+                    @click="removeUnit(uidx)"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium mb-1">Select Item</label>
+
+                    <BaseCombobox
+                      v-model="unit.productId"
+                      :options="primaryProducts"
+                      labelKey="name"
+                      valueKey="_id"
+                      placeholder="Select item"
+                      @change="(v) => onUnitProductChange(unit)"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-1">Select Employee</label>
+                    <BaseCombobox
+                      v-model="unit.employeeId"
+                      :options="getFilteredEmployeeOptionsForUnit(unit, uidx)"
+                      labelKey="name"
+                      valueKey="id"
+                      placeholder="Select employee"
+                    />
+                    <!-- <p class="text-xs text-gray-500 mt-1" v-if="!selectedDeptName">
+                      Tip: choose a department to filter employees.
+                    </p> -->
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-1">Asset Control Number</label>
+                    <BaseCombobox
+                      v-model="unit.acn"
+                      :options="getFilteredAcnOptions(unit, uidx)"
+                      :disabled="!unit.productId"
+                      placeholder="Select ACN"
+                    />
+                    <p
+                      class="text-xs text-gray-600 mt-1"
+                      v-if="requiresAcnForProduct(unit.productId)"
+                    >
+                      ACN required for this product.
+                    </p>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-1">Property Number</label>
+                    <input
+                      v-model="unit.propertyNumber"
+                      class="w-full rounded border border-stroke p-2"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-1">Remarks / Years</label>
+                    <input
+                      v-model="unit.remarksYears"
+                      class="w-full rounded border border-stroke p-2"
+                    />
+                  </div>
+                </div>
+
+                <!-- Secondary items -->
+                <div class="mt-4">
+                  <h5 class="font-medium mb-2">Secondary Items</h5>
+                  <div class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+                    <div>
+                      <label class="block text-sm font-medium mb-1">Type</label>
+                      <BaseCombobox
+                        v-model="unit._newSecondaryType"
+                        :options="['Monitor', 'Printer', 'Scanner']"
+                        placeholder="Select type"
+                      />
+                    </div>
+                    <div>
+                      <BaseCombobox
+                        v-model="unit._newSecondaryProductId"
+                        :options="secondaryProductsByType(unit._newSecondaryType)"
+                        labelKey="name"
+                        valueKey="_id"
+                        :disabled="!unit._newSecondaryType"
+                        placeholder="Select product"
+                        @change="(v) => onSecondaryProductChange(unit)"
+                      />
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium mb-1">ACN</label>
+                      <BaseCombobox
+                        v-model="unit._newSecondaryAcn"
+                        :options="getFilteredSecondaryAcnOptions(unit, uidx)"
+                        :disabled="!unit._newSecondaryProductId"
+                        placeholder="Select ACN"
+                      />
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium mb-1">Property Number</label>
+                      <input
+                        v-model="unit._newSecondaryPropertyNumber"
+                        class="w-full rounded border border-stroke p-2"
+                      />
+                    </div>
+
+                    <div class="md:col-span-1">
+                      <label class="block text-sm font-medium mb-1">Remarks</label>
+                      <input
+                        v-model="unit._newSecondaryRemarks"
+                        class="w-full rounded border border-stroke p-2"
+                      />
+                    </div>
+                    <!-- <div class="md:col-span-1">
+                      <label class="text-xs flex items-center gap-1 mt-6">
+                        <input type="checkbox" v-model="unit._newSecondaryDuplicate" />
+                        Duplicate across units
+                      </label>
+                    </div> -->
+                    <div class="md:col-span-1">
+                      <button
+                        class="text-sm px-3 py-2 border border-stroke rounded hover:bg-gray-50 disabled:opacity-50"
+                        :disabled="
+                          !unit._newSecondaryType ||
+                          !unit._newSecondaryProductId ||
+                          (requiresAcnForProduct(unit._newSecondaryProductId) &&
+                            !unit._newSecondaryAcn)
+                        "
+                        @click="addSecondary(unit)"
+                      >
+                        + Add Secondary
+                      </button>
+                    </div>
+                  </div>
+
+                  <div v-if="(unit.secondary || []).length" class="mt-3">
+                    <div class="overflow-x-auto border border-stroke rounded">
+                      <table class="min-w-full text-xs">
+                        <thead class="bg-gray-100">
+                          <tr>
+                            <th class="px-2 py-1 text-left">Type</th>
+                            <th class="px-2 py-1 text-left">Product</th>
+                            <th class="px-2 py-1 text-left">ACN</th>
+                            <th class="px-2 py-1 text-left">Property Number</th>
+                            <th class="px-2 py-1 text-left">Remarks</th>
+                            <th class="px-2 py-1 text-left">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="(sec, sidx) in unit.secondary" :key="sidx" class="border-t">
+                            <td class="px-2 py-1">{{ sec.type }}</td>
+                            <td class="px-2 py-1">{{ getProductName(sec.productId) }}</td>
+                            <td class="px-2 py-1">{{ sec.acn || '—' }}</td>
+                            <td class="px-2 py-1">{{ sec.propertyNumber || '—' }}</td>
+                            <td class="px-2 py-1">{{ sec.remarksYears || '—' }}</td>
+                            <td class="px-2 py-1">
+                              <button
+                                class="text-xs px-2 py-1 border border-stroke rounded hover:bg-gray-50"
+                                @click="removeSecondary(unit, sidx)"
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex justify-end mt-2">
+                <button
+                  class="bg-primary text-white px-4 py-2 rounded hover:bg-opacity-90 disabled:opacity-50"
+                  :disabled="
+                    batchUnits.length === 0 ||
+                    batchUnits.some(
+                      (u) =>
+                        !u.productId ||
+                        !u.employeeId ||
+                        (requiresAcnForProduct(u.productId) && !u.acn)
+                    )
+                  "
+                  @click="applyBatchToItems"
+                >
+                  Apply Units to Items
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div class="mt-6">
             <div class="flex justify-between items-center mb-3">
               <h3 class="font-semibold">Items</h3>
-              <div class="flex gap-2">
+              <div class="flex gap-2 items-center">
+                <span
+                  class="text-xs px-2 py-1 rounded border"
+                  :class="
+                    isValidPreview
+                      ? 'border-green-300 text-green-700 bg-green-50'
+                      : 'border-yellow-300 text-yellow-700 bg-yellow-50'
+                  "
+                >
+                  {{ isValidPreview ? 'Status: Validation Pass' : 'Status: Validation Issues' }}
+                </span>
                 <button
-                  class="text-sm px-3 py-1 border border-stroke rounded hover:bg-gray-50"
+                  class="text-sm px-3 py-1 border border-stroke rounded hover:bg-gray-50 disabled:opacity-50"
                   @click="addItemRow"
+                  :disabled="
+                    !primaryProductId ||
+                    !selectedEmployeeId ||
+                    productsLoading ||
+                    employeesLoading ||
+                    (requiresAcn && !selectedPrimaryAcn)
+                  "
+                  :title="
+                    !primaryProductId || !selectedEmployeeId
+                      ? 'Select product and employee first'
+                      : requiresAcn && !selectedPrimaryAcn
+                        ? 'Select ACN for this product'
+                        : ''
+                  "
                 >
                   + Add Item
                 </button>
               </div>
             </div>
 
-            <!-- Inline row editor -->
-            <div
-              v-if="editingItemIndex !== null"
-              class="mt-4 border border-sky-200 bg-sky-50 rounded p-4"
-            >
-              <div class="flex items-center justify-between mb-3">
-                <h4 class="font-medium">Item #{{ editingItemIndex + 1 }}</h4>
-                <button
-                  class="text-sm px-3 py-1 border border-stroke rounded"
-                  @click="cancelEditItem"
-                >
-                  Close
-                </button>
-              </div>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-sm font-medium mb-1">Description</label>
-                  <input
-                    v-model="tempItem.description"
-                    type="text"
-                    class="w-full rounded border border-stroke p-2"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium mb-1">Processor</label>
-                  <input
-                    v-model="tempItem.processor"
-                    type="text"
-                    class="w-full rounded border border-stroke p-2"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium mb-1">Storage</label>
-                  <input
-                    v-model="tempItem.storage"
-                    type="text"
-                    class="w-full rounded border border-stroke p-2"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium mb-1">RAM</label>
-                  <input
-                    v-model="tempItem.ram"
-                    type="text"
-                    class="w-full rounded border border-stroke p-2"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium mb-1">Video Card</label>
-                  <input
-                    v-model="tempItem.videoCard"
-                    type="text"
-                    class="w-full rounded border border-stroke p-2"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium mb-1">BOM & SN</label>
-                  <input
-                    v-model="tempItem.monitorAndSerial"
-                    type="text"
-                    class="w-full rounded border border-stroke p-2"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium mb-1">Asset Control Number (ACN)</label>
-                  <input
-                    v-model="tempItem.propertyNumber"
-                    type="text"
-                    placeholder="Enter ACN"
-                    class="w-full rounded border border-stroke p-2"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium mb-1">Printer or Scanner</label>
-                  <input
-                    v-model="tempItem.printerOrScanner"
-                    type="text"
-                    class="w-full rounded border border-stroke p-2"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium mb-1">End User or MR</label>
-                  <input
-                    v-model="tempItem.endUserOrMR"
-                    type="text"
-                    class="w-full rounded border border-stroke p-2"
-                  />
-                </div>
-                <div class="md:col-span-1">
-                  <label class="block text-sm font-medium mb-1">Remarks / Years</label>
-                  <input
-                    v-model="tempItem.remarksYears"
-                    rows="2"
-                    class="w-full rounded border border-stroke p-2"
-                  />
-                </div>
-              </div>
-              <div class="flex justify-end gap-2 mt-4">
-                <button class="border border-stroke px-4 py-2 rounded" @click="cancelEditItem">
-                  Cancel
-                </button>
-                <button
-                  class="bg-primary text-white px-4 py-2 rounded hover:bg-opacity-90"
-                  @click="saveEditItem"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-
-            <!-- Compact table for items -->
+            <!-- Items Preview Table -->
             <div class="overflow-x-auto mt-2 border border-stroke rounded">
-              <table class="min-w-full text-sm">
+              <div class="flex justify-end p-2">
+                <button
+                  class="text-xs px-3 py-1 border border-stroke rounded hover:bg-gray-50"
+                  @click="printPreview"
+                >
+                  Print / Export PDF
+                </button>
+              </div>
+              <table class="min-w-full text-sm border border-stroke">
                 <thead class="bg-gray-100">
                   <tr>
-                    <th class="px-3 py-2 text-left">Description</th>
-                    <th class="px-3 py-2 text-left">Asset Control Number (ACN)</th>
-                    <th class="px-3 py-2 text-left">End User / MR</th>
-                    <th class="px-3 py-2 text-left">Remarks / Years</th>
-                    <th class="px-3 py-2 text-left">Actions</th>
+                    <th class="px-3 py-2 text-left border border-stroke">Description</th>
+                    <th class="px-3 py-2 text-left border border-stroke">Processor</th>
+                    <th class="px-3 py-2 text-left border border-stroke">Storage</th>
+                    <th class="px-3 py-2 text-left border border-stroke">RAM</th>
+                    <th class="px-3 py-2 text-left border border-stroke">Video Card</th>
+                    <th class="px-3 py-2 text-left border border-stroke">
+                      Brand of Monitor & Serial Number
+                    </th>
+                    <th class="px-3 py-2 text-left border border-stroke">Property Number</th>
+                    <th class="px-3 py-2 text-left border border-stroke">Printer or Scanner</th>
+                    <th class="px-3 py-2 text-left border border-stroke">End User or MR</th>
+                    <th class="px-3 py-2 text-left border border-stroke">Remarks / Years</th>
+                    <th class="px-3 py-2 text-left border border-stroke">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr
-                    v-for="(item, idx) in newRecord.items"
-                    :key="idx"
-                    class="border-t odd:bg-gray-50"
-                  >
-                    <td class="px-3 py-2 truncate" :title="item.description">
-                      {{ item.description || '—' }}
+                  <tr v-for="(row, idx) in mergedPreviewRows" :key="idx" class="odd:bg-gray-50">
+                    <td
+                      class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                      :title="row.description"
+                    >
+                      {{ row.description || '—' }}
                     </td>
-                    <td class="px-3 py-2 truncate" :title="item.propertyNumber">
-                      {{ item.propertyNumber || '—' }}
+                    <td
+                      class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                      :title="row.processor"
+                    >
+                      {{ row.processor || '—' }}
                     </td>
-                    <td class="px-3 py-2 truncate" :title="item.endUserOrMR">
-                      {{ item.endUserOrMR || '—' }}
+                    <td
+                      class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                      :title="row.storage"
+                    >
+                      {{ row.storage || '—' }}
                     </td>
-                    <td class="px-3 py-2 truncate" :title="item.remarksYears">
-                      {{ item.remarksYears || '—' }}
+                    <td
+                      class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                      :title="row.ram"
+                    >
+                      {{ row.ram || '—' }}
                     </td>
-                    <td class="px-3 py-2">
-                      <div class="flex gap-2">
-                        <button
-                          class="text-xs px-2 py-1 border border-stroke rounded hover:bg-gray-50"
-                          @click="startEditItem(idx)"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          class="text-xs px-2 py-1 border border-stroke rounded hover:bg-gray-50 disabled:opacity-50"
-                          :disabled="newRecord.items.length === 1"
-                          @click="removeItemRow(idx)"
-                        >
-                          Remove
-                        </button>
-                      </div>
+                    <td
+                      class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                      :title="row.videoCard"
+                    >
+                      {{ row.videoCard || '—' }}
+                    </td>
+                    <td
+                      class="px-3 py-2 border border-stroke whitespace-pre-line break-words align-top"
+                      :title="row.monitorAndSerial"
+                    >
+                      {{ row.monitorAndSerial || '—' }}
+                    </td>
+                    <td
+                      class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                      :title="row.propertyNumber"
+                    >
+                      {{ row.propertyNumber || '—' }}
+                    </td>
+                    <td
+                      class="px-3 py-2 border border-stroke whitespace-pre-line break-words align-top"
+                      :title="row.printerOrScanner"
+                    >
+                      {{ row.printerOrScanner || '—' }}
+                    </td>
+                    <td
+                      class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                      :title="row.endUserOrMR"
+                    >
+                      {{ row.endUserOrMR || '—' }}
+                    </td>
+                    <td
+                      class="px-3 py-2 border border-stroke whitespace-pre-line break-words align-top"
+                      :title="row.remarksYears"
+                    >
+                      {{ row.remarksYears || '—' }}
+                    </td>
+                    <td class="px-3 py-2 border border-stroke">
+                      <div class="text-xs text-gray-500">Edit items individually above</div>
                     </td>
                   </tr>
-                  <tr v-if="newRecord.items.length === 0">
-                    <td colspan="5" class="px-3 py-4 text-center text-gray-500">
+                  <tr v-if="mergedPreviewRows.length === 0">
+                    <td colspan="11" class="px-3 py-4 text-center text-gray-500">
                       No items yet. Click "Add Item" to start.
                     </td>
                   </tr>
@@ -789,6 +2546,9 @@ function initials(name) {
           <div class="flex justify-end gap-2 mt-6">
             <button @click="cancelAdd" class="border border-stroke px-4 py-2 rounded">
               Cancel
+            </button>
+            <button class="px-3 py-2 text-sm border border-stroke rounded" @click="saveDraft">
+              Save as Draft
             </button>
             <button
               @click="saveRecord"
