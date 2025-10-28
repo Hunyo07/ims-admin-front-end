@@ -78,11 +78,8 @@ const computerSpecs = ref({
 // Check if selected category is Computer Desktop
 const isComputerDesktop = computed(() => {
   const selectedCategory = categories.value.find((cat) => cat._id === newProduct.value.categoryId)
-  return (
-    selectedCategory?.name?.toLowerCase().includes('computer desktop') ||
-    selectedCategory?.name?.toLowerCase().includes('desktop computer') ||
-    selectedCategory?.name?.toLowerCase() === 'desktop'
-  )
+  const n = selectedCategory?.name?.toLowerCase() || ''
+  return n.includes('desktop') || n.includes('computer')
 })
 
 const fetchNextItemId = async () => {

@@ -146,9 +146,33 @@ async function fetchACNsForProduct(productId) {
       .filter((a) => a?.isActive !== false)
       .map((a) => a?.acnCode)
       .filter(Boolean)
+    
+    // Get deployed ACNs from inventory records (both primary and secondary)
+    const { data: inventoryData } = await axios.get('/inventory-records')
+    const inventoryRecords = Array.isArray(inventoryData?.records) ? inventoryData.records : []
+    const deployedAcns = new Set()
+    
+    inventoryRecords.forEach(record => {
+      (record.items || []).forEach(item => {
+        // Check primary ACN
+        if (item.acn && item.status === 'deployed') {
+          deployedAcns.add(item.acn)
+        }
+        // Check secondary ACNs
+        (item.secondaryItems || []).forEach(secItem => {
+          if (secItem.acn && item.status === 'deployed') {
+            deployedAcns.add(secItem.acn)
+          }
+        })
+      })
+    })
+    
+    // Filter out deployed ACNs
+    const availableCodes = activeCodes.filter(code => !deployedAcns.has(code))
+    
     acnOptionsByProduct.value = {
       ...acnOptionsByProduct.value,
-      [productId]: activeCodes
+      [productId]: availableCodes
     }
   } catch (err) {
     acnOptionsByProduct.value = { ...acnOptionsByProduct.value, [productId]: [] }
@@ -204,13 +228,16 @@ function usedAcnCodes(excludeCardIdx = null) {
   wizard.value.cards.forEach((c, idx) => {
     if (excludeCardIdx !== null && idx === excludeCardIdx) return
     const primary = String(c.acn || '').trim()
-    if (primary)
-      codes
-        .push(primary)(c.secondaries || [])
-        .forEach((s) => {
-          const sec = String(s.acn || '').trim()
-          if (sec) codes.push(sec)
-        })
+    if (primary) codes.push(primary)
+    ;(c.secondaries || []).forEach((s) => {
+      const sec = String(s.acn || '').trim()
+      if (sec) codes.push(sec)
+    })
+    // Include ACNs from temporary secondary forms
+    const tempInlineAcn = String(c._secInline?.acn || '').trim()
+    if (tempInlineAcn) codes.push(tempInlineAcn)
+    const tempSecAcn = String(c._secAcn || '').trim()
+    if (tempSecAcn) codes.push(tempSecAcn)
   })
   return new Set(codes)
 }
@@ -381,6 +408,12 @@ function secondaryProductsByType(type) {
 function onSecondaryProductChange(card) {
   card._secAcn = ''
   const pid = card._secProductId
+  if (pid) fetchACNsForProduct(pid)
+}
+
+function onSecondaryInlineProductChange(card) {
+  card._secInline.acn = ''
+  const pid = card._secInline.productId
   if (pid) fetchACNsForProduct(pid)
 }
 
@@ -668,24 +701,40 @@ async function saveRecord() {
       department: dep?.name || wizard.value.department,
       notes: `${headerNotes}${wizard.value.notes || ''}`,
       date: wizard.value.date,
-      items: editableItems.value.map((it) => ({
-        description: it.description || 'N/A',
-        product: it.product,
-        processor: it.processor || 'N/A',
-        storage: it.storage || 'N/A',
-        ram: it.ram || 'N/A',
-        videoCard: it.videoCard || 'N/A',
-        monitorSerial: it.monitorSerial || 'N/A',
-        serialNumber: it.serialNumber || undefined,
-        acn: it.acn || undefined,
-        propertyNumber: it.propertyNumber || 'N/A',
-        printerOrScanner: it.printerOrScanner || 'N/A',
-        endUserOrMR: it.endUserOrMR || 'N/A',
-        employeeId: it.employeeId,
-        remarksYears: it.remarksYears || 'N/A',
-        status: it.status || 'deployed',
-        statusNotes: it.statusNotes || ''
-      }))
+      items: wizard.value.cards.map((card) => {
+        const product = products.value.find((p) => String(p._id) === String(card.productId))
+        const employee = employees.value.find((e) => String(e._id) === String(card.employeeId))
+        const employeeName = employee
+          ? [employee.firstName, employee.lastName].filter(Boolean).join(' ') || employee.name || employee.email
+          : ''
+        
+        return {
+          description: product ? product.name : 'N/A',
+          product: product ? product._id : undefined,
+          processor: 'N/A',
+          storage: 'N/A',
+          ram: 'N/A',
+          videoCard: 'N/A',
+          monitorSerial: 'N/A',
+          serialNumber: card.serialNumber || undefined,
+          acn: card.acn || undefined,
+          propertyNumber: card.acn || 'N/A',
+          printerOrScanner: 'N/A',
+          endUserOrMR: employeeName || 'N/A',
+          employeeId: employee ? employee._id : undefined,
+          remarksYears: card.remarksYears || 'N/A',
+          status: 'deployed',
+          statusNotes: '',
+          secondaryItems: (card.secondaries || []).map(sec => ({
+            type: sec.type,
+            productId: sec.productId,
+            acn: sec.acn || undefined,
+            propertyNumber: sec.acn || undefined,
+            serialNumber: undefined,
+            remarksYears: sec.remarksYears || ''
+          }))
+        }
+      })
     }
     await axios.post('/inventory-records', payload)
     alert('Record created successfully')

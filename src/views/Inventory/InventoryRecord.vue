@@ -38,6 +38,33 @@ const statusOptions = ['deployed', 'returned', 'repair', 'retired']
 
 // Cache of globally deployed ACN codes for robust filtering
 const deployedAcnCodes = ref([])
+
+// Helper to safely read specs from either top-level or nested `specs`
+function specFrom(item, key) {
+  try {
+    return item?.[key] || item?.specs?.[key] || ''
+  } catch (_) {
+    return ''
+  }
+}
+
+// Helper to extract ACNs from legacy display strings (backward compatibility)
+function extractAcnsFromDisplayStrings(item) {
+  const acns = []
+  const acnPattern = /[A-Z]{3}-\d{3}-\d{2}-\d{4}/g
+
+  // Extract from monitorAndSerial field
+  const monitorStr = String(item.monitorAndSerial || '')
+  const monitorMatches = monitorStr.match(acnPattern) || []
+  acns.push(...monitorMatches)
+
+  // Extract from printerOrScanner field
+  const printerStr = String(item.printerOrScanner || '')
+  const printerMatches = printerStr.match(acnPattern) || []
+  acns.push(...printerMatches)
+
+  return acns.map((acn) => acn.trim().toUpperCase()).filter(Boolean)
+}
 async function fetchDeployedAcnCodes() {
   try {
     const { data } = await axios.get('/inventory-records', {
@@ -49,7 +76,19 @@ async function fetchDeployedAcnCodes() {
         .trim()
         .toUpperCase()
     const codes = (list || []).flatMap((rec) =>
-      (rec.items || []).flatMap((it) => [norm(it.propertyNumber), norm(it.acn)]).filter((s) => !!s)
+      (rec.items || [])
+        .flatMap((it) => {
+          const primary = [norm(it.propertyNumber), norm(it.acn)]
+          const secondary = (it.secondaryItems || []).flatMap((sec) => [
+            norm(sec.propertyNumber),
+            norm(sec.acn)
+          ])
+          // For backward compatibility: extract ACNs from display strings if secondaryItems is empty
+          const legacy =
+            (it.secondaryItems || []).length === 0 ? extractAcnsFromDisplayStrings(it) : []
+          return [...primary, ...secondary, ...legacy]
+        })
+        .filter((s) => !!s)
     )
     const uniq = Array.from(new Set(codes))
     console.log(data)
@@ -119,6 +158,8 @@ async function fetchACNsForProduct(productId) {
   acnLoading.value = true
   acnError.value = null
   try {
+    console.log('🔍 DEBUG: Fetching ACNs for product:', productId)
+
     // 1) Fetch product to get legacy ACN array and serials
     const { data: prodResp } = await axios.get(`/products/${productId}`)
     const product = prodResp?.product || {}
@@ -126,18 +167,34 @@ async function fetchACNsForProduct(productId) {
       ? product.assetControlNumbers.filter(Boolean)
       : []
     const serials = Array.isArray(product.serialNumbers) ? product.serialNumbers : []
+    console.log('📦 Product legacy ACNs:', legacyCodes)
 
     // 2) Fetch ACN records that may include serial numbers
     const { data: acnResp } = await axios.get(`/acns/product/${productId}`)
     const records = Array.isArray(acnResp?.acns) ? acnResp.acns : []
     const active = records.filter((r) => r?.isActive !== false)
+    console.log(
+      '📋 Active ACN records:',
+      active.map((r) => r.acnCode)
+    )
 
     // Build union of ACN codes from product and records
     const codeSet = new Set([
       ...legacyCodes.map((c) => String(c).trim()).filter(Boolean),
       ...active.map((r) => String(r?.acnCode || '').trim()).filter(Boolean)
     ])
-    const codes = Array.from(codeSet)
+    const allCodes = Array.from(codeSet)
+    console.log('🔗 All available ACNs before filtering:', allCodes)
+
+    // 3) Use global deployed ACNs cache
+    await fetchDeployedAcnCodes()
+    const deployedAcns = new Set(deployedAcnCodes.value.map(c => c.toUpperCase()))
+    
+    console.log('🚫 Deployed ACNs to exclude:', Array.from(deployedAcns))
+
+    // Filter out deployed ACNs
+    const codes = allCodes.filter((code) => !deployedAcns.has(code.toUpperCase()))
+    console.log('✅ Final available ACNs after filtering:', codes)
 
     // Build ACN → serial map from records
     const map = {}
@@ -159,7 +216,9 @@ async function fetchACNsForProduct(productId) {
 
     acnOptionsByProduct.value[productId] = codes
     serialByAcnByProduct.value[productId] = map
+    console.log('💾 Stored ACN options for product:', productId, codes)
   } catch (err) {
+    console.error('❌ Error fetching ACNs:', err)
     // Preserve any existing options to avoid clearing UI unexpectedly
     acnOptionsByProduct.value[productId] = acnOptionsByProduct.value[productId] || []
     serialByAcnByProduct.value[productId] = serialByAcnByProduct.value[productId] || {}
@@ -525,7 +584,18 @@ function applyBatchToItems() {
       remarksYears: unit.remarksYears || '',
       serialNumber: primarySerial,
       status: 'deployed',
-      statusNotes: ''
+      statusNotes: '',
+      secondaryItems: (unit.secondary || []).map((sec) => ({
+        type: sec.type,
+        productId: sec.productId,
+        acn: sec.acn || undefined,
+        propertyNumber: sec.propertyNumber || '',
+        serialNumber:
+          sec.acn && serialByAcnByProduct.value?.[sec.productId]?.[sec.acn]
+            ? serialByAcnByProduct.value[sec.productId][sec.acn]
+            : '',
+        remarksYears: sec.remarksYears || ''
+      }))
     })
     if (code) usedAcn.add(code)
 
@@ -604,7 +674,10 @@ function secondaryProductsByType(type) {
 function onSecondaryProductChange(unit) {
   unit._newSecondaryAcn = ''
   const pid = unit._newSecondaryProductId
-  if (pid) fetchACNsForProduct(pid)
+  if (pid) {
+    fetchACNsForProduct(pid)
+    fetchDeployedAcnCodes() // Ensure deployed ACNs are up to date
+  }
 }
 
 // Filter ACN options for a new secondary item: exclude ACNs already selected
@@ -615,16 +688,23 @@ function getFilteredSecondaryAcnOptions(unit, uidx) {
     const pid = String(unit?._newSecondaryProductId || '').trim()
     const base = pid ? acnOptionsByProduct.value[pid] || [] : []
     if (!base || base.length === 0) return base
+
+    const current = String(unit?._newSecondaryAcn || unit?._newSecondaryPropertyNumber || '').trim()
+    const allowDupeAcrossUnits = !!unit?._newSecondaryDuplicate
+
+    // Get deployed ACNs from global cache (same as fetchACNsForProduct uses)
+    const deployedAcns = new Set(deployedAcnCodes.value || [])
+
     const usedInRecord = (newRecord.value.items || [])
       .flatMap((it) => [String(it.propertyNumber || '').trim(), String(it.acn || '').trim()])
       .filter((s) => !!s)
-    const current = String(unit?._newSecondaryAcn || unit?._newSecondaryPropertyNumber || '').trim()
-    const allowDupeAcrossUnits = !!unit?._newSecondaryDuplicate
+
     const usedPrimaryInBatch = allowDupeAcrossUnits
       ? []
       : (batchUnits.value || [])
           .map((u, i) => (i !== uidx ? String(u.acn || u.propertyNumber || '').trim() : ''))
           .filter((s) => !!s)
+
     const usedSecondaryInBatch = allowDupeAcrossUnits
       ? []
       : (batchUnits.value || []).flatMap((u, i) =>
@@ -634,31 +714,27 @@ function getFilteredSecondaryAcnOptions(unit, uidx) {
                 .filter((s) => !!s)
             : []
         )
-    // Exclude ACNs already selected in this unit's primary and secondary lists
+
     const usedPrimaryInCurrentUnit = [
       String(unit?.acn || unit?.propertyNumber || '').trim()
     ].filter((s) => !!s)
+
     const usedSecondaryInCurrentUnit = (unit?.secondary || [])
       .flatMap((s) => [String(s.acn || '').trim(), String(s.propertyNumber || '').trim()])
       .filter((s) => !!s)
 
-    const norm = (s) =>
-      String(s || '')
-        .trim()
-        .toUpperCase()
-    const usedAcrossRecords = Array.from(acnCodesUsedInRecords.value || new Set())
     const usedSet = new Set([
-      ...usedInRecord.map(norm),
-      ...usedPrimaryInBatch.map(norm),
-      ...usedSecondaryInBatch.map(norm),
-      ...usedPrimaryInCurrentUnit.map(norm),
-      ...usedSecondaryInCurrentUnit.map(norm),
-      ...usedAcrossRecords.map(norm)
+      ...Array.from(deployedAcns),
+      ...usedInRecord,
+      ...usedPrimaryInBatch,
+      ...usedSecondaryInBatch,
+      ...usedPrimaryInCurrentUnit,
+      ...usedSecondaryInCurrentUnit
     ])
+
     return base.filter((code) => {
-      const c = norm(code)
-      const cur = norm(current)
-      return !usedSet.has(c) || c === cur
+      const c = String(code)
+      return !usedSet.has(c) || c === current
     })
   } catch (_) {
     return acnOptionsByProduct.value[unit?._newSecondaryProductId] || []
@@ -879,7 +955,17 @@ const acnCodesUsedInRecords = computed(() => {
   const codes = (records.value || []).flatMap((rec) =>
     (rec.items || [])
       .filter((it) => String(it.status || '').toLowerCase() === 'deployed')
-      .flatMap((it) => [norm(it.propertyNumber), norm(it.acn)])
+      .flatMap((it) => {
+        const primary = [norm(it.propertyNumber), norm(it.acn)]
+        const secondary = (it.secondaryItems || []).flatMap((sec) => [
+          norm(sec.propertyNumber),
+          norm(sec.acn)
+        ])
+        // For backward compatibility: extract ACNs from display strings if secondaryItems is empty
+        const legacy =
+          (it.secondaryItems || []).length === 0 ? extractAcnsFromDisplayStrings(it).map(norm) : []
+        return [...primary, ...secondary, ...legacy]
+      })
       .filter((s) => !!s)
   )
   const union = new Set([...(deployedAcnCodes.value || []), ...codes])
@@ -1099,7 +1185,8 @@ function resetAddForm() {
         remarksYears: '',
         serialNumber: '',
         status: 'deployed',
-        statusNotes: ''
+        statusNotes: '',
+        secondaryItems: []
       }
     ]
   }
@@ -1142,7 +1229,8 @@ function addItemRow() {
     remarksYears: '',
     serialNumber: acnSerial || '',
     status: 'deployed',
-    statusNotes: ''
+    statusNotes: '',
+    secondaryItems: []
   })
   // Immediately open editor for the newly added row
   const idx = newRecord.value.items.length - 1
@@ -1259,7 +1347,12 @@ function hasValidationIssues(rec) {
   try {
     const items = rec?.items || []
     return items.some(
-      (it) => !it?.description || !it?.processor || !it?.storage || !it?.ram || !it?.endUserOrMR
+      (it) =>
+        !it?.description ||
+        !(it?.processor || it?.specs?.processor) ||
+        !(it?.storage || it?.specs?.storage) ||
+        !(it?.ram || it?.specs?.ram) ||
+        !it?.endUserOrMR
     )
   } catch (e) {
     return false
@@ -1334,10 +1427,10 @@ function buildMergedRows(items) {
 
     if (isDesktop || (!row.description && isLaptop)) {
       row.description = product?.name || it.description || ''
-      row.processor = it.processor || specVal('Processor') || ''
-      row.storage = it.storage || specVal('Storage') || ''
-      row.ram = it.ram || specVal('RAM') || ''
-      row.videoCard = it.videoCard || specVal('Video Card') || ''
+      row.processor = specFrom(it, 'processor') || specVal('Processor') || ''
+      row.storage = specFrom(it, 'storage') || specVal('Storage') || ''
+      row.ram = specFrom(it, 'ram') || specVal('RAM') || ''
+      row.videoCard = specFrom(it, 'videoCard') || specVal('Video Card') || ''
       if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
     } else if (isMonitor) {
       if (monitorStr) row.monitors.push(monitorStr)
@@ -1357,20 +1450,20 @@ function buildMergedRows(items) {
       // Fallback: if this item carries specs (or product specs), use as primary if none yet
       if (
         !row.description &&
-        (it.processor ||
-          it.storage ||
-          it.ram ||
-          it.videoCard ||
+        (specFrom(it, 'processor') ||
+          specFrom(it, 'storage') ||
+          specFrom(it, 'ram') ||
+          specFrom(it, 'videoCard') ||
           specVal('Processor') ||
           specVal('Storage') ||
           specVal('RAM') ||
           specVal('Video Card'))
       ) {
         row.description = product?.name || it.description || ''
-        row.processor = it.processor || specVal('Processor') || ''
-        row.storage = it.storage || specVal('Storage') || ''
-        row.ram = it.ram || specVal('RAM') || ''
-        row.videoCard = it.videoCard || specVal('Video Card') || ''
+        row.processor = specFrom(it, 'processor') || specVal('Processor') || ''
+        row.storage = specFrom(it, 'storage') || specVal('Storage') || ''
+        row.ram = specFrom(it, 'ram') || specVal('RAM') || ''
+        row.videoCard = specFrom(it, 'videoCard') || specVal('Video Card') || ''
         if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
       }
     }
@@ -1443,6 +1536,7 @@ async function saveRecord() {
       const employeeId = (exemplars.find((it) => it.employeeId) || {}).employeeId || undefined
       const serialNumber = primaryExemplar?.serialNumber || undefined
       const acn = primaryExemplar?.acn || undefined
+      const secondaryItems = primaryExemplar?.secondaryItems || []
 
       return {
         description: row.description || primaryExemplar?.description || '',
@@ -1460,7 +1554,8 @@ async function saveRecord() {
         employeeId,
         remarksYears: row.remarksYears,
         status: 'deployed',
-        statusNotes: ''
+        statusNotes: '',
+        secondaryItems
       }
     })
 
@@ -1495,21 +1590,17 @@ async function saveRecord() {
       const isMonitor = cname.includes('monitor')
       const isPrinter = cname.includes('printer')
       const isScanner = cname.includes('scanner')
-
       // Always require description and End User/MR
       const baseRequired = [it.description, it.endUserOrMR]
-
       // Additional requireds based on type
       const computerRequired = [it.processor, it.storage, it.ram, it.videoCard, it.remarksYears]
       const monitorRequired = [it.monitorAndSerial]
       const printerScannerRequired = [it.printerOrScanner]
-
       const checks = [...baseRequired]
       if (isDesktop || isLaptop) checks.push(...computerRequired)
       else if (isMonitor) checks.push(...monitorRequired)
       else if (isPrinter || isScanner) checks.push(...printerScannerRequired)
       // For other types, only baseRequired applies
-
       return !checks.every((v) => (typeof v === 'string' ? v.trim() : v))
     })
 
@@ -1519,7 +1610,6 @@ async function saveRecord() {
       )
       return
     }
-
     // Derive employee assignments to help backend establish relations
     const empMap = {}
     for (const it of payload.items) {
@@ -1548,7 +1638,6 @@ async function saveRecord() {
     }
     payload.employeeAssignments = Object.values(empMap)
     payload.employeeIds = payload.employeeAssignments.map((a) => a.employeeId)
-
     await axios.post('/inventory-records', payload)
     isAddOpen.value = false
     resetAddForm()
@@ -1699,12 +1788,15 @@ onMounted(async () => {
     try {
       const { data } = await axios.get('/products')
       products.value = data?.products || data?.data?.products || []
+      console.log('🔍 Products loaded:', products.value.length, products.value)
       // Initialize primary product to first matching type
       const list = primaryProducts.value
+      console.log('🔍 Primary products:', list.length, list)
       if (!primaryProductId.value && list.length) primaryProductId.value = list[0]._id
     } catch (err) {
       products.value = []
       productsError.value = err?.response?.data?.message || err.message || 'Failed to load products'
+      console.error('❌ Products fetch error:', err)
     } finally {
       productsLoading.value = false
     }
@@ -1715,10 +1807,12 @@ onMounted(async () => {
     try {
       const { data } = await axios.get('/employees')
       employees.value = data?.employees || []
+      console.log('🔍 Employees loaded:', employees.value.length, employees.value)
     } catch (err) {
       employees.value = []
       employeesError.value =
         err?.response?.data?.message || err.message || 'Failed to load employees'
+      console.error('❌ Employees fetch error:', err)
     } finally {
       employeesLoading.value = false
     }
@@ -2534,8 +2628,9 @@ const mergedPreviewRows = computed(() => {
                       </div>
                     </td>
                     <td class="px-4 py-2 whitespace-pre-line">
-                      Processor: {{ item.processor }} \nStorage: {{ item.storage }} \nRAM:
-                      {{ item.ram }} \nVideo Card: {{ item.videoCard }}
+                      Processor: {{ specFrom(item, 'processor') }} \nStorage:
+                      {{ specFrom(item, 'storage') }} \nRAM: {{ specFrom(item, 'ram') }} \nVideo
+                      Card: {{ specFrom(item, 'videoCard') }}
                     </td>
                     <td class="px-4 py-2 whitespace-pre-line">
                       {{ item.monitorAndSerial || '—' }}
@@ -2593,10 +2688,10 @@ const mergedPreviewRows = computed(() => {
                   >
                     <td class="px-4 py-2">{{ item.description }}</td>
                     <td class="px-4 py-2">{{ item.serialNumber || '—' }}</td>
-                    <td class="px-4 py-2">{{ item.processor }}</td>
-                    <td class="px-4 py-2">{{ item.storage }}</td>
-                    <td class="px-4 py-2">{{ item.ram }}</td>
-                    <td class="px-4 py-2">{{ item.videoCard }}</td>
+                    <td class="px-4 py-2">{{ specFrom(item, 'processor') }}</td>
+                    <td class="px-4 py-2">{{ specFrom(item, 'storage') }}</td>
+                    <td class="px-4 py-2">{{ specFrom(item, 'ram') }}</td>
+                    <td class="px-4 py-2">{{ specFrom(item, 'videoCard') }}</td>
                     <td class="px-4 py-2">{{ item.monitorAndSerial }}</td>
                     <td class="px-4 py-2">{{ item.propertyNumber }}</td>
                     <td class="px-4 py-2">{{ item.printerOrScanner }}</td>

@@ -8,27 +8,43 @@
           <h4 class="text-xl font-semibold text-black dark:text-white mb-2">
             Asset Control Numbers (ACN)
           </h4>
-          <p class="text-sm text-gray-500 dark:text-gray-400">
-            Total: {{ filteredACNs.length }} ACNs
-          </p>
+          <div class="flex items-center gap-4">
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              Total:
+              <span class="font-semibold text-black dark:text-white">{{
+                filteredACNs.length
+              }}</span>
+              ACNs
+            </p>
+            <p v-if="selectedACNs.length > 0" class="text-sm text-primary">
+              Selected: <span class="font-semibold">{{ selectedACNs.length }}</span>
+            </p>
+          </div>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
           <button
-            @click="openAcnGenerateModal"
-            class="bg-primary text-white px-4 py-2 rounded hover:bg-opacity-90 disabled:opacity-50"
+            @click="openGenerateModal"
+            class="bg-primary text-white px-4 py-2 rounded hover:bg-opacity-90 transition"
           >
-            Generate ACN
+            + Generate ACN
           </button>
           <button
             @click="bulkPrint"
             :disabled="selectedACNs.length === 0"
-            class="bg-success text-white px-4 py-2 rounded hover:bg-opacity-90 disabled:opacity-50"
+            class="bg-success text-white px-4 py-2 rounded hover:bg-opacity-90 disabled:opacity-50 transition"
           >
-            Bulk Print ({{ selectedACNs.length }})
+            Print ({{ selectedACNs.length }})
+          </button>
+          <button
+            @click="bulkDownload"
+            :disabled="selectedACNs.length === 0"
+            class="bg-warning text-white px-4 py-2 rounded hover:bg-opacity-90 disabled:opacity-50 transition"
+          >
+            Download ({{ selectedACNs.length }})
           </button>
           <button
             @click="fetchACNs"
-            class="bg-primary text-white px-4 py-2 rounded hover:bg-opacity-90"
+            class="border border-stroke px-4 py-2 rounded hover:bg-gray-50 dark:hover:bg-meta-4 transition"
           >
             Refresh
           </button>
@@ -41,31 +57,26 @@
           placeholder="Search ACNs, serials, products..."
           class="flex-1 rounded border border-stroke bg-gray py-2 px-4 text-black focus:border-primary focus-visible:outline-none dark:border-strokedark dark:bg-meta-4 dark:text-white"
         />
-        <select
+        <BaseCombobox
           v-model="selectedProduct"
-          @change="filterByProduct"
-          class="rounded border border-stroke bg-gray py-2 px-4 text-black focus:border-primary focus-visible:outline-none dark:border-strokedark dark:bg-meta-4 dark:text-white"
-        >
-          <option value="">All Products</option>
-          <option v-for="product in products" :key="product._id" :value="product._id">
-            {{ product.name }} ({{ product.sku }})
-          </option>
-        </select>
+          :options="products"
+          labelKey="name"
+          valueKey="_id"
+          placeholder="All Products"
+          @update:modelValue="filterByProduct"
+        />
       </div>
     </div>
 
-    <!-- Loading State -->
     <div v-if="loading" class="flex justify-center items-center py-8">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       <span class="ml-2 text-gray-600 dark:text-gray-400">Loading...</span>
     </div>
 
-    <!-- Empty State -->
     <div v-else-if="filteredACNs.length === 0" class="text-center py-8">
       <p class="text-gray-500 dark:text-gray-400">No ACNs found</p>
     </div>
 
-    <!-- ACN Table -->
     <div v-else class="max-w-full overflow-x-auto">
       <table class="w-full table-auto">
         <thead>
@@ -111,15 +122,24 @@
               <div class="flex items-center gap-2">
                 <button
                   @click="viewBarcode(acn)"
-                  class="inline-flex items-center justify-center rounded-md bg-primary py-2 px-3 text-center font-medium text-white hover:bg-opacity-90"
+                  title="View Barcode"
+                  class="inline-flex items-center justify-center rounded-md bg-primary py-2 px-3 text-center text-xs font-medium text-white hover:bg-opacity-90"
                 >
                   View
                 </button>
                 <button
                   @click="printBarcode(acn)"
-                  class="inline-flex items-center justify-center rounded-md bg-success py-2 px-3 text-center font-medium text-white hover:bg-opacity-90"
+                  title="Print Barcode"
+                  class="inline-flex items-center justify-center rounded-md bg-success py-2 px-3 text-center text-xs font-medium text-white hover:bg-opacity-90"
                 >
                   Print
+                </button>
+                <button
+                  @click="downloadBarcode(acn)"
+                  title="Download Barcode"
+                  class="inline-flex items-center justify-center rounded-md bg-warning py-2 px-3 text-center text-xs font-medium text-white hover:bg-opacity-90"
+                >
+                  Download
                 </button>
               </div>
             </td>
@@ -132,14 +152,19 @@
               </span>
             </td>
             <td class="py-5 px-4">
-              <div class="flex items-center space-x-3.5">
-                <button @click="editACN(acn)" class="hover:text-primary" title="Edit ACN">
+              <div class="flex items-center gap-2">
+                <button
+                  @click="editACN(acn)"
+                  class="text-primary hover:text-opacity-80"
+                  title="Edit ACN"
+                >
                   Edit
                 </button>
                 <button
                   @click="toggleACNStatus(acn)"
-                  :class="acn.isActive ? 'hover:text-danger' : 'hover:text-success'"
-                  :title="acn.isActive ? 'Deactivate ACN' : 'Activate ACN'"
+                  :class="acn.isActive ? 'text-danger' : 'text-success'"
+                  class="hover:text-opacity-80"
+                  :title="acn.isActive ? 'Deactivate' : 'Activate'"
                 >
                   {{ acn.isActive ? 'Deactivate' : 'Activate' }}
                 </button>
@@ -149,34 +174,111 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Pagination -->
+    <div v-if="!loading && filteredACNs.length > 0" class="flex items-center justify-between border-t border-stroke dark:border-strokedark px-5 py-4">
+      <div class="text-sm text-bodydark2">
+        Showing {{ (pagination.currentPage - 1) * pagination.limit + 1 }} to {{ Math.min(pagination.currentPage * pagination.limit, pagination.totalItems) }} of {{ pagination.totalItems }} ACNs
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          @click="goToPage(1)"
+          :disabled="pagination.currentPage === 1"
+          class="px-3 py-1 rounded border border-stroke hover:bg-gray-50 dark:hover:bg-meta-4 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          First
+        </button>
+        <button
+          @click="goToPage(pagination.currentPage - 1)"
+          :disabled="!pagination.hasPrev"
+          class="px-3 py-1 rounded border border-stroke hover:bg-gray-50 dark:hover:bg-meta-4 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Previous
+        </button>
+        <span class="px-3 py-1 text-sm font-medium">Page {{ pagination.currentPage }} of {{ pagination.totalPages }}</span>
+        <button
+          @click="goToPage(pagination.currentPage + 1)"
+          :disabled="!pagination.hasNext"
+          class="px-3 py-1 rounded border border-stroke hover:bg-gray-50 dark:hover:bg-meta-4 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Next
+        </button>
+        <button
+          @click="goToPage(pagination.totalPages)"
+          :disabled="pagination.currentPage === pagination.totalPages"
+          class="px-3 py-1 rounded border border-stroke hover:bg-gray-50 dark:hover:bg-meta-4 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Last
+        </button>
+      </div>
+    </div>
+
+    <!-- Generate ACN Modal -->
     <div
-      v-if="showAcnGenerateModal"
+      v-if="showGenerateModal"
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
     >
-      <div class="bg-white dark:bg-boxdark rounded-lg p-6 w-full max-w-2xl mx-4">
+      <div
+        class="bg-white dark:bg-boxdark rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto"
+      >
         <div class="flex justify-between items-center mb-4">
-          <h3 class="text-lg font-semibold text-black dark:text-white">Generate ACN</h3>
-          <button @click="closeAcnGenerateModal" class="text-gray-500 hover:text-gray-700">
+          <h3 class="text-lg font-semibold text-black dark:text-white">Generate ACNs</h3>
+          <button @click="closeGenerateModal" class="text-gray-500 hover:text-gray-700 text-2xl">
             ×
           </button>
         </div>
-        <DeploymentItemSelector
-          v-model="acnForm"
-          :products="products"
-          title="Item"
-          type="general"
-          required
-          @remove="closeAcnGenerateModal"
-          @generationComplete="onGenerationComplete"
-        />
-        <div class="flex justify-end mt-4">
-          <button
-            @click="closeAcnGenerateModal"
-            class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-opacity-90"
-          >
-            Close
-          </button>
-        </div>
+
+        <form @submit.prevent="handleGenerate">
+          <div class="mb-4 flex items-center justify-between">
+            <h4 class="text-sm font-semibold">Items ({{ items.length }})</h4>
+            <button type="button" @click="addItem" class="text-primary text-sm hover:underline">+ Add Item</button>
+          </div>
+
+          <div v-for="(item, idx) in items" :key="idx" class="mb-4 p-4 border border-stroke dark:border-strokedark rounded">
+            <div class="flex justify-between items-center mb-3">
+              <span class="text-sm font-medium">Item #{{ idx + 1 }}</span>
+              <button v-if="items.length > 1" type="button" @click="removeItem(idx)" class="text-danger text-sm hover:underline">Remove</button>
+            </div>
+
+            <div class="mb-3">
+              <label class="block text-sm font-medium text-black dark:text-white mb-2">Product <span class="text-danger">*</span></label>
+              <BaseCombobox
+                v-model="item.productId"
+                :options="products"
+                labelKey="name"
+                valueKey="_id"
+                placeholder="Select Product"
+                @update:modelValue="onProductChange(idx)"
+              />
+            </div>
+
+            <div class="mb-3">
+              <label class="block text-sm font-medium text-black dark:text-white mb-2">Quantity <span class="text-danger">*</span></label>
+              <input v-model.number="item.quantity" type="number" min="1" required @input="updateSerialCount(idx)" class="w-full rounded border border-stroke bg-gray py-2 px-4 text-black focus:border-primary dark:border-strokedark dark:bg-meta-4 dark:text-white" />
+            </div>
+
+            <div v-if="getProductObj(item.productId)?.hasSerialNumbers" class="mb-3">
+              <label class="block text-sm font-medium text-black dark:text-white mb-2">
+                Serial Numbers <span class="text-danger">*</span>
+                <span class="text-xs text-bodydark2 font-normal ml-2">(One per line)</span>
+              </label>
+              <textarea v-model="item.serialsText" rows="4" placeholder="SN001&#10;SN002&#10;SN003" class="w-full rounded border border-stroke bg-gray py-2 px-4 text-black focus:border-primary dark:border-strokedark dark:bg-meta-4 dark:text-white font-mono text-sm"></textarea>
+              <div class="mt-2 flex items-center justify-between">
+                <p class="text-xs" :class="validateItem(item).isValid ? 'text-success' : 'text-danger'">{{ validateItem(item).message }}</p>
+                <button v-if="getAvailableSerials(item.productId).length > 0" type="button" @click="autoFillSerials(idx)" class="text-xs text-primary hover:underline">
+                  Auto-fill ({{ getAvailableSerials(item.productId).length }})
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex gap-2 justify-end">
+            <button type="button" @click="closeGenerateModal" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-opacity-90">Cancel</button>
+            <button type="submit" :disabled="!canGenerate || generating" class="bg-primary text-white px-4 py-2 rounded hover:bg-opacity-90 disabled:opacity-50">
+              {{ generating ? 'Generating...' : `Generate ACNs (${items.reduce((sum, i) => sum + i.quantity, 0)} total)` }}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -188,7 +290,9 @@
       <div class="bg-white dark:bg-boxdark rounded-lg p-6 max-w-md w-full mx-4">
         <div class="flex justify-between items-center mb-4">
           <h3 class="text-lg font-semibold text-black dark:text-white">ACN Barcode</h3>
-          <button @click="closeBarcodeModal" class="text-gray-500 hover:text-gray-700">×</button>
+          <button @click="closeBarcodeModal" class="text-gray-500 hover:text-gray-700 text-2xl">
+            ×
+          </button>
         </div>
         <div v-if="selectedACN" class="text-center">
           <p class="mb-2 text-black dark:text-white">{{ selectedACN.acnCode }}</p>
@@ -198,9 +302,15 @@
           <div class="flex gap-2 justify-center">
             <button
               @click="printBarcode(selectedACN)"
-              class="bg-primary text-white px-4 py-2 rounded hover:bg-opacity-90"
+              class="bg-success text-white px-4 py-2 rounded hover:bg-opacity-90"
             >
-              Print Barcode
+              Print
+            </button>
+            <button
+              @click="downloadBarcode(selectedACN)"
+              class="bg-warning text-white px-4 py-2 rounded hover:bg-opacity-90"
+            >
+              Download
             </button>
             <button
               @click="closeBarcodeModal"
@@ -213,7 +323,7 @@
       </div>
     </div>
 
-    <!-- Edit ACN Modal -->
+    <!-- Edit Modal -->
     <div
       v-if="showEditModal"
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -221,18 +331,20 @@
       <div class="bg-white dark:bg-boxdark rounded-lg p-6 max-w-md w-full mx-4">
         <div class="flex justify-between items-center mb-4">
           <h3 class="text-lg font-semibold text-black dark:text-white">Edit ACN</h3>
-          <button @click="closeEditModal" class="text-gray-500 hover:text-gray-700">×</button>
+          <button @click="closeEditModal" class="text-gray-500 hover:text-gray-700 text-2xl">
+            ×
+          </button>
         </div>
         <form @submit.prevent="updateACN">
           <div class="mb-4">
-            <label class="block text-sm font-medium text-black dark:text-white mb-2">
-              ACN Code
-            </label>
+            <label class="block text-sm font-medium text-black dark:text-white mb-2"
+              >ACN Code</label
+            >
             <input
               v-model="editForm.acnCode"
               type="text"
               required
-              class="w-full rounded border border-stroke bg-gray py-2 px-4 text-black focus:border-primary focus-visible:outline-none dark:border-strokedark dark:bg-meta-4 dark:text-white"
+              class="w-full rounded border border-stroke bg-gray py-2 px-4 text-black focus:border-primary dark:border-strokedark dark:bg-meta-4 dark:text-white"
             />
           </div>
           <div class="flex gap-2 justify-end">
@@ -247,7 +359,7 @@
               type="submit"
               class="bg-primary text-white px-4 py-2 rounded hover:bg-opacity-90"
             >
-              Update ACN
+              Update
             </button>
           </div>
         </form>
@@ -257,82 +369,85 @@
 </template>
 
 <script>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
 import { useAuthStore } from '@/stores'
-import DeploymentItemSelector from '../Inventory/DeploymentItemSelector.vue'
-const authStore = useAuthStore()
+import Swal from 'sweetalert2'
+import BaseCombobox from '../Forms/BaseCombobox.vue'
 
 export default {
   name: 'ACNManagement',
-  components: { DeploymentItemSelector },
+  components: { BaseCombobox },
   setup() {
+    const authStore = useAuthStore()
     const acns = ref([])
     const products = ref([])
     const searchQuery = ref('')
     const selectedProduct = ref('')
     const loading = ref(false)
     const selectedACNs = ref([])
-    const acnForm = ref({
-      productId: '',
-      serialNumber: '',
-      quantity: 1,
-      serials: [],
-      acn: '',
-      propertyNumber: '',
-      remarks: ''
-    })
+    const generating = ref(false)
+    const pagination = ref({ currentPage: 1, totalPages: 1, totalItems: 0, limit: 20 })
 
-    // Modal states
-    const showAcnGenerateModal = ref(false)
+    const items = ref([{ productId: '', quantity: 1, serialsText: '' }])
+    const showGenerateModal = ref(false)
     const showBarcodeModal = ref(false)
     const showEditModal = ref(false)
     const selectedACN = ref(null)
     const barcodeImage = ref('')
+    const editForm = ref({ acnCode: '' })
 
-    // Edit form
-    const editForm = ref({
-      acnCode: ''
+    const getProductObj = (productId) => products.value.find((p) => p._id === productId)
+
+    const getAvailableSerials = (productId) => {
+      const product = getProductObj(productId)
+      if (!product?.hasSerialNumbers) return []
+      const serials = product.serialNumbers || []
+      const acnList = product.assetControlNumbers || []
+      return serials.filter((sn, idx) => !acnList[idx])
+    }
+
+    const parseSerials = (text) => text.split('\n').map((s) => s.trim()).filter(Boolean)
+
+    const validateItem = (item) => {
+      const product = getProductObj(item.productId)
+      if (!product?.hasSerialNumbers) return { isValid: true, message: '' }
+      const serials = parseSerials(item.serialsText)
+      if (serials.length === 0) return { isValid: false, message: `0 of ${item.quantity} serials` }
+      if (serials.length !== item.quantity) return { isValid: false, message: `${serials.length} of ${item.quantity}` }
+      if (new Set(serials).size !== serials.length) return { isValid: false, message: 'Duplicates' }
+      return { isValid: true, message: `✓ ${serials.length}` }
+    }
+
+    const canGenerate = computed(() => {
+      return items.value.every((item) => {
+        if (!item.productId || item.quantity < 1) return false
+        const product = getProductObj(item.productId)
+        return product?.hasSerialNumbers ? validateItem(item).isValid : true
+      })
     })
 
-    const filteredACNs = computed(() => {
-      let filtered = acns.value
+    const filteredACNs = computed(() => acns.value)
 
-      if (searchQuery.value) {
-        const query = searchQuery.value.toLowerCase()
-        filtered = filtered.filter(
-          (acn) =>
-            acn.acnCode.toLowerCase().includes(query) ||
-            acn.serialNumber?.toLowerCase().includes(query) ||
-            acn.product?.name?.toLowerCase().includes(query)
-        )
-      }
+    const isAllSelected = computed(
+      () => filteredACNs.value.length > 0 && selectedACNs.value.length === filteredACNs.value.length
+    )
 
-      return filtered
-    })
-
-    const isAllSelected = computed(() => {
-      return (
-        filteredACNs.value.length > 0 && selectedACNs.value.length === filteredACNs.value.length
-      )
-    })
-
-    const fetchACNs = async () => {
+    const fetchACNs = async (page = 1) => {
       try {
         loading.value = true
-        const params = {}
-
-        if (selectedProduct.value) {
-          params.productId = selectedProduct.value
-        }
-
-        const response = await axios.get('http://localhost:5000/api/acns', {
+        const params = { page, limit: pagination.value.limit }
+        if (selectedProduct.value) params.productId = selectedProduct.value
+        if (searchQuery.value) params.search = searchQuery.value
+        
+        const { data } = await axios.get('http://localhost:5000/api/acns', {
           params,
-          headers: {
-            Authorization: `Bearer ${authStore.token}`
-          }
+          headers: { Authorization: `Bearer ${authStore.token}` }
         })
-        acns.value = response.data.acns
+        acns.value = data.acns
+        if (data.pagination) {
+          pagination.value = data.pagination
+        }
       } catch (error) {
         console.error('Error fetching ACNs:', error)
       } finally {
@@ -340,74 +455,139 @@ export default {
       }
     }
 
+    const goToPage = (page) => {
+      if (page >= 1 && page <= pagination.value.totalPages) {
+        fetchACNs(page)
+      }
+    }
+
     const fetchProducts = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/api/products/', {
-          headers: {
-            Authorization: `Bearer ${authStore.token}`
-          }
+        const { data } = await axios.get('http://localhost:5000/api/products/', {
+          headers: { Authorization: `Bearer ${authStore.token}` }
         })
-        // Allow selecting serialized products and those already tracking ACNs
-        products.value = response.data.products.filter(
-          (p) => p.hasSerialNumbers || p.hasAssetControlNumber
-        )
+        products.value = data.products.filter((p) => p.hasSerialNumbers || p.hasAssetControlNumber)
       } catch (error) {
         console.error('Error fetching products:', error)
       }
     }
 
+    const onProductChange = (index) => {
+      items.value[index].serialsText = ''
+      items.value[index].quantity = 1
+    }
+
+    const updateSerialCount = (index) => {
+      const item = items.value[index]
+      const current = parseSerials(item.serialsText)
+      if (current.length > item.quantity) {
+        item.serialsText = current.slice(0, item.quantity).join('\n')
+      }
+    }
+
+    const autoFillSerials = (index) => {
+      const item = items.value[index]
+      const available = getAvailableSerials(item.productId)
+      item.serialsText = available.slice(0, item.quantity).join('\n')
+    }
+
+    const addItem = () => {
+      items.value.push({ productId: '', quantity: 1, serialsText: '' })
+    }
+
+    const removeItem = (index) => {
+      if (items.value.length > 1) items.value.splice(index, 1)
+    }
+
+    const handleGenerate = async () => {
+      try {
+        generating.value = true
+        let success = 0, fail = 0
+
+        for (const item of items.value) {
+          const product = getProductObj(item.productId)
+          const serials = product?.hasSerialNumbers ? parseSerials(item.serialsText) : []
+
+          for (let i = 0; i < item.quantity; i++) {
+            try {
+              const payload = { productId: item.productId }
+              if (serials[i]) payload.serialNumber = serials[i]
+              const { data } = await axios.post('http://localhost:5000/api/acns/generate', payload, {
+                headers: { Authorization: `Bearer ${authStore.token}` }
+              })
+              if (data?.success) success++
+              else fail++
+            } catch { fail++ }
+          }
+        }
+
+        if (success > 0) {
+          await Swal.fire({
+            icon: 'success',
+            title: 'ACNs Generated',
+            html: `<p>Successfully generated <strong>${success}</strong> ACN(s)</p>${fail > 0 ? `<p class="text-danger">Failed: ${fail}</p>` : ''}`,
+            timer: 3000
+          })
+          closeGenerateModal()
+          fetchACNs()
+        } else {
+          Swal.fire({ icon: 'error', title: 'Failed', text: 'Failed to generate any ACNs' })
+        }
+      } catch (error) {
+        Swal.fire({ icon: 'error', title: 'Error', text: error?.response?.data?.message || 'Failed to generate ACNs' })
+      } finally {
+        generating.value = false
+      }
+    }
+
+    const openGenerateModal = () => {
+      items.value = [{ productId: '', quantity: 1, serialsText: '' }]
+      showGenerateModal.value = true
+    }
+
+    const closeGenerateModal = () => {
+      showGenerateModal.value = false
+    }
+
     const viewBarcode = async (acn) => {
       try {
         selectedACN.value = acn
-        const response = await axios.get(`http://localhost:5000/api/barcodes/acn/${acn._id}`, {
-          headers: {
-            Authorization: `Bearer ${authStore.token}`
-          }
+        const { data } = await axios.get(`http://localhost:5000/api/barcodes/acn/${acn._id}`, {
+          headers: { Authorization: `Bearer ${authStore.token}` }
         })
-        if (response.data.success && response.data.printData) {
-          barcodeImage.value = response.data.printData.barcodeImage
+        if (data.success && data.printData) {
+          barcodeImage.value = data.printData.barcodeImage
           showBarcodeModal.value = true
         }
       } catch (error) {
-        console.error('Error fetching barcode:', error)
-        alert('Failed to load barcode')
+        Swal.fire({ icon: 'error', text: 'Failed to load barcode' })
       }
     }
 
     const createBarcodeCanvas = async (acn) => {
-      const response = await axios.get(`http://localhost:5000/api/barcodes/acn/${acn._id}`, {
-        headers: {
-          Authorization: `Bearer ${authStore.token}`
-        }
+      const { data } = await axios.get(`http://localhost:5000/api/barcodes/acn/${acn._id}`, {
+        headers: { Authorization: `Bearer ${authStore.token}` }
       })
-
       const canvas = document.createElement('canvas')
       const ctx = canvas.getContext('2d')
-
-      const barcodeImg = new Image()
-      barcodeImg.src = 'data:image/png;base64,' + response.data.printData.barcodeImage
+      const img = new Image()
+      img.src = 'data:image/png;base64,' + data.printData.barcodeImage
 
       return new Promise((resolve) => {
-        barcodeImg.onload = () => {
-          canvas.width = Math.max(barcodeImg.width, 300)
-          canvas.height = barcodeImg.height + 60
-
+        img.onload = () => {
+          canvas.width = Math.max(img.width, 300)
+          canvas.height = img.height + 80
           ctx.fillStyle = 'white'
           ctx.fillRect(0, 0, canvas.width, canvas.height)
-
           ctx.fillStyle = 'black'
-          ctx.font = '25px Arial'
+          ctx.font = 'bold 32px Arial'
           ctx.textAlign = 'center'
-          ctx.fillText(acn.acnCode, canvas.width / 2, 25)
-
+          ctx.fillText(acn.acnCode, canvas.width / 2, 32)
           if (acn.serialNumber) {
-            ctx.font = '20px Arial'
-            ctx.fillText(`S/N: ${acn.serialNumber}`, canvas.width / 2, 45)
+            ctx.font = 'bold 24px Arial'
+            ctx.fillText(`S/N: ${acn.serialNumber}`, canvas.width / 2, 58)
           }
-
-          const x = (canvas.width - barcodeImg.width) / 2
-          ctx.drawImage(barcodeImg, x, 50)
-
+          ctx.drawImage(img, (canvas.width - img.width) / 2, acn.serialNumber ? 65 : 40)
           resolve(canvas)
         }
       })
@@ -416,19 +596,164 @@ export default {
     const printBarcode = async (acn) => {
       try {
         const canvas = await createBarcodeCanvas(acn)
+        const imgData = canvas.toDataURL('image/png')
+        
+        const printWindow = window.open('', '_blank')
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Print ACN - ${acn.acnCode}</title>
+            <style>
+              @media print {
+                @page { size: A4; margin: 0.5cm; }
+                body { margin: 0; padding: 0; }
+              }
+              body {
+                font-family: Arial, sans-serif;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0;
+                padding: 0.5cm;
+              }
+              .barcode-item {
+                width: 2in;
+                height: 1.5in;
+                border: 1px dashed #ccc;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                page-break-inside: avoid;
+                box-sizing: border-box;
+                padding: 0.1in;
+              }
+              .barcode-item img {
+                max-width: 100%;
+                max-height: 100%;
+                object-fit: contain;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="barcode-item"><img src="${imgData}" /></div>
+          </body>
+          </html>
+        `)
+        printWindow.document.close()
+        printWindow.onload = () => {
+          printWindow.print()
+          printWindow.onafterprint = () => printWindow.close()
+        }
+      } catch (error) {
+        Swal.fire({ icon: 'error', text: 'Failed to print barcode' })
+      }
+    }
+
+    const downloadBarcode = async (acn) => {
+      try {
+        const canvas = await createBarcodeCanvas(acn)
         canvas.toBlob((blob) => {
-          const url = window.URL.createObjectURL(blob)
+          const url = URL.createObjectURL(blob)
           const link = document.createElement('a')
           link.href = url
-          link.setAttribute('download', `acn-barcode-${acn.acnCode}.png`)
-          document.body.appendChild(link)
+          link.download = `acn-barcode-${acn.acnCode}.png`
           link.click()
-          link.remove()
-          window.URL.revokeObjectURL(url)
+          URL.revokeObjectURL(url)
         })
       } catch (error) {
-        console.error('Error printing barcode:', error)
-        alert('Failed to download barcode')
+        Swal.fire({ icon: 'error', text: 'Failed to download barcode' })
+      }
+    }
+
+    const bulkPrint = async () => {
+      if (selectedACNs.value.length === 0) return
+      try {
+        loading.value = true
+        const selectedAcnObjects = selectedACNs.value.map(id => acns.value.find(a => a._id === id)).filter(Boolean)
+        
+        const canvases = await Promise.all(selectedAcnObjects.map(acn => createBarcodeCanvas(acn)))
+        const images = canvases.map(canvas => canvas.toDataURL('image/png'))
+        
+        const printWindow = window.open('', '_blank')
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Print ACN Barcodes</title>
+            <style>
+              @media print {
+                @page { size: A4; margin: 0.5cm; }
+                body { margin: 0; padding: 0; }
+              }
+              body {
+                font-family: Arial, sans-serif;
+                display: grid;
+                grid-template-columns: repeat(4, 2in);
+                gap: 0.1in;
+                padding: 0.5cm;
+              }
+              .barcode-item {
+                width: 2in;
+                height: 1.5in;
+                border: 1px dashed #ccc;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                page-break-inside: avoid;
+                box-sizing: border-box;
+                padding: 0.1in;
+              }
+              .barcode-item img {
+                max-width: 100%;
+                max-height: 100%;
+                object-fit: contain;
+              }
+            </style>
+          </head>
+          <body>
+            ${images.map(img => `<div class="barcode-item"><img src="${img}" /></div>`).join('')}
+          </body>
+          </html>
+        `)
+        printWindow.document.close()
+        printWindow.onload = () => {
+          printWindow.print()
+          printWindow.onafterprint = () => printWindow.close()
+        }
+        selectedACNs.value = []
+      } catch (error) {
+        Swal.fire({ icon: 'error', text: 'Failed to print barcodes' })
+      } finally {
+        loading.value = false
+      }
+    }
+
+    const bulkDownload = async () => {
+      if (selectedACNs.value.length === 0) return
+      try {
+        loading.value = true
+        const selectedAcnObjects = selectedACNs.value.map(id => acns.value.find(a => a._id === id)).filter(Boolean)
+        
+        for (const acn of selectedAcnObjects) {
+          const canvas = await createBarcodeCanvas(acn)
+          await new Promise(resolve => {
+            canvas.toBlob((blob) => {
+              const url = URL.createObjectURL(blob)
+              const link = document.createElement('a')
+              link.href = url
+              link.download = `acn-barcode-${acn.acnCode}.png`
+              link.click()
+              URL.revokeObjectURL(url)
+              setTimeout(resolve, 100)
+            })
+          })
+        }
+        selectedACNs.value = []
+        Swal.fire({ icon: 'success', title: 'Downloaded', text: `${selectedAcnObjects.length} barcode(s) downloaded`, timer: 2000 })
+      } catch (error) {
+        Swal.fire({ icon: 'error', text: 'Failed to download barcodes' })
+      } finally {
+        loading.value = false
       }
     }
 
@@ -442,25 +767,14 @@ export default {
       try {
         await axios.put(
           `http://localhost:5000/api/barcodes/acn/${selectedACN.value._id}`,
-          {
-            newAcnCode: editForm.value.acnCode
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${authStore.token}`
-            }
-          }
+          { newAcnCode: editForm.value.acnCode },
+          { headers: { Authorization: `Bearer ${authStore.token}` } }
         )
-
-        // Update local data
-        const index = acns.value.findIndex((a) => a._id === selectedACN.value._id)
-        if (index !== -1) {
-          acns.value[index].acnCode = editForm.value.acnCode
-        }
-
+        const idx = acns.value.findIndex((a) => a._id === selectedACN.value._id)
+        if (idx !== -1) acns.value[idx].acnCode = editForm.value.acnCode
         closeEditModal()
       } catch (error) {
-        console.error('Error updating ACN:', error)
+        Swal.fire({ icon: 'error', text: 'Failed to update ACN' })
       }
     }
 
@@ -469,110 +783,33 @@ export default {
         await axios.patch(
           `http://localhost:5000/api/acns/${acn._id}/toggle-status`,
           {},
-          {
-            headers: {
-              Authorization: `Bearer ${authStore.token}`
-            }
-          }
+          { headers: { Authorization: `Bearer ${authStore.token}` } }
         )
-
-        // Update local data
-        const index = acns.value.findIndex((a) => a._id === acn._id)
-        if (index !== -1) {
-          acns.value[index].isActive = !acns.value[index].isActive
-        }
+        const idx = acns.value.findIndex((a) => a._id === acn._id)
+        if (idx !== -1) acns.value[idx].isActive = !acns.value[idx].isActive
       } catch (error) {
-        console.error('Error toggling ACN status:', error)
+        Swal.fire({ icon: 'error', text: 'Failed to toggle status' })
       }
     }
 
-    const filterByProduct = () => {
-      fetchACNs()
-    }
-
+    const filterByProduct = () => fetchACNs(1)
     const toggleSelectAll = () => {
-      if (isAllSelected.value) {
-        selectedACNs.value = []
-      } else {
-        selectedACNs.value = filteredACNs.value.map((acn) => acn._id)
-      }
+      selectedACNs.value = isAllSelected.value ? [] : filteredACNs.value.map((acn) => acn._id)
     }
-    const openAcnGenerateModal = () => {
-      acnForm.value = {
-        productId: '',
-        serialNumber: '',
-        quantity: 1,
-        serials: [],
-        acn: '',
-        propertyNumber: '',
-        remarks: ''
-      }
-      showAcnGenerateModal.value = true
-    }
-    const closeAcnGenerateModal = () => {
-      showAcnGenerateModal.value = false
-    }
-
-    const bulkPrint = async () => {
-      if (selectedACNs.value.length === 0) return
-
-      try {
-        loading.value = true
-        for (const acnId of selectedACNs.value) {
-          const acn = acns.value.find((a) => a._id === acnId)
-          if (acn) {
-            const canvas = await createBarcodeCanvas(acn)
-            canvas.toBlob((blob) => {
-              const url = window.URL.createObjectURL(blob)
-              const link = document.createElement('a')
-              link.href = url
-              link.setAttribute('download', `acn-barcode-${acn.acnCode}.png`)
-              document.body.appendChild(link)
-              link.click()
-              link.remove()
-              window.URL.revokeObjectURL(url)
-            })
-          }
-        }
-        selectedACNs.value = []
-      } catch (error) {
-        console.error('Error bulk printing:', error)
-        alert('Failed to print some barcodes')
-      } finally {
-        loading.value = false
-      }
-    }
-
     const closeBarcodeModal = () => {
       showBarcodeModal.value = false
       selectedACN.value = null
       barcodeImage.value = ''
     }
-
     const closeEditModal = () => {
       showEditModal.value = false
       selectedACN.value = null
-      editForm.value.acnCode = ''
     }
 
     onMounted(() => {
       fetchACNs()
       fetchProducts()
     })
-
-    // Auto-close modal and refresh ACN list only after successful generation
-    watch([() => acnForm.value.acn, () => acnForm.value.propertyNumber], ([newAcn, newProp]) => {
-      const isGenerated = newAcn && newProp && newAcn === newProp
-      if (isGenerated && showAcnGenerateModal.value) {
-        closeAcnGenerateModal()
-        fetchACNs()
-      }
-    })
-
-    const onGenerationComplete = (count) => {
-      closeAcnGenerateModal()
-      fetchACNs()
-    }
 
     return {
       acns,
@@ -581,29 +818,43 @@ export default {
       selectedProduct,
       loading,
       selectedACNs,
-      showAcnGenerateModal,
-      acnForm,
-      filteredACNs,
-      isAllSelected,
+      items,
+      showGenerateModal,
       showBarcodeModal,
       showEditModal,
       selectedACN,
       barcodeImage,
       editForm,
+      generating,
+      getProductObj,
+      getAvailableSerials,
+      validateItem,
+      canGenerate,
+      filteredACNs,
+      isAllSelected,
       fetchACNs,
+      goToPage,
+      pagination,
+      onProductChange,
+      updateSerialCount,
+      autoFillSerials,
+      addItem,
+      removeItem,
+      handleGenerate,
+      openGenerateModal,
+      closeGenerateModal,
       viewBarcode,
       printBarcode,
+      downloadBarcode,
+      bulkPrint,
+      bulkDownload,
       editACN,
       updateACN,
       toggleACNStatus,
       filterByProduct,
       toggleSelectAll,
-      bulkPrint,
       closeBarcodeModal,
-      closeEditModal,
-      openAcnGenerateModal,
-      closeAcnGenerateModal,
-      onGenerationComplete
+      closeEditModal
     }
   }
 }

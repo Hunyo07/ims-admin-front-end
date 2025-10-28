@@ -110,6 +110,11 @@ const allMenuGroups = ref([
             roles: ['superadmin', 'admin', 'staff']
           },
           {
+            label: 'Delivery Receipts',
+            route: '/inventory/delivery-receipts',
+            roles: ['superadmin', 'admin', 'staff']
+          },
+          {
             label: 'Stock adjustments',
             route: '/stock-adjustments',
             roles: ['superadmin', 'admin']

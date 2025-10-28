@@ -182,6 +182,24 @@ const routes = [
     meta: { title: 'Inventory List', requiresAuth: true }
   },
   {
+    path: '/inventory/delivery-receipts',
+    name: 'DeliveryReceiptsList',
+    component: () => import('../views/Inventory/DeliveryReceiptsList.vue'),
+    meta: { title: 'Delivery Receipts', requiresAuth: true }
+  },
+  {
+    path: '/inventory/delivery-receipts/new',
+    name: 'DeliveryReceiptCreate',
+    component: () => import('../views/Inventory/DeliveryReceiptCreate.vue'),
+    meta: { title: 'New Delivery Receipt', requiresAuth: true }
+  },
+  {
+    path: '/inventory/delivery-receipts/:id',
+    name: 'DeliveryReceiptDetail',
+    component: () => import('../views/Inventory/DeliveryReceiptDetail.vue'),
+    meta: { title: 'Delivery Receipt Detail', requiresAuth: true }
+  },
+  {
     path: '/supplier',
     name: 'supllier',
     component: () => import('../views/Supplier/SupplierManagementView.vue'),

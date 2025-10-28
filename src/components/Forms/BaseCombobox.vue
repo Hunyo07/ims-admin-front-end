@@ -8,7 +8,7 @@ const props = defineProps({
   valueKey: { type: String, default: 'value' },
   placeholder: { type: String, default: '' },
   disabled: { type: Boolean, default: false },
-  clearable: { type: Boolean, default: true },
+  clearable: { type: Boolean, default: true }
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
@@ -47,7 +47,9 @@ watch(
 )
 
 const filteredOptions = computed(() => {
-  const q = String(query.value || '').trim().toLowerCase()
+  const q = String(query.value || '')
+    .trim()
+    .toLowerCase()
   const all = normalizedOptions.value
   if (!q) return all
   return all.filter((o) => o.label.toLowerCase().includes(q))
@@ -77,7 +79,8 @@ function moveHighlight(delta) {
 }
 function selectOption(opt) {
   // Accept already-normalized options; fallback to normalizing raw options
-  const n = opt && typeof opt === 'object' && 'label' in opt && 'value' in opt ? opt : normalizeOption(opt)
+  const n =
+    opt && typeof opt === 'object' && 'label' in opt && 'value' in opt ? opt : normalizeOption(opt)
   emit('update:modelValue', n.value)
   emit('change', n.value)
   query.value = n.label
@@ -108,7 +111,13 @@ function clearSelection() {
         aria-autocomplete="list"
         :aria-expanded="isOpen"
         :aria-controls="listId"
-        @input="(e) => { query = e.target.value; open(); highlightIndex = 0 }"
+        @input="
+          (e) => {
+            query = e.target.value
+            open()
+            highlightIndex = 0
+          }
+        "
         @focus="open"
         @keydown.down.prevent="moveHighlight(1)"
         @keydown.up.prevent="moveHighlight(-1)"

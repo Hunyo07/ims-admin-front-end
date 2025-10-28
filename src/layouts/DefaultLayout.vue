@@ -1,9 +1,10 @@
-<script setup >
+<script setup>
 import HeaderArea from '../components/Header/HeaderArea.vue'
 import SidebarArea from '../components/Sidebar/SidebarArea.vue'
 import { useSidebarStore } from '../stores'
 
 const sidebarStore = useSidebarStore()
+
 </script>
 
 <template>
@@ -14,7 +15,10 @@ const sidebarStore = useSidebarStore()
     <!-- ===== Sidebar End ===== -->
 
     <!-- ===== Content Area Start ===== -->
-    <div class="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden" :class="{ 'w-full': sidebarStore.isFullScreen }">
+    <div
+      class="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden"
+      :class="{ 'w-full': sidebarStore.isFullScreen }"
+    >
       <!-- ===== Header Start ===== -->
       <HeaderArea v-if="!sidebarStore.isFullScreen" />
       <!-- ===== Header End ===== -->
