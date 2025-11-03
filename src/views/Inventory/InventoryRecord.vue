@@ -1807,7 +1807,7 @@ onMounted(async () => {
     try {
       const { data } = await axios.get('/employees')
       employees.value = data?.employees || []
-      console.log('🔍 Employees loaded:', employees.value.length, employees.value)
+      // console.log('🔍 Employees loaded:', emsployees.value.length, employees.value)
     } catch (err) {
       employees.value = []
       employeesError.value =

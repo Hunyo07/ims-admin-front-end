@@ -76,10 +76,11 @@ const routes = [
     }
   },
   {
-    path: '/inventory/stock-adjustments',
-    name: 'StockAdjustments',
+    path: '/stock-adjustments',
+    name: 'Stock Adjustments',
     component: () => import('../views/Inventory/StockAdjustmentsView.vue'),
     meta: {
+      title: 'Stock Adjustments',
       requiresAuth: true
     }
   },
@@ -92,15 +93,6 @@ const routes = [
       requiresAuth: true,
       roles: ['superadmin', 'admin'],
       permissions: ['view_brands', 'manage_brands']
-    }
-  },
-  {
-    path: '/stock-adjustments',
-    name: 'Stock Adjustments',
-    component: () => import('../views/Inventory/StockAdjustmentsView.vue'),
-    meta: {
-      title: 'Stock Adjustments',
-      requiresAuth: true
     }
   },
   // Update your route definitions to include role requirements
@@ -198,6 +190,82 @@ const routes = [
     name: 'DeliveryReceiptDetail',
     component: () => import('../views/Inventory/DeliveryReceiptDetail.vue'),
     meta: { title: 'Delivery Receipt Detail', requiresAuth: true }
+  },
+  // MR routes
+  {
+    path: '/mr',
+    name: 'mr-list',
+    component: () => import('../views/MR/MRListView.vue'),
+    meta: { title: 'Memorandum Receipts', requiresAuth: true }
+  },
+  {
+    path: '/mr/create',
+    name: 'mr-create',
+    component: () => import('../views/MR/CreateMRView.vue'),
+    meta: { title: 'Create MR', requiresAuth: true }
+  },
+  {
+    path: '/mr/:id',
+    name: 'mr-detail',
+    component: () => import('../views/MR/MRListView.vue'),
+    meta: { title: 'MR Detail', requiresAuth: true }
+  },
+  // Maintenance routes
+  {
+    path: '/maintenance',
+    name: 'maintenance-list',
+    component: () => import('../views/Maintenance/MaintenanceListView.vue'),
+    meta: { title: 'Maintenance & Repair', requiresAuth: true }
+  },
+  {
+    path: '/maintenance/create',
+    name: 'maintenance-create',
+    component: () => import('../views/Maintenance/CreateMaintenanceView.vue'),
+    meta: { title: 'Create Repair Ticket', requiresAuth: true }
+  },
+  {
+    path: '/maintenance/:id',
+    name: 'maintenance-detail',
+    component: () => import('../views/Maintenance/MaintenanceListView.vue'),
+    meta: { title: 'Repair Ticket Detail', requiresAuth: true }
+  },
+  // Disposal routes
+  {
+    path: '/disposal',
+    name: 'disposal-list',
+    component: () => import('../views/Disposal/DisposalListView.vue'),
+    meta: { title: 'Disposal Records', requiresAuth: true }
+  },
+  {
+    path: '/disposal/create',
+    name: 'disposal-create',
+    component: () => import('../views/Disposal/CreateDisposalView.vue'),
+    meta: { title: 'Create Disposal Record', requiresAuth: true }
+  },
+  {
+    path: '/disposal/:id',
+    name: 'disposal-detail',
+    component: () => import('../views/Disposal/DisposalListView.vue'),
+    meta: { title: 'Disposal Detail', requiresAuth: true }
+  },
+  // Borrow routes
+  {
+    path: '/borrow',
+    name: 'borrow-list',
+    component: () => import('../views/Borrow/BorrowListView.vue'),
+    meta: { title: 'Borrow Items', requiresAuth: true }
+  },
+  {
+    path: '/borrow/create',
+    name: 'borrow-create',
+    component: () => import('../views/Borrow/CreateBorrowView.vue'),
+    meta: { title: 'Create Borrow Request', requiresAuth: true }
+  },
+  {
+    path: '/borrow/:id',
+    name: 'borrow-detail',
+    component: () => import('../views/Borrow/BorrowListView.vue'),
+    meta: { title: 'Borrow Detail', requiresAuth: true }
   },
   {
     path: '/supplier',

@@ -140,27 +140,30 @@ const allMenuGroups = ref([
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z"/>
+                <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
               </svg>`,
-        label: 'Barcode ',
-        route: '/barcodes',
-        roles: ['superadmin', 'admin']
+        label: 'Asset Management',
+        route: '',
+        children: [
+          { label: 'Memorandum Receipt', route: '/mr', roles: ['superadmin', 'admin', 'staff'] },
+          { label: 'Maintenance & Repair', route: '/maintenance', roles: ['superadmin', 'admin', 'staff'] },
+          { label: 'Disposal', route: '/disposal', roles: ['superadmin', 'admin', 'staff'] },
+          { label: 'Borrow Items', route: '/borrow', roles: ['superadmin', 'admin', 'staff'] }
+        ],
+        roles: ['superadmin', 'admin', 'staff']
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
                 <path d="M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z"/>
               </svg>`,
-        label: 'Inventory List ',
-        route: '/inventory/list',
-        roles: ['superadmin', 'admin']
-      },
-      {
-        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z"/>
-              </svg>`,
-        label: 'ACN ',
-        route: '/acn',
-        roles: ['superadmin', 'admin']
+        label: 'Item Tracking',
+        route: '',
+        children: [
+          { label: 'Inventory List', route: '/inventory/list', roles: ['superadmin', 'admin', 'staff'] },
+          { label: 'Barcodes', route: '/barcodes', roles: ['superadmin', 'admin'] },
+          { label: 'ACN Management', route: '/acn', roles: ['superadmin', 'admin'] }
+        ],
+        roles: ['superadmin', 'admin', 'staff']
       }
       // POS removed
     ]

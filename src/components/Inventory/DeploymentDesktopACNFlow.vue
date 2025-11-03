@@ -1,93 +1,107 @@
 <template>
   <div class="space-y-6">
-    <!-- Step 1: Select Computer Desktop and Quantity -->
+    <!-- Primary Items Section -->
     <div class="border border-stroke rounded-lg p-4 dark:border-strokedark">
-      <h4 class="font-medium mb-3">Select Computer Desktop / Laptop</h4>
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div>
-          <label class="block text-sm font-medium mb-1">Device Type</label>
-          <select
-            v-model="deviceType"
-            class="w-full rounded border-[1.5px] border-stroke bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-strokedark"
-          >
-            <option value="desktop">Desktop</option>
-            <option value="laptop">Laptop</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">Product</label>
-          <select
-            v-model="desktopProductId"
-            class="w-full rounded border-[1.5px] border-stroke bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-strokedark"
-          >
-            <option value="">Select Desktop/Laptop</option>
-            <option v-for="p in primaryProducts" :key="p._id" :value="p._id">
-              {{ p.name }} (Stock: {{ p.currentStock }})
-            </option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium mb-1">Quantity</label>
-          <input
-            v-model.number="desktopQty"
-            type="number"
-            min="1"
-            :max="desktopProductStock || null"
-            class="w-full rounded border-[1.5px] border-stroke bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-strokedark"
-          />
-          <div
-            v-if="desktopProductId"
-            class="text-xs mt-1"
-            :class="desktopProductStock <= 0 ? 'text-warning' : 'text-gray-600'"
-          >
-            <span v-if="desktopProductStock > 0">Available stock: {{ desktopProductStock }}</span>
-            <span v-else>No stock available for selected product.</span>
+      <div class="flex justify-between items-center mb-3">
+        <h4 class="font-medium">Primary Items (Desktop/Laptop)</h4>
+        <button
+          type="button"
+          @click="addPrimaryItem"
+          class="bg-primary text-white px-3 py-2 rounded hover:bg-opacity-90 text-sm"
+        >
+          + Add Primary Item
+        </button>
+      </div>
+      
+      <div v-for="(primary, pIdx) in primaryItems" :key="primary.id" class="mb-4 pb-4 border-b border-stroke last:border-0">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium mb-1">Device Type</label>
+            <select
+              v-model="primary.deviceType"
+              @change="onPrimaryDeviceTypeChange(pIdx)"
+              class="w-full rounded border-[1.5px] border-stroke bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-strokedark"
+            >
+              <option value="desktop">Desktop</option>
+              <option value="laptop">Laptop</option>
+            </select>
+          </div>
+          <div class="md:col-span-4">
+            <label class="block text-sm font-medium mb-1">Product</label>
+            <select
+              v-model="primary.productId"
+              @change="onPrimaryProductChange(pIdx)"
+              class="w-full rounded border-[1.5px] border-stroke bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-strokedark"
+            >
+              <option value="">Select Product</option>
+              <option 
+                v-for="p in getPrimaryProductsByType(primary.deviceType)" 
+                :key="p._id" 
+                :value="p._id"
+                :disabled="!p.currentStock || p.currentStock <= 0"
+              >
+                {{ p.name }} (Stock: {{ p.currentStock }})
+              </option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium mb-1">Quantity</label>
+            <input
+              v-model.number="primary.qty"
+              @input="onPrimaryQtyChange(pIdx)"
+              type="number"
+              min="1"
+              :max="primary.stock || null"
+              class="w-full rounded border-[1.5px] border-stroke bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-strokedark"
+            />
+          </div>
+          <div class="md:col-span-3">
+            <label class="block text-sm font-medium mb-1">Notes</label>
+            <input
+              v-model="primary.notes"
+              type="text"
+              placeholder="Optional notes"
+              class="w-full rounded border-[1.5px] border-stroke bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-strokedark"
+            />
+          </div>
+          <div class="md:col-span-1">
+            <button
+              type="button"
+              @click="removePrimaryItem(pIdx)"
+              :disabled="primaryItems.length === 1"
+              class="bg-danger text-white px-2 py-2 rounded hover:bg-opacity-90 w-full disabled:opacity-50"
+            >
+              Remove
+            </button>
           </div>
         </div>
-
-        <div>
-          <label class="block text-sm font-medium mb-1">Notes</label>
-          <input
-            v-model="desktopNotes"
-            type="text"
-            placeholder="Optional notes for desktop deployment"
-            class="w-full rounded border-[1.5px] border-stroke bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-strokedark"
-          />
+        
+        <!-- ACN Selection for this primary item -->
+        <div v-if="primary.productId && primary.hasAcn" class="mt-3 p-3 bg-gray-50 dark:bg-meta-4 rounded">
+          <h5 class="text-sm font-medium mb-2">Select ACNs ({{ primary.selectedACNs.length }} / {{ primary.qty }})</h5>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto">
+            <label
+              v-for="acn in primary.availableAcns"
+              :key="acn"
+              class="flex items-center space-x-2 py-1 px-2 rounded hover:bg-white dark:hover:bg-boxdark"
+            >
+              <input
+                type="checkbox"
+                :value="acn"
+                v-model="primary.selectedACNs"
+                :disabled="isPrimaryAcnDisabled(pIdx, acn)"
+                class="rounded"
+              />
+              <span class="text-sm">{{ acn }}</span>
+            </label>
+          </div>
         </div>
       </div>
-      <p v-if="desktopProductId && !hasAcn" class="text-xs text-warning mt-2">
-        This product has no ACN tracking enabled. You can still proceed.
-      </p>
     </div>
 
-    <!-- Step 2: Select ACNs based on quantity -->
-    <div v-if="desktopProductId" class="border border-stroke rounded-lg p-4 dark:border-strokedark">
-      <h4 class="font-medium mb-3">Select ACNs (limit: {{ desktopQty }})</h4>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-2 max-h-60 overflow-y-auto">
-        <label
-          v-for="acn in availableAcnList"
-          :key="acn"
-          class="flex items-center space-x-2 py-1 px-2 rounded hover:bg-gray-50 dark:hover:bg-meta-4"
-        >
-          <input
-            type="checkbox"
-            :value="acn"
-            v-model="selectedACNs"
-            :disabled="isAcnDisabled(acn)"
-            class="rounded"
-          />
-          <span class="text-sm">{{ acn }}</span>
-        </label>
-      </div>
-      <div class="text-xs text-gray-600 mt-2">
-        Selected: {{ selectedACNs.length }} / {{ desktopQty }}
-      </div>
-    </div>
-
-    <!-- Step 3: Cards per selected desktop unit -->
-    <div v-if="desktopProductId && unitCards.length" class="space-y-4">
-      <h4 class="font-medium">Assign Employees and Additional Items</h4>
+    <!-- Unit Cards per all primary items -->
+    <div v-if="unitCards.length" class="space-y-4">
+      <h4 class="font-medium">Assign Employees and Additional Items ({{ unitCards.length }} units)</h4>
       <div
         v-for="(unit, idx) in unitCards"
         :key="unit.id"
@@ -95,10 +109,45 @@
       >
         <div class="flex justify-between items-start mb-3">
           <div>
-            <div class="font-medium">{{ primaryLabel }} Unit #{{ idx + 1 }}</div>
+            <div class="font-medium">{{ unit.primaryLabel || 'Desktop' }} Unit #{{ idx + 1 }}</div>
             <div class="text-sm text-gray-600">ACN: {{ unit.acn || 'Unselected' }}</div>
           </div>
           <div class="w-64 relative">
+            <!-- Deployment History Warning -->
+            <div v-if="unit.hasDuplicateWarning && unit.deploymentHistory?.length" class="mb-2 p-2 bg-warning/10 border border-warning/30 rounded text-xs">
+              <div class="flex items-start gap-2">
+                <svg class="w-4 h-4 text-warning flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+                <div>
+                  <div class="font-medium text-warning">Already has {{ unit.deploymentHistory.length }} deployed item(s)</div>
+                  <button 
+                    type="button" 
+                    @click="unit.showHistory = !unit.showHistory"
+                    class="text-primary hover:underline mt-1"
+                  >
+                    {{ unit.showHistory ? 'Hide' : 'View' }} details
+                  </button>
+                  <div v-if="unit.showHistory" class="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                    <div v-for="(item, i) in unit.deploymentHistory" :key="i" class="text-xs bg-white dark:bg-boxdark p-2 rounded">
+                      <div class="font-medium">{{ item.description }}</div>
+                      <div class="text-gray-600">ACN: {{ item.acn || 'N/A' }}</div>
+                      <div class="text-gray-600">Deployed: {{ new Date(item.deployedDate).toLocaleDateString() }}</div>
+                    </div>
+                  </div>
+                  <div class="mt-2 text-warning">
+                    <label class="flex items-center gap-1">
+                      <input type="radio" :name="`action-${idx}`" value="additional" v-model="unit.deploymentAction" class="rounded" />
+                      <span>Additional items</span>
+                    </label>
+                    <label class="flex items-center gap-1">
+                      <input type="radio" :name="`action-${idx}`" value="replacement" v-model="unit.deploymentAction" class="rounded" />
+                      <span>Replacement (retire old)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
             <label class="block text-sm font-medium mb-1">Employee</label>
             <div class="flex items-center space-x-2">
               <input
@@ -153,14 +202,14 @@
           </div>
         </div>
 
-        <!-- Default desktop item preview -->
+        <!-- Primary item preview -->
         <div class="bg-gray-50 dark:bg-meta-4 p-3 rounded mb-3">
           <div class="text-sm">
-            <span class="font-medium">{{ primaryLabel }}:</span>
-            {{ getProductName(desktopProductId) }}
+            <span class="font-medium">{{ unit.primaryLabel }}:</span>
+            {{ unit.primaryProductName }}
             <span v-if="unit.acn" class="ml-2">(ACN: {{ unit.acn }})</span>
           </div>
-          <div v-if="desktopNotes" class="text-xs text-gray-600">{{ desktopNotes }}</div>
+          <div v-if="unit.primaryNotes" class="text-xs text-gray-600">{{ unit.primaryNotes }}</div>
         </div>
 
         <!-- Additional items per unit -->
@@ -191,7 +240,12 @@
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent px-2 py-2 outline-none focus:border-primary dark:border-strokedark"
               >
                 <option value="">Select item</option>
-                <option v-for="p in getProductsByType(it.type)" :key="p._id" :value="p._id">
+                <option 
+                  v-for="p in getProductsByType(it.type)" 
+                  :key="p._id" 
+                  :value="p._id"
+                  :disabled="!p.currentStock || p.currentStock <= 0"
+                >
                   {{ p.name }} (Stock: {{ p.currentStock }})
                 </option>
               </select>
@@ -202,10 +256,11 @@
               </div> -->
             </div>
             <div class="md:col-span-3" v-if="it.product && it.hasSerialNumbers">
-              <label class="block text-sm font-medium mb-1">Serial Number</label>
+              <label class="block text-sm font-medium mb-1">Serial Number <span class="text-meta-1">*</span></label>
               <select
                 v-model="it.selectedSerial"
                 class="w-full rounded border-[1.5px] border-stroke bg-transparent px-2 py-2 outline-none focus:border-primary dark:border-strokedark"
+                :class="{ 'border-danger': it.product && !it.selectedSerial }"
               >
                 <option value="">Select serial</option>
                 <option v-for="sn in getAvailableSerials(it)" :key="sn" :value="sn">
@@ -220,6 +275,12 @@
                 class="text-xs text-warning mt-1"
               >
                 No serials available for this product.
+              </div>
+              <div
+                v-if="it.product && !it.selectedSerial && it.availableSerials?.length"
+                class="text-xs text-danger mt-1"
+              >
+                Serial number is required for this product.
               </div>
             </div>
             <div class="md:col-span-3" v-else-if="it.product && it.hasAssetControlNumber">
@@ -285,45 +346,32 @@ const props = defineProps({
 
 const emit = defineEmits(['update:deploymentData'])
 
-// Desktop selection
-const desktopProductId = ref('')
-const desktopQty = ref(1)
-const desktopNotes = ref('')
-const hasAcn = ref(false)
-const acnList = ref([])
-const selectedACNs = ref([])
+// Primary items array (supports multiple desktops/laptops)
+const primaryItems = ref([{
+  id: Date.now(),
+  deviceType: 'desktop',
+  productId: '',
+  qty: 1,
+  notes: '',
+  stock: 0,
+  hasAcn: false,
+  availableAcns: [],
+  selectedACNs: []
+}])
 
-// Primary device type selection
-const deviceType = ref('desktop')
-
-// Unit cards derived from qty and selected ACNs
+const deployedAcnCodes = ref([])
+const deployedSerials = ref([])
 const unitCards = ref([])
 
-// Filter desktop products
-// const desktopProducts = computed(() => {
-//   return props.products.filter((p) => {
-//     const cname = (p.category?.name || '').toLowerCase()
-//     return cname.includes('desktop') || cname.includes('computer')
-//   })
-// })
-
-// Products filtered by the selected device type (desktop or laptop)
-const primaryProducts = computed(() => {
+// Get products by device type
+const getPrimaryProductsByType = (deviceType) => {
   return props.products.filter((p) => {
     const cname = (p.category?.name || '').toLowerCase()
-    return deviceType.value === 'desktop'
+    return deviceType === 'desktop'
       ? cname.includes('desktop') || cname.includes('computer')
       : cname.includes('laptop')
   })
-})
-
-const primaryLabel = computed(() => (deviceType.value === 'laptop' ? 'Laptop' : 'Desktop'))
-
-// Current stock of the selected desktop product
-const desktopProductStock = computed(() => {
-  const p = props.products.find((p) => p._id === desktopProductId.value)
-  return p ? parseInt(p.currentStock) || 0 : 0
-})
+}
 
 const getProductsByType = (type) => {
   const cname = (name) => (name || '').toLowerCase()
@@ -343,96 +391,150 @@ const getProductName = (id) => {
   return p ? p.name : 'Unknown'
 }
 
-// Available ACNs from product, prefer product.assetControlNumbers
-const availableAcnList = computed(() => {
-  return Array.isArray(acnList.value) ? acnList.value : []
-})
-
-const isAcnDisabled = (acn) => {
-  const isSelected = selectedACNs.value.includes(acn)
-  const limitReached = selectedACNs.value.length >= (parseInt(desktopQty.value) || 0)
+// Check if ACN is disabled for a primary item
+const isPrimaryAcnDisabled = (pIdx, acn) => {
+  const primary = primaryItems.value[pIdx]
+  if (!primary) return true
+  const isSelected = primary.selectedACNs.includes(acn)
+  const limitReached = primary.selectedACNs.length >= (parseInt(primary.qty) || 0)
   return !isSelected && limitReached
 }
 
-// Fetch product details when desktopProductId changes
-const fetchDesktopDetails = async () => {
-  acnList.value = []
-  hasAcn.value = false
-  selectedACNs.value = []
-  try {
-    if (!desktopProductId.value) return
-    const { data } = await axios.get(`/products/${desktopProductId.value}`)
-    const product = data.product
-    hasAcn.value = !!product?.hasAssetControlNumber
-    acnList.value = Array.isArray(product?.assetControlNumbers) ? product.assetControlNumbers : []
-    // Auto-select up to qty if available
-    const qty = parseInt(desktopQty.value) || 0
-    selectedACNs.value = acnList.value.slice(0, qty)
-  } catch (e) {
-    hasAcn.value = false
-    acnList.value = []
-    selectedACNs.value = []
+// Add/remove primary items
+const addPrimaryItem = () => {
+  primaryItems.value.push({
+    id: Date.now(),
+    deviceType: 'desktop',
+    productId: '',
+    qty: 1,
+    notes: '',
+    stock: 0,
+    hasAcn: false,
+    availableAcns: [],
+    selectedACNs: []
+  })
+}
+
+const removePrimaryItem = (pIdx) => {
+  if (primaryItems.value.length > 1) {
+    primaryItems.value.splice(pIdx, 1)
+    rebuildUnitCards()
   }
 }
 
-watch(desktopProductId, fetchDesktopDetails)
+const onPrimaryDeviceTypeChange = (pIdx) => {
+  const primary = primaryItems.value[pIdx]
+  if (!primary) return
+  primary.productId = ''
+  primary.qty = 1
+  primary.stock = 0
+  primary.hasAcn = false
+  primary.availableAcns = []
+  primary.selectedACNs = []
+  rebuildUnitCards()
+}
 
-// Sync selected ACNs when qty changes
-watch(desktopQty, (newQty) => {
-  const qty = parseInt(newQty) || 0
-  if (qty < selectedACNs.value.length) {
-    selectedACNs.value = selectedACNs.value.slice(0, qty)
+const onPrimaryQtyChange = (pIdx) => {
+  const primary = primaryItems.value[pIdx]
+  if (!primary) return
+  const qty = parseInt(primary.qty) || 1
+  if (qty < 1) primary.qty = 1
+  if (primary.stock > 0 && qty > primary.stock) primary.qty = primary.stock
+  // Adjust selected ACNs
+  if (qty < primary.selectedACNs.length) {
+    primary.selectedACNs = primary.selectedACNs.slice(0, qty)
+  } else if (qty > primary.selectedACNs.length) {
+    const need = qty - primary.selectedACNs.length
+    const candidates = primary.availableAcns.filter(a => !primary.selectedACNs.includes(a)).slice(0, need)
+    primary.selectedACNs = [...primary.selectedACNs, ...candidates]
   }
-  // If we have room, auto-fill remaining from acnList
-  if (qty > selectedACNs.value.length) {
-    const need = qty - selectedACNs.value.length
-    const candidates = (acnList.value || [])
-      .filter((a) => !selectedACNs.value.includes(a))
-      .slice(0, need)
-    selectedACNs.value = selectedACNs.value.concat(candidates)
-  }
-})
+  rebuildUnitCards()
+}
 
-// Build unit cards from qty and selected ACNs
+// Fetch deployed ACNs and serials from inventory records
+const fetchDeployedAcnCodes = async () => {
+  try {
+    const { data } = await axios.get('/inventory-records', { params: { status: 'deployed' } })
+    const codes = new Set()
+    const serials = new Set()
+    for (const rec of data?.records || []) {
+      for (const item of rec.items || []) {
+        if (item.acn) codes.add(item.acn)
+        if (item.serialNumber) serials.add(item.serialNumber)
+        if (Array.isArray(item.secondaryItems)) {
+          for (const sec of item.secondaryItems) {
+            if (sec.acn) codes.add(sec.acn)
+            if (sec.serialNumber) serials.add(sec.serialNumber)
+          }
+        }
+      }
+    }
+    deployedAcnCodes.value = Array.from(codes)
+    deployedSerials.value = Array.from(serials)
+  } catch (e) {
+    deployedAcnCodes.value = []
+    deployedSerials.value = []
+  }
+}
+
+// Fetch product details for a primary item
+const onPrimaryProductChange = async (pIdx) => {
+  const primary = primaryItems.value[pIdx]
+  if (!primary || !primary.productId) return
+  try {
+    await fetchDeployedAcnCodes()
+    const { data } = await axios.get(`/products/${primary.productId}`)
+    const product = data.product
+    primary.stock = parseInt(product.currentStock) || 0
+    primary.hasAcn = !!product?.hasAssetControlNumber
+    const allAcns = Array.isArray(product?.assetControlNumbers) ? product.assetControlNumbers : []
+    primary.availableAcns = allAcns.filter(acn => !deployedAcnCodes.value.includes(acn))
+    primary.selectedACNs = primary.availableAcns.slice(0, primary.qty)
+    rebuildUnitCards()
+  } catch (e) {
+    primary.stock = 0
+    primary.hasAcn = false
+    primary.availableAcns = []
+    primary.selectedACNs = []
+  }
+}
+
+// Build unit cards from all primary items
 const rebuildUnitCards = () => {
-  const qty = parseInt(desktopQty.value) || 0
-  const cards = []
-  for (let i = 0; i < qty; i++) {
-    const existing = unitCards.value[i]
-    cards.push({
-      id: existing?.id || `${i}-${desktopProductId.value}`,
-      acn: selectedACNs.value[i] || '',
-      employeeId: existing?.employeeId || '',
-      employeeQuery: existing?.employeeQuery || '',
-      showEmpOptions: false,
-      empHighlightIndex: 0,
-      items: Array.isArray(existing?.items) ? existing.items : []
-    })
+  const newCards = []
+  let cardIndex = 0
+  for (const primary of primaryItems.value) {
+    if (!primary.productId) continue
+    const qty = parseInt(primary.qty) || 0
+    const product = props.products.find(p => p._id === primary.productId)
+    for (let i = 0; i < qty; i++) {
+      const existing = unitCards.value[cardIndex]
+      newCards.push({
+        id: existing?.id || `${cardIndex}-${primary.productId}`,
+        primaryProductId: primary.productId,
+        primaryProductName: product?.name || 'Unknown',
+        primaryLabel: primary.deviceType === 'laptop' ? 'Laptop' : 'Desktop',
+        primaryNotes: primary.notes || '',
+        acn: primary.selectedACNs[i] || '',
+        employeeId: existing?.employeeId || '',
+        employeeQuery: existing?.employeeQuery || '',
+        employeeDepartment: existing?.employeeDepartment || '',
+        showEmpOptions: false,
+        empHighlightIndex: 0,
+        items: Array.isArray(existing?.items) ? existing.items : [],
+        deploymentHistory: existing?.deploymentHistory || [],
+        hasDuplicateWarning: existing?.hasDuplicateWarning || false,
+        showHistory: existing?.showHistory || false,
+        deploymentAction: existing?.deploymentAction || 'additional'
+      })
+      cardIndex++
+    }
   }
-  unitCards.value = cards
+  unitCards.value = newCards
   emitDeploymentData()
 }
 
-watch(selectedACNs, rebuildUnitCards, { deep: true })
-watch(desktopQty, rebuildUnitCards)
-
-// Reset product and ACN list when device type changes
-watch(deviceType, () => {
-  const list = primaryProducts.value
-  desktopProductId.value = list.length ? list[0]._id : ''
-  fetchDesktopDetails()
-  rebuildUnitCards()
-})
-
-// Clamp quantity to available stock and keep it >= 1
-watch([desktopQty, desktopProductStock], ([qty, stock]) => {
-  let q = parseInt(qty) || 1
-  if (stock > 0 && q > stock) {
-    desktopQty.value = stock
-    q = stock
-  }
-  if (q < 1) desktopQty.value = 1
-})
+watch(primaryItems, rebuildUnitCards, { deep: true })
 
 // Add/remove items per unit
 const addUnitItem = (unitIndex) => {
@@ -466,12 +568,15 @@ const onItemProductChange = async (unitIndex, itemIndex) => {
   const it = unit?.items?.[itemIndex]
   if (!it || !it.product) return
   try {
+    await fetchDeployedAcnCodes()
     const { data } = await axios.get(`/products/${it.product}`)
     const p = data.product
     it.hasSerialNumbers = !!p?.hasSerialNumbers
     it.hasAssetControlNumber = !!p?.hasAssetControlNumber
-    it.availableSerials = Array.isArray(p?.serialNumbers) ? p.serialNumbers : []
-    it.availableACNs = Array.isArray(p?.assetControlNumbers) ? p.assetControlNumbers : []
+    const allSerials = Array.isArray(p?.serialNumbers) ? p.serialNumbers : []
+    it.availableSerials = allSerials.filter(sn => !deployedSerials.value.includes(sn))
+    const allAcns = Array.isArray(p?.assetControlNumbers) ? p.assetControlNumbers : []
+    it.availableACNs = allAcns.filter(acn => !deployedAcnCodes.value.includes(acn))
     // Build serial-to-ACN map if both serials and ACNs are tracked
     it.serialToAcnMap = {}
     if (it.hasSerialNumbers && it.hasAssetControlNumber) {
@@ -535,36 +640,48 @@ const getAvailableACNs = (it) => {
   return list.filter((a) => !taken.includes(a) || a === it.selectedACN)
 }
 
+// Validate that all serialized items have serials selected
+const validateSerialSelections = () => {
+  for (const unit of unitCards.value) {
+    if (!unit) continue
+    for (const it of unit.items) {
+      if (it.hasSerialNumbers && it.product && !it.selectedSerial) {
+        return false
+      }
+    }
+  }
+  return true
+}
+
 // Emit deploymentData aggregated per employee
 const emitDeploymentData = () => {
   const map = new Map()
   for (const unit of unitCards.value) {
-    if (!unit.employeeId) continue
+    if (!unit || !unit.employeeId || !unit.primaryProductId) continue
     const employee = props.employees.find((e) => e._id === unit.employeeId)
     if (!employee) continue
     if (!map.has(unit.employeeId)) {
       map.set(unit.employeeId, {
         id: unit.employeeId,
         name: `${employee.firstName} ${employee.lastName}`,
-        department: employee.department || '',
+        department: unit.employeeDepartment || employee.department || '',
         items: []
       })
     }
     const entry = map.get(unit.employeeId)
-    // Desktop item with ACN as part of remarks
-    if (desktopProductId.value) {
-      entry.items.push({
-        type: 'desktop',
-        product: desktopProductId.value,
-        propertyNumber: '',
-        quantity: 1,
-        // include ACN explicitly for downstream consumers
-        acn: unit.acn || undefined,
-        remarks: unit.acn
-          ? `ACN: ${unit.acn}${desktopNotes.value ? ` | ${desktopNotes.value}` : ''}`
-          : desktopNotes.value || ''
-      })
+    // Primary item with ACN
+    const primaryItem = {
+      type: (unit.primaryLabel || 'desktop').toLowerCase(),
+      product: unit.primaryProductId,
+      propertyNumber: '',
+      quantity: 1,
+      acn: unit.acn || undefined,
+      remarks: unit.acn
+        ? `ACN: ${unit.acn}${unit.primaryNotes ? ` | ${unit.primaryNotes}` : ''}`
+        : unit.primaryNotes || ''
     }
+    
+    entry.items.push(primaryItem)
     // Additional items
     for (const it of unit.items) {
       if (!it.type || !it.product) continue
@@ -578,26 +695,34 @@ const emitDeploymentData = () => {
             ? `ACN: ${it.selectedACN}`
             : ''
       const finalRemarks = [detailRemark, it.remarks].filter(Boolean).join(' | ')
-      entry.items.push({
+      
+      const itemData = {
         type: it.type,
         product: it.product,
         propertyNumber: '',
         quantity: 1,
         remarks: finalRemarks,
-        // emit explicit fields so CreateRIS can build serialNumbers mapping
-        serialNumber: it.selectedSerial || undefined,
         acn: it.selectedACN || acnFromSerial || undefined
-      })
+      }
+      
+      // Only include serialNumber if item has serials and one is selected
+      if (it.hasSerialNumbers && it.selectedSerial) {
+        itemData.serialNumber = it.selectedSerial
+      }
+      
+      entry.items.push(itemData)
     }
   }
   const employees = Array.from(map.values())
   emit('update:deploymentData', { employees })
 }
 
-// Auto-select first desktop product on mount if available
 onMounted(() => {
-  if (!desktopProductId.value && primaryProducts.value.length) {
-    desktopProductId.value = primaryProducts.value[0]._id
+  // Initialize with first available desktop if exists
+  const desktops = getPrimaryProductsByType('desktop')
+  if (desktops.length && !primaryItems.value[0].productId) {
+    primaryItems.value[0].productId = desktops[0]._id
+    onPrimaryProductChange(0)
   }
 })
 
@@ -639,12 +764,17 @@ const closeEmpOptionsLater = (unitIndex) => {
   setTimeout(() => closeEmpOptions(unitIndex), 150)
 }
 
-const selectEmployee = (unitIndex, employee) => {
+const selectEmployee = async (unitIndex, employee) => {
   const unit = unitCards.value[unitIndex]
   if (!unit || !employee) return
   unit.employeeId = employee._id
   unit.employeeQuery = `${employee.firstName || ''} ${employee.lastName || ''}`.trim()
+  unit.employeeDepartment = employee.department || ''
   unit.showEmpOptions = false
+  
+  // Fetch deployment history for this employee
+  await fetchEmployeeDeploymentHistory(unitIndex, employee._id)
+  
   emitDeploymentData()
 }
 
@@ -678,5 +808,38 @@ const getAcnForSerial = (it) => {
   if (!it || !it.selectedSerial) return ''
   const map = it.serialToAcnMap || {}
   return map[it.selectedSerial] || ''
+}
+
+// Fetch employee deployment history
+const fetchEmployeeDeploymentHistory = async (unitIndex, employeeId) => {
+  const unit = unitCards.value[unitIndex]
+  if (!unit) return
+  
+  try {
+    const { data } = await axios.get('/inventory-records', { 
+      params: { employeeId, status: 'deployed' } 
+    })
+    
+    const deployedItems = []
+    for (const rec of data?.records || []) {
+      for (const item of rec.items || []) {
+        if (item.employeeId === employeeId && item.status === 'deployed') {
+          deployedItems.push({
+            description: item.description,
+            acn: item.acn,
+            serialNumber: item.serialNumber,
+            product: item.product,
+            deployedDate: rec.date
+          })
+        }
+      }
+    }
+    
+    unit.deploymentHistory = deployedItems
+    unit.hasDuplicateWarning = deployedItems.length > 0
+  } catch (e) {
+    unit.deploymentHistory = []
+    unit.hasDuplicateWarning = false
+  }
 }
 </script>

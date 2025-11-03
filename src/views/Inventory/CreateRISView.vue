@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '../../utils/axios'
 import { socket } from '../../socket'
@@ -45,6 +45,7 @@ const employees = ref([])
 const loading = ref(true) // Start with loading true
 const submitting = ref(false)
 const error = ref(null)
+const showRequestorDropdown = ref(false)
 
 // Fetch products for dropdown
 async function fetchProducts() {
@@ -80,6 +81,23 @@ async function fetchEmployees() {
   } catch (e) {
     console.error('Failed to fetch employees', e)
   }
+}
+
+// Filtered requestors based on search
+const filteredRequestors = computed(() => {
+  const query = (requestor.value || '').toLowerCase()
+  if (!query) return employees.value
+  return employees.value.filter((e) => {
+    const name = `${e.firstName || ''} ${e.lastName || ''}`.toLowerCase()
+    const email = (e.email || '').toLowerCase()
+    return name.includes(query) || email.includes(query)
+  })
+})
+
+// Select requestor from dropdown
+function selectRequestor(emp) {
+  requestor.value = `${emp.firstName} ${emp.lastName}`
+  showRequestorDropdown.value = false
 }
 
 // Add new item row
@@ -203,7 +221,6 @@ async function submitRIS() {
     } else {
       // Deployment RIS
       payload.deploymentData = deploymentData.value
-
       // Create items array from all employee items
       const allItems = []
       deploymentData.value.employees.forEach((employee) => {
@@ -237,15 +254,27 @@ async function submitRIS() {
         })
       })
       payload.serialNumbers = serialsPayload
-
       // Pre-submit validation: ensure serialized products have matching serial counts
+      // Skip validation if product has ACNs (ACNs are sufficient for tracking)
+      const acnsProvided = {}
+      deploymentData.value.employees.forEach((employee) => {
+        employee.items.forEach((item) => {
+          if (item && item.product && item.acn) {
+            const pid = item.product
+            if (!acnsProvided[pid]) acnsProvided[pid] = 0
+            acnsProvided[pid]++
+          }
+        })
+      })
       for (const ai of allItems) {
         const pid = ai.product
         const product = products.value.find((p) => p._id === pid)
         if (product?.hasSerialNumbers) {
           const provided = (serialsPayload[pid] || []).length
+          const acnCount = acnsProvided[pid] || 0
           const required = ai.requestedQty
-          if (provided !== required) {
+          // Skip validation if ACNs are provided (ACN tracks the item)
+          if (acnCount === 0 && provided !== required) {
             error.value = `Serials count mismatch for ${product.name}: expected ${required}, provided ${provided}. Add or remove serial selections per unit before submitting.`
             submitting.value = false
             return
@@ -304,7 +333,7 @@ onUnmounted(() => {
     <div class="p-6">
       <BreadcrumbDefault :pageTitle="pageTitle" />
 
-      <div class="bg-white dark:bg-boxdark rounded-sm   shadow-default p-6 mt-4">
+      <div class="bg-white dark:bg-boxdark rounded-sm shadow-default p-6 mt-4">
         <div v-if="loading" class="flex justify-center items-center p-8">
           <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
@@ -346,17 +375,35 @@ onUnmounted(() => {
                 />
               </div>
 
-              <div>
+              <div class="relative">
                 <label class="mb-2.5 block text-black dark:text-white">
                   Requestor <span class="text-meta-1">*</span>
                 </label>
                 <input
                   v-model="requestor"
+                  @focus="showRequestorDropdown = true"
+                  @input="showRequestorDropdown = true"
+                  @blur="() => setTimeout(() => (showRequestorDropdown = false), 200)"
                   type="text"
                   required
-                  placeholder="Enter requestor name"
+                  placeholder="Type to search employee"
                   class="w-full rounded border-[1.5px] border-stroke bg-transparent py-3 px-5 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
                 />
+                <ul
+                  v-if="showRequestorDropdown && filteredRequestors.length"
+                  class="absolute z-10 mt-1 w-full bg-white dark:bg-boxdark border border-stroke dark:border-strokedark rounded shadow max-h-48 overflow-auto"
+                >
+                  <li v-for="emp in filteredRequestors" :key="emp._id">
+                    <button
+                      type="button"
+                      @mousedown.prevent="selectRequestor(emp)"
+                      class="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-meta-4"
+                    >
+                      {{ emp.firstName }} {{ emp.lastName }}
+                      <span v-if="emp.email" class="text-xs text-gray-500"> — {{ emp.email }}</span>
+                    </button>
+                  </li>
+                </ul>
               </div>
 
               <div>
@@ -366,7 +413,7 @@ onUnmounted(() => {
                   class="w-full rounded border-[1.5px] border-stroke bg-transparent py-3 px-5 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
                 >
                   <option value="">Select department</option>
-                  <option v-for="dept in departments" :key="dept._id" :value="dept.code">
+                  <option v-for="dept in departments" :key="dept._id" :value="dept.name">
                     {{ dept.name }}<span v-if="dept.code"> ({{ dept.code }})</span>
                   </option>
                 </select>
