@@ -14,6 +14,7 @@ const form = reactive({
   supplierId: '',
   dateReceived: '',
   purpose: 'stock',
+  purposeText: '',
   departmentId: '',
   images: []
 })
@@ -26,10 +27,7 @@ const ui = reactive({
 
 const suppliers = ref([])
 const products = ref([])
-const users = ref([])
 const departments = ref([])
-const availableUsers = ref([])
-const deployedUsers = ref(new Set())
 
 const items = ref([{ productId: '', qty: 1, serialsText: '', notes: '' }])
 
@@ -41,14 +39,7 @@ const productOptions = computed(() =>
   }))
 )
 
-const userOptions = computed(() => {
-  if (form.purpose !== 'deployment' || !form.departmentId) return []
-  return (availableUsers.value || []).map((u) => ({
-    ...u,
-    label: `${u.firstName || ''} ${u.lastName || ''}${u.email ? ` (${u.email})` : ''}`.trim(),
-    disabled: deployedUsers.value.has(u._id)
-  }))
-})
+// Deployment-related user options removed per requirements
 
 const isSerializedProduct = (pid) => {
   if (!Array.isArray(products.value) || !pid) return false
@@ -57,9 +48,9 @@ const isSerializedProduct = (pid) => {
 }
 
 const validateBeforeSubmit = () => {
-  if (!form.drNumber || !form.supplierId || !form.dateReceived || !form.purpose || form.images.length === 0)
+  if (!form.drNumber || !form.supplierId || !form.dateReceived || !form.purposeText || form.images.length === 0)
     return false
-  if (form.purpose === 'deployment' && !form.departmentId) return false
+  if (!form.departmentId) return false
   for (const it of items.value) {
     if (!it.productId || !it.qty || Number(it.qty) < 1) return false
     if (isSerializedProduct(it.productId)) {
@@ -160,9 +151,7 @@ const submit = async () => {
           .map((s) => s.trim())
           .filter(Boolean)
       : [],
-    endUserId: form.purpose === 'deployment' ? it.endUserId || '' : undefined,
-    departmentId: form.purpose === 'deployment' ? form.departmentId : undefined,
-    deploymentStatus: form.purpose === 'deployment' ? it.deploymentStatus || 'pending' : undefined
+    departmentId: form.departmentId
   }))
 
   fd.append('items', JSON.stringify(itemsPayload))
@@ -203,45 +192,6 @@ const fetchProducts = async () => {
   }
 }
 
-const fetchUsersByDepartment = async (departmentId) => {
-  if (!departmentId) {
-    availableUsers.value = []
-    return
-  }
-  try {
-    const { data } = await axios.get(
-      `/delivery-receipts/deployment/available-users?departmentId=${departmentId}`
-    )
-    availableUsers.value = data?.users || []
-    await fetchDeployedUsers()
-    console.log('🔍 Available users loaded:', availableUsers.value.length, availableUsers.value)
-  } catch (err) {
-    availableUsers.value = []
-    console.error('❌ Users fetch error:', err)
-  }
-}
-
-const fetchDeployedUsers = async () => {
-  if (!form.departmentId) return
-  try {
-    const { data } = await axios.get(
-      `/delivery-receipts/deployment/items?departmentId=${form.departmentId}`
-    )
-    const deployed = new Set()
-    const itemsList = data?.items || []
-    if (Array.isArray(itemsList)) {
-      for (const item of itemsList) {
-        if (item.isDeployed && item.endUser?._id) {
-          deployed.add(item.endUser._id)
-        }
-      }
-    }
-    deployedUsers.value = deployed
-  } catch (err) {
-    console.error('❌ Deployed users fetch error:', err)
-  }
-}
-
 const fetchDepartments = async () => {
   try {
     const { data } = await axios.get('/departments')
@@ -251,27 +201,6 @@ const fetchDepartments = async () => {
   } catch (err) {
     departments.value = []
     console.error('❌ Departments fetch error:', err)
-  }
-}
-
-const onDepartmentChange = () => {
-  if (form.purpose === 'deployment' && form.departmentId) {
-    fetchUsersByDepartment(form.departmentId)
-
-    // Clear end users in items
-    items.value.forEach((item) => {
-      item.endUserId = ''
-    })
-  }
-}
-
-const onPurposeChange = () => {
-  if (form.purpose === 'stock') {
-    form.departmentId = ''
-    items.value.forEach((item) => {
-      item.endUserId = ''
-      item.deploymentStatus = 'pending'
-    })
   }
 }
 
@@ -291,13 +220,6 @@ onMounted(() => {
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           <h2 class="text-lg font-semibold">New Delivery Receipt</h2>
-          <span
-            :class="`px-3 py-1 rounded text-xs font-medium ${
-              form.purpose === 'stock' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'
-            }`"
-          >
-            {{ form.purpose === 'stock' ? 'For Stocks' : 'For Deployment' }}
-          </span>
         </div>
         <div class="flex gap-2">
           <router-link
@@ -387,29 +309,26 @@ onMounted(() => {
             <label class="block text-sm font-medium mb-1"
               >Purpose<span class="text-danger">*</span></label
             >
-            <select
-              v-model="form.purpose"
-              @change="onPurposeChange"
+            <input
+              v-model="form.purposeText"
               class="w-full rounded border border-stroke p-2 dark:border-strokedark dark:bg-form-input"
-            >
-              <option value="stock">For Stocks</option>
-              <option value="deployment">For Deployment</option>
-            </select>
+              placeholder="Enter purpose"
+            />
+            <p class="text-xs text-bodydark2 mt-1">Free text purpose description</p>
           </div>
 
-          <div v-if="form.purpose === 'deployment'">
+          <div>
             <label class="block text-sm font-medium mb-1"
-              >Department<span class="text-danger">*</span></label
+              >Office Delivered<span class="text-danger">*</span></label
             >
             <BaseCombobox
               v-model="form.departmentId"
               :options="departments"
               labelKey="name"
               valueKey="_id"
-              placeholder="Select department"
-              @update:modelValue="onDepartmentChange"
+              placeholder="Select office"
             />
-            <p class="text-xs text-bodydark2 mt-1">Users will be filtered by this department</p>
+            <p class="text-xs text-bodydark2 mt-1">Tracks which office received the items</p>
           </div>
 
           <div class="md:col-span-2">
@@ -551,49 +470,7 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- Deployment Fields (conditional) -->
-            <div
-              v-if="form.purpose === 'deployment'"
-              class="mt-4 pt-4 border-t border-stroke dark:border-strokedark"
-            >
-              <div
-                v-if="!form.departmentId"
-                class="p-3 rounded bg-warning/10 text-warning text-sm border border-warning/20 mb-3"
-              >
-                ⚠️ Please select a department in DR Information section first
-              </div>
-              <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-sm font-medium mb-1">End User (optional)</label>
-                  <BaseCombobox
-                    v-model="it.endUserId"
-                    :options="userOptions"
-                    labelKey="label"
-                    valueKey="_id"
-                    placeholder="Select end user"
-                  />
-                  <p
-                    v-if="it.endUserId && deployedUsers.has(it.endUserId)"
-                    class="text-xs text-warning mt-1"
-                  >
-                    ⚠️ This user already has deployed items
-                  </p>
-                </div>
-
-                <div>
-                  <label class="block text-sm font-medium mb-1">Status</label>
-                  <select
-                    v-model="it.deploymentStatus"
-                    class="w-full rounded border border-stroke p-2 dark:border-strokedark dark:bg-form-input"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="delivered">Delivered to Department</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                  <p class="text-xs text-bodydark2 mt-1">Use RIS to deploy to end users</p>
-                </div>
-              </div>
-            </div>
+            <!-- Deployment-specific fields removed per requirement -->
           </div>
         </div>
       </div>
