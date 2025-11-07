@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '../../utils/axios'
 import { socket } from '../../socket'
@@ -73,21 +73,42 @@ async function fetchDepartments() {
   }
 }
 
-// Fetch employees for deployment
+// Fetch employees for deployment, prefer department but fallback to all if none
 async function fetchEmployees() {
   try {
-    const response = await axios.get('/employees')
-    employees.value = response.data?.employees || []
+    const baseParams = { limit: 1000 }
+    const params = department.value ? { ...baseParams, department: department.value } : baseParams
+    const response = await axios.get('/employees', { params })
+    let list = response.data?.employees || []
+    // Fallback: if department filtering returned no employees, fetch all
+    if (department.value && list.length === 0) {
+      const allResp = await axios.get('/employees', { params: baseParams })
+      list = allResp.data?.employees || []
+    }
+    employees.value = list
   } catch (e) {
     console.error('Failed to fetch employees', e)
   }
 }
 
-// Filtered requestors based on search
+// Ensure employees list reacts to department changes
+watch(department, () => {
+  fetchEmployees()
+})
+
+// Employees narrowed by selected department (extra guard even if API filters)
+const departmentEmployees = computed(() => {
+  const dept = (department.value || '').toLowerCase()
+  if (!dept) return employees.value
+  return employees.value.filter((e) => (e.department || '').toLowerCase() === dept)
+})
+
+// Filtered requestors based on search within department employees (fallback to all)
 const filteredRequestors = computed(() => {
   const query = (requestor.value || '').toLowerCase()
-  if (!query) return employees.value
-  return employees.value.filter((e) => {
+  const source = departmentEmployees.value.length ? departmentEmployees.value : employees.value
+  if (!query) return source
+  return source.filter((e) => {
     const name = `${e.firstName || ''} ${e.lastName || ''}`.toLowerCase()
     const email = (e.email || '').toLowerCase()
     return name.includes(query) || email.includes(query)
@@ -436,6 +457,7 @@ onUnmounted(() => {
               <DeploymentDesktopACNFlow
                 :employees="employees"
                 :products="products"
+                :department="department"
                 @update:deploymentData="deploymentData = $event"
               />
             </div>

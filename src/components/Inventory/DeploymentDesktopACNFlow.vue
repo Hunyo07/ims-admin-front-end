@@ -341,7 +341,8 @@ import axios from '../../utils/axios'
 
 const props = defineProps({
   employees: { type: Array, default: () => [] },
-  products: { type: Array, default: () => [] }
+  products: { type: Array, default: () => [] },
+  department: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:deploymentData'])
@@ -732,8 +733,15 @@ watch(unitCards, emitDeploymentData, { deep: true })
 // Helpers: employee filtering and formatting
 const getFilteredEmployees = (query) => {
   const q = (query || '').toLowerCase()
-  if (!q) return props.employees
-  return props.employees.filter((e) => {
+  const dept = (props.department || '').toLowerCase()
+  let source = props.employees
+  if (dept) {
+    const byDept = props.employees.filter((e) => (e.department || '').toLowerCase() === dept)
+    // Fallback to all employees if no exact department match
+    source = byDept.length ? byDept : props.employees
+  }
+  if (!q) return source
+  return source.filter((e) => {
     const name = `${e.firstName || ''} ${e.lastName || ''}`.toLowerCase()
     const email = (e.email || '').toLowerCase()
     const phone = (e.phoneNumber || '').toLowerCase()

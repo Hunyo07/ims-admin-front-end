@@ -1805,7 +1805,9 @@ onMounted(async () => {
     employeesLoading.value = true
     employeesError.value = null
     try {
-      const { data } = await axios.get('/employees')
+      const params = { limit: 1000 }
+      if (selectedDeptName?.value) params.department = selectedDeptName.value
+      const { data } = await axios.get('/employees', { params })
       employees.value = data?.employees || []
       // console.log('🔍 Employees loaded:', emsployees.value.length, employees.value)
     } catch (err) {
@@ -1824,6 +1826,11 @@ onMounted(async () => {
     fetchEmployees(),
     fetchDeployedAcnCodes()
   ])
+})
+
+// Refetch employees when selected department changes to keep combobox scoped
+watch(selectedDeptName, () => {
+  fetchEmployees()
 })
 
 // Refetch when filters change

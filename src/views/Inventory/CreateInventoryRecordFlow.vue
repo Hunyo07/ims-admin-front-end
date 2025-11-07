@@ -538,7 +538,10 @@ async function fetchProducts() {
 async function fetchEmployees() {
   try {
     employeesLoading.value = true
-    const { data } = await axios.get('/employees')
+    const params = { limit: 1000 }
+    const depName = selectedDeptName?.value || wizard?.value?.department || ''
+    if (depName) params.department = depName
+    const { data } = await axios.get('/employees', { params })
     employees.value = data?.employees || data || []
     employeesError.value = null
   } catch (err) {
@@ -551,6 +554,11 @@ async function fetchEmployees() {
 
 onMounted(async () => {
   await Promise.all([fetchDepartments(), fetchProducts(), fetchEmployees()])
+})
+
+// Refetch employees when selected department changes to scope lists
+watch(selectedDeptName, () => {
+  fetchEmployees()
 })
 
 // Navigation
@@ -785,50 +793,22 @@ async function saveDraft() {
   }
 }
 
-// Data fetching
-async function fetchProducts() {
-  try {
-    productsLoading.value = true
-    const { data } = await axios.get('/products')
-    products.value = data?.products || data || []
-  } catch (err) {
-    console.error('Failed to load products:', err)
-  } finally {
-    productsLoading.value = false
-  }
-}
-async function fetchEmployees() {
-  try {
-    employeesLoading.value = true
-    const { data } = await axios.get('/employees')
-    employees.value = data?.employees || data || []
-    employeesError.value = null
-  } catch (err) {
-    employees.value = []
-    employeesError.value = err?.response?.data?.message || err.message || 'Failed to load employees'
-  } finally {
-    employeesLoading.value = false
-  }
-}
-
-onMounted(async () => {
-  await Promise.all([fetchDepartments(), fetchProducts(), fetchEmployees()])
-})
+// (Removed duplicate fetchEmployees and onMounted block)
 
 // Navigation
-function nextStep() {
-  if (currentStep.value === 2) {
-    // require at least one card generated
-    if (!wizard.value.cards?.length) {
-      alert('Generate cards for Desktop or Laptop first.')
-      return
-    }
-  }
-  if (currentStep.value < steps.length) currentStep.value += 1
-}
-function prevStep() {
-  if (currentStep.value > 1) currentStep.value -= 1
-}
+// function nextStep() {
+//   if (currentStep.value === 2) {
+//     // require at least one card generated
+//     if (!wizard.value.cards?.length) {
+//       alert('Generate cards for Desktop or Laptop first.')
+//       return
+//     }
+//   }
+//   if (currentStep.value < steps.length) currentStep.value += 1
+// }
+// function prevStep() {
+//   if (currentStep.value > 1) currentStep.value -= 1
+// }
 
 function copyPreviousCard(idx) {
   if (idx < 1) return
@@ -885,9 +865,9 @@ function addSecondaryInline(card) {
   }
   card._secInlineShow = false
 }
-function prevStep() {
-  if (currentStep.value > 1) currentStep.value -= 1
-}
+// function prevStep() {
+//   if (currentStep.value > 1) currentStep.value -= 1
+// }
 </script>
 
 <template>

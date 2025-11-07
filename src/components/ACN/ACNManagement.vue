@@ -96,6 +96,7 @@
             </th>
             <th class="min-w-[120px] py-4 px-4 font-medium text-black dark:text-white">Barcode</th>
             <th class="min-w-[80px] py-4 px-4 font-medium text-black dark:text-white">Status</th>
+            <th class="min-w-[160px] py-4 px-4 font-medium text-black dark:text-white">Assigned To</th>
             <th class="py-4 px-4 font-medium text-black dark:text-white">Actions</th>
           </tr>
         </thead>
@@ -150,6 +151,19 @@
               >
                 {{ acn.isActive ? 'Active' : 'Inactive' }}
               </span>
+            </td>
+            <td class="py-5 px-4">
+              <div v-if="assignmentStatus.acn[acn.acnCode]?.assigned" class="text-sm">
+                <span class="inline-flex rounded-full bg-primary/10 text-primary px-2 py-0.5">
+                  {{ assignmentStatus.acn[acn.acnCode].endUserOrMR }} ({{ assignmentStatus.acn[acn.acnCode].department }})
+                </span>
+              </div>
+              <div v-else-if="acn.serialNumber && assignmentStatus.serial[acn.serialNumber]?.assigned" class="text-sm">
+                <span class="inline-flex rounded-full bg-primary/10 text-primary px-2 py-0.5">
+                  {{ assignmentStatus.serial[acn.serialNumber].endUserOrMR }} ({{ assignmentStatus.serial[acn.serialNumber].department }})
+                </span>
+              </div>
+              <div v-else class="text-xs text-bodydark2">Unassigned</div>
             </td>
             <td class="py-5 px-4">
               <div class="flex items-center gap-2">
@@ -379,6 +393,7 @@ export default {
   name: 'ACNManagement',
   components: { BaseCombobox },
   setup() {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api'
     const authStore = useAuthStore()
     const acns = ref([])
     const products = ref([])
@@ -388,6 +403,7 @@ export default {
     const selectedACNs = ref([])
     const generating = ref(false)
     const pagination = ref({ currentPage: 1, totalPages: 1, totalItems: 0, limit: 20 })
+    const assignmentStatus = ref({ acn: {}, serial: {} })
 
     const items = ref([{ productId: '', quantity: 1, serialsText: '' }])
     const showGenerateModal = ref(false)
@@ -440,13 +456,24 @@ export default {
         if (selectedProduct.value) params.productId = selectedProduct.value
         if (searchQuery.value) params.search = searchQuery.value
         
-        const { data } = await axios.get('http://localhost:5000/api/acns', {
+        const { data } = await axios.get(`${API_URL}/acns`, {
           params,
           headers: { Authorization: `Bearer ${authStore.token}` }
         })
         acns.value = data.acns
         if (data.pagination) {
-          pagination.value = data.pagination
+          pagination.value = { ...pagination.value, ...data.pagination }
+        }
+        // Refresh assignment status for visible ACNs/serials
+        const acnCodes = Array.from(new Set(acns.value.map(a => a.acnCode).filter(Boolean)))
+        const serialNumbers = Array.from(new Set(acns.value.map(a => a.serialNumber).filter(Boolean)))
+        if (acnCodes.length || serialNumbers.length) {
+          const resp = await axios.post(`${API_URL}/acns/assignment-status`, { acnCodes, serialNumbers }, {
+            headers: { Authorization: `Bearer ${authStore.token}` }
+          })
+          assignmentStatus.value = resp.data?.assignments || { acn: {}, serial: {} }
+        } else {
+          assignmentStatus.value = { acn: {}, serial: {} }
         }
       } catch (error) {
         console.error('Error fetching ACNs:', error)
@@ -463,7 +490,7 @@ export default {
 
     const fetchProducts = async () => {
       try {
-        const { data } = await axios.get('http://localhost:5000/api/products/', {
+        const { data } = await axios.get(`${API_URL}/products/`, {
           headers: { Authorization: `Bearer ${authStore.token}` }
         })
         products.value = data.products.filter((p) => p.hasSerialNumbers || p.hasAssetControlNumber)
@@ -512,7 +539,7 @@ export default {
             try {
               const payload = { productId: item.productId }
               if (serials[i]) payload.serialNumber = serials[i]
-              const { data } = await axios.post('http://localhost:5000/api/acns/generate', payload, {
+              const { data } = await axios.post(`${API_URL}/acns/generate`, payload, {
                 headers: { Authorization: `Bearer ${authStore.token}` }
               })
               if (data?.success) success++
@@ -552,7 +579,7 @@ export default {
     const viewBarcode = async (acn) => {
       try {
         selectedACN.value = acn
-        const { data } = await axios.get(`http://localhost:5000/api/barcodes/acn/${acn._id}`, {
+        const { data } = await axios.get(`${API_URL}/barcodes/acn/${acn._id}`, {
           headers: { Authorization: `Bearer ${authStore.token}` }
         })
         if (data.success && data.printData) {
@@ -565,7 +592,7 @@ export default {
     }
 
     const createBarcodeCanvas = async (acn) => {
-      const { data } = await axios.get(`http://localhost:5000/api/barcodes/acn/${acn._id}`, {
+      const { data } = await axios.get(`${API_URL}/barcodes/acn/${acn._id}`, {
         headers: { Authorization: `Bearer ${authStore.token}` }
       })
       const canvas = document.createElement('canvas')
@@ -766,7 +793,7 @@ export default {
     const updateACN = async () => {
       try {
         await axios.put(
-          `http://localhost:5000/api/barcodes/acn/${selectedACN.value._id}`,
+          `${API_URL}/barcodes/acn/${selectedACN.value._id}`,
           { newAcnCode: editForm.value.acnCode },
           { headers: { Authorization: `Bearer ${authStore.token}` } }
         )
@@ -781,7 +808,7 @@ export default {
     const toggleACNStatus = async (acn) => {
       try {
         await axios.patch(
-          `http://localhost:5000/api/acns/${acn._id}/toggle-status`,
+          `${API_URL}/acns/${acn._id}/toggle-status`,
           {},
           { headers: { Authorization: `Bearer ${authStore.token}` } }
         )
@@ -818,6 +845,7 @@ export default {
       selectedProduct,
       loading,
       selectedACNs,
+      assignmentStatus,
       items,
       showGenerateModal,
       showBarcodeModal,

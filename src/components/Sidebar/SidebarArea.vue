@@ -103,7 +103,7 @@ const allMenuGroups = ref([
         label: 'Inventory ',
         route: '',
         children: [
-          { label: 'Purchase order', route: '/reorder', roles: ['superadmin', 'admin'] },
+          // { label: 'Purchase order', route: '/reorder', roles: ['superadmin', 'admin'] },
           {
             label: 'Inventory counts',
             route: '/inventory-counts',
@@ -146,7 +146,11 @@ const allMenuGroups = ref([
         route: '',
         children: [
           { label: 'Memorandum Receipt', route: '/mr', roles: ['superadmin', 'admin', 'staff'] },
-          { label: 'Maintenance & Repair', route: '/maintenance', roles: ['superadmin', 'admin', 'staff'] },
+          {
+            label: 'Maintenance & Repair',
+            route: '/maintenance',
+            roles: ['superadmin', 'admin', 'staff']
+          },
           { label: 'Disposal', route: '/disposal', roles: ['superadmin', 'admin', 'staff'] },
           { label: 'Borrow Items', route: '/borrow', roles: ['superadmin', 'admin', 'staff'] }
         ],
@@ -159,7 +163,7 @@ const allMenuGroups = ref([
         label: 'Item Tracking',
         route: '',
         children: [
-          { label: 'Inventory List', route: '/inventory/list', roles: ['superadmin', 'admin', 'staff'] },
+          // { label: 'Inventory List', route: '/inventory/list', roles: ['superadmin', 'admin', 'staff'] },
           { label: 'Barcodes', route: '/barcodes', roles: ['superadmin', 'admin'] },
           { label: 'ACN Management', route: '/acn', roles: ['superadmin', 'admin'] }
         ],

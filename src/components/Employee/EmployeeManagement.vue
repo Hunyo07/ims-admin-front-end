@@ -59,7 +59,10 @@ async function fetchDepartments() {
 const fetchEmployees = async () => {
   try {
     isLoading.value = true
-    const response = await api.get('/employees')
+    // Request a high limit to load all employees in one call
+    const response = await api.get('/employees', {
+      params: { page: 1, limit: 1000 }
+    })
     employees.value = response.data.employees || response.data
   } catch (error) {
     console.error('Error fetching employees:', error)
