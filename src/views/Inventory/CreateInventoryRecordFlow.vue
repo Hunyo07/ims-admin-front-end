@@ -657,7 +657,7 @@ function validateBeforeSave() {
 
 const isValidPreview = computed(() => {
   const depName =
-    typeof selectedDeptName !== 'undefined' && selectedDeptName?.value
+    typeof selectedDeptName.value !== 'undefined' && selectedDeptName?.value
       ? selectedDeptName.value
       : wizard.value.department
   if (!depName || !wizard.value.date) return false
@@ -961,7 +961,7 @@ function addSecondaryInline(card) {
             v-model="wizard.notes"
             class="w-full rounded border border-stroke p-2"
             rows="3"
-            placeholder="Optional notes for deployment"
+            placeholder="Optional notes"
           />
         </div>
       </div>

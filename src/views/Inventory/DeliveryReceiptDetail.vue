@@ -314,8 +314,9 @@ const getStatusBadgeClass = (status) => {
   return status === 'posted' ? 'bg-success/10 text-success' : 'bg-bodydark/10 text-bodydark'
 }
 
-const getPurposeBadgeClass = (purpose) => {
-  return purpose === 'stock' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'
+const getPurposeBadgeClass = () => {
+  // DRs are stock-only; always render success badge
+  return 'bg-success/10 text-success'
 }
 
 const getDeploymentStatusClass = (status) => {
@@ -418,11 +419,9 @@ onMounted(() => {
             </div>
             <div class="flex gap-2">
               <span
-                :class="`inline-block px-3 py-1 rounded text-xs font-medium ${getPurposeBadgeClass(
-                  dr.purpose
-                )}`"
+                :class="`inline-block px-3 py-1 rounded text-xs font-medium ${getPurposeBadgeClass()}`"
               >
-                {{ dr.purpose === 'stock' ? 'For Stocks' : 'For Deployment' }}
+                For Stocks
               </span>
               <span
                 :class="`inline-block px-3 py-1 rounded text-xs font-medium ${getStatusBadgeClass(

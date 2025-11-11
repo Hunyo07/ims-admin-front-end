@@ -207,7 +207,7 @@ const routes = [
   {
     path: '/mr/:id',
     name: 'mr-detail',
-    component: () => import('../views/MR/MRListView.vue'),
+    component: () => import('../views/MR/MRDetailView.vue'),
     meta: { title: 'MR Detail', requiresAuth: true }
   },
   // Maintenance routes
@@ -215,7 +215,7 @@ const routes = [
     path: '/maintenance',
     name: 'maintenance-list',
     component: () => import('../views/Maintenance/MaintenanceListView.vue'),
-    meta: { title: 'Maintenance & Repair', requiresAuth: true }
+    meta: { title: 'Repair & Maintenance', requiresAuth: true }
   },
   {
     path: '/maintenance/create',
@@ -226,7 +226,7 @@ const routes = [
   {
     path: '/maintenance/:id',
     name: 'maintenance-detail',
-    component: () => import('../views/Maintenance/MaintenanceListView.vue'),
+    component: () => import('../views/Maintenance/MaintenanceDetailView.vue'),
     meta: { title: 'Repair Ticket Detail', requiresAuth: true }
   },
   // Disposal routes
@@ -245,7 +245,7 @@ const routes = [
   {
     path: '/disposal/:id',
     name: 'disposal-detail',
-    component: () => import('../views/Disposal/DisposalListView.vue'),
+    component: () => import('../views/Disposal/DisposalDetailView.vue'),
     meta: { title: 'Disposal Detail', requiresAuth: true }
   },
   // Borrow routes
@@ -264,7 +264,7 @@ const routes = [
   {
     path: '/borrow/:id',
     name: 'borrow-detail',
-    component: () => import('../views/Borrow/BorrowListView.vue'),
+    component: () => import('../views/Borrow/BorrowDetailView.vue'),
     meta: { title: 'Borrow Detail', requiresAuth: true }
   },
   {

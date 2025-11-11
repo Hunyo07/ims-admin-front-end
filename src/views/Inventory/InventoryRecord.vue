@@ -1117,7 +1117,7 @@ function recordStatus(rec) {
     .filter(Boolean)
   if (!statuses.length) return ''
   const unique = Array.from(new Set(statuses))
-  return unique.length === 1 ? unique[0] : 'mixed'
+  return unique.length === 1 ? unique[0] : 'deployed'
 }
 
 async function copyToClipboard(text) {

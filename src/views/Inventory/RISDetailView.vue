@@ -17,6 +17,9 @@ const error = ref(null)
 const issuing = ref(false)
 const successMessage = ref(null)
 const downloading = ref(false)
+// UI view toggles
+const deploymentView = ref('cards')
+const summaryView = ref('cards')
 
 // key: productId (string), value: quantity to issue
 const issueQuantities = ref({})
@@ -389,6 +392,44 @@ function printRIS() {
   printWindow.focus()
   printWindow.print()
 }
+
+// Extract tokens like SN and ACN from remarks string (e.g., "SN: XXX | ACN: YYY")
+function parseRemarksTokens(remarks) {
+  if (!remarks) return { sn: '', acn: '' }
+  const snMatch = /SN:\s*([^|]+)/i.exec(remarks)
+  const acnMatch = /ACN:\s*([^|]+)/i.exec(remarks)
+  return {
+    sn: snMatch ? snMatch[1].trim() : '',
+    acn: acnMatch ? acnMatch[1].trim() : ''
+  }
+}
+
+// Group deployment items by employee for a cleaner card view
+const groupedDeployment = computed(() => {
+  const employees = ris.value?.deploymentData?.employees || []
+  return employees.map((emp) => ({
+    id: emp.id,
+    name: emp.name,
+    items: (emp.items || []).map((it) => {
+      const tokens = parseRemarksTokens(it.remarks || '')
+      return {
+        productName: it.productName || 'Product',
+        propertyNumber: it.propertyNumber || '',
+        quantity: it.quantity || 1,
+        sn: tokens.sn,
+        acn: tokens.acn,
+        remarks: it.remarks || ''
+      }
+    })
+  }))
+})
+
+function percentIssuedForItem(item) {
+  const issued = item.issuedQty || 0
+  const requested = item.requestedQty || 0
+  if (!requested) return 0
+  return Math.round((issued / requested) * 100)
+}
 </script>
 
 <template>
@@ -580,17 +621,25 @@ function printRIS() {
             <span
               :class="[
                 'px-3 py-1 rounded-full text-sm font-medium',
-                ris.risType === 'Deployment' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                ris.risType === 'Deployment'
+                  ? 'bg-purple-100 text-purple-800'
+                  : 'bg-blue-100 text-blue-800'
               ]"
             >
               {{ ris.risType || 'Individual' }}
             </span>
           </div>
-          
+
           <div v-if="ris.risType === 'Deployment' && ris.deploymentData?.employees?.length">
-            <h3 class="text-lg font-semibold mb-2">Deployed Employees ({{ ris.deploymentData.employees.length }})</h3>
+            <h3 class="text-lg font-semibold mb-2">
+              Deployed Employees ({{ ris.deploymentData.employees.length }})
+            </h3>
             <div class="bg-gray-50 dark:bg-meta-4 p-3 rounded max-h-32 overflow-y-auto">
-              <div v-for="employee in ris.deploymentData.employees" :key="employee.id" class="flex justify-between items-center py-1">
+              <div
+                v-for="employee in ris.deploymentData.employees"
+                :key="employee.id"
+                class="flex justify-between items-center py-1"
+              >
                 <span class="font-medium">{{ employee.name }}</span>
                 <span class="text-sm text-gray-500">{{ employee.items?.length || 0 }} items</span>
               </div>
@@ -637,9 +686,83 @@ function printRIS() {
         </div>
 
         <!-- Deployment Summary -->
-        <div v-if="ris.risType === 'Deployment' && ris.deploymentData?.employees?.length" class="mb-6">
-          <h3 class="text-lg font-semibold mb-4">Deployment Summary</h3>
-          <div class="overflow-x-auto">
+        <div
+          v-if="ris.risType === 'Deployment' && ris.deploymentData?.employees?.length"
+          class="mb-6"
+        >
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold">Deployment Summary</h3>
+            <div
+              class="inline-flex rounded border border-stroke dark:border-strokedark overflow-hidden"
+            >
+              <button
+                class="px-3 py-1 text-xs font-medium"
+                :class="
+                  deploymentView === 'cards'
+                    ? 'bg-gray-100 dark:bg-meta-4'
+                    : 'bg-white dark:bg-boxdark'
+                "
+                @click="deploymentView = 'cards'"
+              >
+                Cards
+              </button>
+              <button
+                class="px-3 py-1 text-xs font-medium border-l border-stroke dark:border-strokedark"
+                :class="
+                  deploymentView === 'table'
+                    ? 'bg-gray-100 dark:bg-meta-4'
+                    : 'bg-white dark:bg-boxdark'
+                "
+                @click="deploymentView = 'table'"
+              >
+                Table
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-if="deploymentView === 'cards'"
+            class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+          >
+            <div
+              v-for="emp in groupedDeployment"
+              :key="emp.id"
+              class="rounded-sm border border-stroke dark:border-strokedark bg-white dark:bg-boxdark p-4"
+            >
+              <div class="font-semibold">{{ emp.name }}</div>
+              <div class="mt-2 space-y-3">
+                <div
+                  v-for="it in emp.items"
+                  :key="it.productName + (it.sn || '') + (it.acn || '') + (it.propertyNumber || '')"
+                  class="flex items-start justify-between"
+                >
+                  <div class="min-w-0">
+                    <div class="text-sm font-medium">{{ it.productName }}</div>
+                    <div class="mt-1 flex flex-wrap gap-1">
+                      <span
+                        v-if="it.propertyNumber"
+                        class="inline-flex items-center px-2 py-0.5 rounded bg-bodydark/10 text-xs text-bodydark dark:bg-meta-4"
+                        >Prop#: {{ it.propertyNumber }}</span
+                      >
+                      <span
+                        v-if="it.sn"
+                        class="inline-flex items-center px-2 py-0.5 rounded bg-primary/10 text-primary text-xs"
+                        >SN: {{ it.sn }}</span
+                      >
+                      <span
+                        v-if="it.acn"
+                        class="inline-flex items-center px-2 py-0.5 rounded bg-success/10 text-success text-xs"
+                        >ACN: {{ it.acn }}</span
+                      >
+                    </div>
+                  </div>
+                  <div class="text-xs text-gray-500">×{{ it.quantity }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="overflow-x-auto">
             <table class="w-full bg-white dark:bg-boxdark rounded-sm">
               <thead>
                 <tr class="text-left bg-gray-50 dark:bg-meta-4">
@@ -651,18 +774,20 @@ function printRIS() {
                 </tr>
               </thead>
               <tbody>
-                <template v-for="employee in ris.deploymentData.employees" :key="employee.id">
-                  <tr
-                    v-for="item in employee.items"
-                    :key="`${employee.id}-${item.product}`"
-                    class="border-b border-stroke last:border-0"
-                  >
-                    <td class="p-4">{{ employee.name }}</td>
-                    <td class="p-4">{{ item.productName || 'Product' }}</td>
-                    <td class="p-4">{{ item.propertyNumber || '—' }}</td>
-                    <td class="p-4">{{ item.quantity || 1 }}</td>
-                    <td class="p-4">{{ item.remarks || '—' }}</td>
-                  </tr>
+                <template>
+                  <div v-for="employee in ris.deploymentData.employees" :key="employee.id">
+                    <tr
+                      v-for="item in employee.items"
+                      :key="`${employee.id}-${item.product}`"
+                      class="border-b border-stroke last:border-0"
+                    >
+                      <td class="p-4">{{ employee.name }}</td>
+                      <td class="p-4">{{ item.productName || 'Product' }}</td>
+                      <td class="p-4">{{ item.propertyNumber || '—' }}</td>
+                      <td class="p-4">{{ item.quantity || 1 }}</td>
+                      <td class="p-4">{{ item.remarks || '—' }}</td>
+                    </tr>
+                  </div>
                 </template>
               </tbody>
             </table>
@@ -670,8 +795,136 @@ function printRIS() {
         </div>
 
         <div class="mb-6">
-          <h3 class="text-lg font-semibold mb-4">{{ ris.risType === 'Deployment' ? 'Summary Items' : 'Items' }}</h3>
-          <div class="overflow-x-auto">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold">
+              {{ ris.risType === 'Deployment' ? 'Summary Items' : 'Items' }}
+            </h3>
+            <div
+              class="inline-flex rounded border border-stroke dark:border-strokedark overflow-hidden"
+            >
+              <button
+                class="px-3 py-1 text-xs font-medium"
+                :class="
+                  summaryView === 'cards'
+                    ? 'bg-gray-100 dark:bg-meta-4'
+                    : 'bg-white dark:bg-boxdark'
+                "
+                @click="summaryView = 'cards'"
+              >
+                Cards
+              </button>
+              <button
+                class="px-3 py-1 text-xs font-medium border-l border-stroke dark:border-strokedark"
+                :class="
+                  summaryView === 'table'
+                    ? 'bg-gray-100 dark:bg-meta-4'
+                    : 'bg-white dark:bg-boxdark'
+                "
+                @click="summaryView = 'table'"
+              >
+                Table
+              </button>
+            </div>
+          </div>
+
+          <!-- Card Grid View -->
+          <div
+            v-if="summaryView === 'cards'"
+            class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+          >
+            <div
+              v-for="item in ris.items"
+              :key="item.product"
+              class="rounded-sm border border-stroke dark:border-strokedark bg-white dark:bg-boxdark p-4"
+            >
+              <div class="flex items-start justify-between">
+                <div>
+                  <div class="font-medium">{{ item.name }}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">SKU: {{ item.sku }}</div>
+                </div>
+                <div class="text-xs px-2 py-1 rounded bg-bodydark/10 dark:bg-meta-4">
+                  Qty {{ item.requestedQty }}
+                </div>
+              </div>
+              <div class="mt-3 grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div class="text-xs text-bodydark2">Requested</div>
+                  <div class="text-lg font-semibold">{{ item.requestedQty }}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-bodydark2">Issued</div>
+                  <div class="text-lg font-semibold">{{ item.issuedQty }}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-bodydark2">Remaining</div>
+                  <div class="text-lg font-semibold">
+                    {{
+                      remainingQty[
+                        typeof item.product === 'string' ? item.product : item.product._id
+                      ] || 0
+                    }}
+                  </div>
+                </div>
+              </div>
+              <div class="mt-2 h-2 rounded bg-gray-200 dark:bg-meta-4">
+                <div
+                  class="h-2 rounded bg-primary"
+                  :style="{ width: percentIssuedForItem(item) + '%' }"
+                ></div>
+              </div>
+
+              <!-- Issuance controls -->
+              <div v-if="ris.status === 'requested'" class="mt-3">
+                <label class="mb-1 block text-xs text-black dark:text-white">Issue Now</label>
+                <input
+                  type="number"
+                  min="0"
+                  :max="
+                    remainingQty[
+                      typeof item.product === 'string' ? item.product : item.product._id
+                    ] || 0
+                  "
+                  class="w-full rounded border-[1.5px] border-stroke bg-transparent py-2 px-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                  v-model.number="
+                    issueQuantities[
+                      typeof item.product === 'string' ? item.product : item.product._id
+                    ]
+                  "
+                  :disabled="isFullyIssued || item.issuedQty >= item.requestedQty"
+                />
+
+                <!-- Serial numbers selection when required -->
+                <div v-if="item.hasSerialNumbers" class="mt-2">
+                  <label class="mb-1 block text-xs text-black dark:text-white"
+                    >Serial Numbers</label
+                  >
+                  <SerialPicker
+                    v-model="
+                      selectedSerials[
+                        typeof item.product === 'string' ? item.product : item.product._id
+                      ]
+                    "
+                    :serials="
+                      productSerials[
+                        typeof item.product === 'string' ? item.product : item.product._id
+                      ] || []
+                    "
+                    :limit="
+                      issueQuantities[
+                        typeof item.product === 'string' ? item.product : item.product._id
+                      ] || 0
+                    "
+                  />
+                </div>
+                <div v-if="item.remarks" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Remarks: {{ item.remarks }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Table View (original) -->
+          <div v-else class="overflow-x-auto">
             <table class="w-full bg-white dark:bg-boxdark rounded-sm">
               <thead>
                 <tr class="text-left bg-gray-50 dark:bg-meta-4">

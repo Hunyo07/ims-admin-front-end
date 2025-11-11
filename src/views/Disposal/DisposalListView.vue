@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import axios from '@/utils/axios'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
 

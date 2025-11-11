@@ -37,7 +37,9 @@ const fetchDRs = async () => {
     if (filters.value.to) params.to = filters.value.to
 
     const { data } = await axios.get('/delivery-receipts', { params })
-    drs.value = data?.deliveryReceipts || []
+    // Populate department info for items
+    const receipts = data?.deliveryReceipts || []
+    drs.value = receipts
   } catch (e) {
     drs.value = []
   } finally {
@@ -50,8 +52,9 @@ const clearFilters = () => {
   fetchDRs()
 }
 
-const getPurposeBadgeClass = (purpose) => {
-  return purpose === 'stock' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'
+const getPurposeBadgeClass = () => {
+  // DRs are now stock-only
+  return 'bg-success/10 text-success'
 }
 
 const getStatusBadgeClass = (status) => {
@@ -112,9 +115,8 @@ onMounted(() => {
               v-model="filters.purpose"
               class="w-full rounded border border-stroke p-2 text-sm dark:border-strokedark dark:bg-form-input"
             >
-              <option value="">All Purposes</option>
+              <option value="">All</option>
               <option value="stock">For Stocks</option>
-              <option value="deployment">For Deployment</option>
             </select>
           </div>
 
@@ -170,7 +172,7 @@ onMounted(() => {
               <th class="py-3 px-4 font-semibold text-sm">Supplier</th>
               <th class="py-3 px-4 font-semibold text-sm">Date Received</th>
               <th class="py-3 px-4 font-semibold text-sm">Purpose</th>
-              <th class="py-3 px-4 font-semibold text-sm text-center">Items</th>
+              <th class="py-3 px-4 font-semibold text-sm">Items & Departments</th>
               <th class="py-3 px-4 font-semibold text-sm">Status</th>
               <th class="py-3 px-4 font-semibold text-sm">Actions</th>
             </tr>
@@ -227,19 +229,46 @@ onMounted(() => {
               </td>
               <td class="py-3 px-4">
                 <span
-                  :class="`inline-block px-2 py-1 rounded text-xs font-medium ${getPurposeBadgeClass(
-                    r.purpose
-                  )}`"
+                  :class="`inline-block px-2 py-1 rounded text-xs font-medium ${getPurposeBadgeClass()}`"
                 >
-                  {{ r.purpose === 'stock' ? 'For Stocks' : 'For Deployment' }}
+                  For Stocks
                 </span>
               </td>
-              <td class="py-3 px-4 text-center">
-                <span
-                  class="inline-block px-2 py-1 rounded bg-bodydark/10 text-bodydark text-xs font-medium"
-                >
-                  {{ r.items?.length || 0 }}
-                </span>
+              <td class="py-3 px-4">
+                <div class="space-y-1">
+                  <div v-if="!r.items || r.items.length === 0" class="text-sm text-bodydark2">
+                    No items
+                  </div>
+                  <div v-else-if="r.items.length <= 3">
+                    <div
+                      v-for="(item, idx) in r.items"
+                      :key="idx"
+                      class="text-xs py-1 border-b border-stroke dark:border-strokedark last:border-0"
+                    >
+                      <span class="font-medium">{{ item.product?.name || 'Unknown' }}</span>
+                      <span class="text-bodydark2 ml-1">({{ item.qty }})</span>
+                      <span v-if="item.department" class="ml-2 text-primary">
+                        → {{ item.department?.name }}
+                      </span>
+                    </div>
+                  </div>
+                  <div v-else>
+                    <div
+                      v-for="(item, idx) in r.items.slice(0, 2)"
+                      :key="idx"
+                      class="text-xs py-1 border-b border-stroke dark:border-strokedark"
+                    >
+                      <span class="font-medium">{{ item.product?.name || 'Unknown' }}</span>
+                      <span class="text-bodydark2 ml-1">({{ item.qty }})</span>
+                      <span v-if="item.department" class="ml-2 text-primary">
+                        → {{ item.department?.name }}
+                      </span>
+                    </div>
+                    <div class="text-xs text-bodydark2 mt-1">
+                      +{{ r.items.length - 2 }} more items
+                    </div>
+                  </div>
+                </div>
               </td>
               <td class="py-3 px-4">
                 <span

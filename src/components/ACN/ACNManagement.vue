@@ -393,7 +393,7 @@ export default {
   name: 'ACNManagement',
   components: { BaseCombobox },
   setup() {
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api'
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
     const authStore = useAuthStore()
     const acns = ref([])
     const products = ref([])

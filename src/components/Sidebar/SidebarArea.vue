@@ -147,7 +147,7 @@ const allMenuGroups = ref([
         children: [
           { label: 'Memorandum Receipt', route: '/mr', roles: ['superadmin', 'admin', 'staff'] },
           {
-            label: 'Maintenance & Repair',
+            label: 'Repair & Maintenance ',
             route: '/maintenance',
             roles: ['superadmin', 'admin', 'staff']
           },

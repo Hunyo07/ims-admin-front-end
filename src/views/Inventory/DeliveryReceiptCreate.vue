@@ -14,8 +14,6 @@ const form = reactive({
   supplierId: '',
   dateReceived: '',
   purpose: 'stock',
-  purposeText: '',
-  departmentId: '',
   images: []
 })
 
@@ -29,7 +27,10 @@ const suppliers = ref([])
 const products = ref([])
 const departments = ref([])
 
-const items = ref([{ productId: '', qty: 1, serialsText: '', notes: '' }])
+const items = ref([{ productId: '', qty: 1, serialsText: '', notes: '', departmentId: '', endUserId: '' }])
+
+const users = ref([])
+const usersByDepartment = ref({})
 
 // Computed options for comboboxes with enriched labels
 const productOptions = computed(() =>
@@ -48,9 +49,8 @@ const isSerializedProduct = (pid) => {
 }
 
 const validateBeforeSubmit = () => {
-  if (!form.drNumber || !form.supplierId || !form.dateReceived || !form.purposeText || form.images.length === 0)
+  if (!form.drNumber || !form.supplierId || !form.dateReceived || form.images.length === 0)
     return false
-  if (!form.departmentId) return false
   for (const it of items.value) {
     if (!it.productId || !it.qty || Number(it.qty) < 1) return false
     if (isSerializedProduct(it.productId)) {
@@ -67,17 +67,17 @@ const validateBeforeSubmit = () => {
 const handleFiles = (e) => {
   const files = Array.from(e.target.files || [])
   if (files.length === 0) return
-  
+
   const validTypes = ['image/jpeg', 'image/png']
   const maxSize = 5 * 1024 * 1024
   const maxFiles = 5
-  
+
   if (form.images.length + files.length > maxFiles) {
     alert(`Maximum ${maxFiles} images allowed`)
     e.target.value = ''
     return
   }
-  
+
   for (const file of files) {
     if (!validTypes.includes(file.type)) {
       alert('Please upload PNG or JPEG images only')
@@ -89,7 +89,7 @@ const handleFiles = (e) => {
       e.target.value = ''
       return
     }
-    
+
     form.images.push(file)
     const reader = new FileReader()
     reader.onload = () => {
@@ -109,7 +109,7 @@ const setToday = () => {
   form.dateReceived = new Date().toISOString().slice(0, 10)
 }
 
-const addRow = () => items.value.push({ productId: '', qty: 1, serialsText: '', notes: '' })
+const addRow = () => items.value.push({ productId: '', qty: 1, serialsText: '', notes: '', departmentId: '', endUserId: '' })
 
 const duplicateRow = (idx) => {
   const copy = JSON.parse(JSON.stringify(items.value[idx]))
@@ -117,7 +117,42 @@ const duplicateRow = (idx) => {
 }
 
 const clearAllRows = () => {
-  items.value = [{ productId: '', qty: 1, serialsText: '', notes: '' }]
+  items.value = [{ productId: '', qty: 1, serialsText: '', notes: '', departmentId: '', endUserId: '' }]
+}
+
+const fetchUsersForDepartment = async (departmentId) => {
+  if (!departmentId) return []
+  
+  // Check if already cached
+  if (usersByDepartment.value[departmentId]) {
+    return usersByDepartment.value[departmentId]
+  }
+  
+  try {
+    const { data } = await axios.get(`/delivery-receipts/deployment/available-users?departmentId=${departmentId}`)
+    const fetchedUsers = data?.users || []
+    usersByDepartment.value[departmentId] = fetchedUsers
+    return fetchedUsers
+  } catch (err) {
+    console.error('❌ Users fetch error:', err)
+    return []
+  }
+}
+
+const onDepartmentChange = async (itemIndex, departmentId) => {
+  // Reset end user when department changes
+  items.value[itemIndex].endUserId = ''
+  
+  // Fetch users for the new department
+  if (departmentId) {
+    await fetchUsersForDepartment(departmentId)
+  }
+}
+
+const getUsersForItem = (itemIndex) => {
+  const departmentId = items.value[itemIndex]?.departmentId
+  if (!departmentId) return []
+  return usersByDepartment.value[departmentId] || []
 }
 
 const removeRow = (idx) => items.value.splice(idx, 1)
@@ -139,7 +174,7 @@ const submit = async () => {
   fd.append('supplierId', form.supplierId)
   fd.append('dateReceived', form.dateReceived)
   fd.append('purpose', form.purpose)
-  form.images.forEach(img => fd.append('images', img))
+  form.images.forEach((img) => fd.append('images', img))
 
   const itemsPayload = items.value.map((it) => ({
     productId: it.productId,
@@ -150,18 +185,48 @@ const submit = async () => {
           .split(/\r?\n|,/)
           .map((s) => s.trim())
           .filter(Boolean)
-      : [],
-    departmentId: form.departmentId
+      : []
   }))
 
   fd.append('items', JSON.stringify(itemsPayload))
 
   try {
     ui.submitting = true
+    
+    // Step 1: Create the DR
     const { data } = await axios.post('/delivery-receipts', fd)
-    const id = data?.deliveryReceipt?._id
-    if (id) router.push(`/inventory/delivery-receipts/${id}`)
-    else router.push('/inventory/delivery-receipts')
+    const drId = data?.deliveryReceipt?._id
+    const createdItems = data?.deliveryReceipt?.items || []
+    
+    if (!drId) {
+      ui.errors.push('Failed to create delivery receipt')
+      return
+    }
+    
+    // Step 2: Update items with department and end user assignments
+    const itemUpdates = items.value
+      .map((it, index) => {
+        const createdItem = createdItems[index]
+        if (!createdItem) return null
+        
+        return {
+          itemId: createdItem._id,
+          departmentId: it.departmentId || undefined,
+          endUserId: it.endUserId || undefined
+        }
+      })
+      .filter(update => update && (update.departmentId || update.endUserId))
+    
+    if (itemUpdates.length > 0) {
+      try {
+        await axios.patch(`/delivery-receipts/${drId}/items`, { items: itemUpdates })
+      } catch (updateErr) {
+        console.error('Failed to update item assignments:', updateErr)
+        // Continue anyway - DR was created successfully
+      }
+    }
+    
+    router.push(`/inventory/delivery-receipts/${drId}`)
   } catch (e) {
     ui.errors = [e?.response?.data?.message || 'Failed to create delivery receipt']
   } finally {
@@ -305,31 +370,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <div>
-            <label class="block text-sm font-medium mb-1"
-              >Purpose<span class="text-danger">*</span></label
-            >
-            <input
-              v-model="form.purposeText"
-              class="w-full rounded border border-stroke p-2 dark:border-strokedark dark:bg-form-input"
-              placeholder="Enter purpose"
-            />
-            <p class="text-xs text-bodydark2 mt-1">Free text purpose description</p>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium mb-1"
-              >Office Delivered<span class="text-danger">*</span></label
-            >
-            <BaseCombobox
-              v-model="form.departmentId"
-              :options="departments"
-              labelKey="name"
-              valueKey="_id"
-              placeholder="Select office"
-            />
-            <p class="text-xs text-bodydark2 mt-1">Tracks which office received the items</p>
-          </div>
+          <!-- Purpose free text removed: DRs are stock-only by design -->
 
           <div class="md:col-span-2">
             <label class="block text-sm font-medium mb-1"
@@ -342,8 +383,13 @@ onMounted(() => {
               @change="handleFiles"
               class="w-full rounded border border-stroke p-2 dark:border-strokedark dark:bg-form-input"
             />
-            <p class="text-xs text-bodydark2 mt-1">Upload up to 5 images (PNG or JPEG, max 5MB each)</p>
-            <div v-if="ui.imgPreviews.length > 0" class="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3">
+            <p class="text-xs text-bodydark2 mt-1">
+              Upload up to 5 images (PNG or JPEG, max 5MB each)
+            </p>
+            <div
+              v-if="ui.imgPreviews.length > 0"
+              class="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3"
+            >
               <div v-for="(preview, idx) in ui.imgPreviews" :key="idx" class="relative">
                 <img
                   :src="preview"
@@ -470,7 +516,36 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- Deployment-specific fields removed per requirement -->
+            <!-- Department and End User Assignment -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pt-3 border-t border-stroke dark:border-strokedark">
+              <div>
+                <label class="block text-sm font-medium mb-1">Department (Optional)</label>
+                <BaseCombobox
+                  v-model="it.departmentId"
+                  :options="departments"
+                  labelKey="name"
+                  valueKey="_id"
+                  placeholder="Select department"
+                  @update:modelValue="onDepartmentChange(idx, $event)"
+                />
+                <p class="text-xs text-bodydark2 mt-1">Assign to a specific department</p>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium mb-1">End User (Optional)</label>
+                <BaseCombobox
+                  v-model="it.endUserId"
+                  :options="getUsersForItem(idx).map(u => ({ ...u, label: `${u.firstName} ${u.lastName}` }))"
+                  labelKey="label"
+                  valueKey="_id"
+                  placeholder="Select end user"
+                  :disabled="!it.departmentId"
+                />
+                <p class="text-xs text-bodydark2 mt-1">
+                  {{ it.departmentId ? 'Assign to a specific user' : 'Select department first' }}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>

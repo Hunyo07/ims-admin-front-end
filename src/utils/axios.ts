@@ -1,8 +1,10 @@
 import axios from 'axios'
 import router from '../router'
 
+const baseURL = (import.meta as any)?.env?.VITE_API_URL || 'http://localhost:5000/api'
+
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:5000/api'
+  baseURL
 })
 
 axiosInstance.interceptors.request.use(

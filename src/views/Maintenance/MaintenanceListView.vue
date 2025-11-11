@@ -1,7 +1,7 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import axios from '@/utils/axios'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
 
@@ -9,6 +9,7 @@ const router = useRouter()
 const tickets = ref([])
 const loading = ref(true)
 const filterStatus = ref('')
+const search = ref('')
 
 const fetchTickets = async () => {
   try {
@@ -26,21 +27,84 @@ const viewTicket = (id) => router.push({ name: 'maintenance-detail', params: { i
 const createTicket = () => router.push({ name: 'maintenance-create' })
 
 onMounted(fetchTickets)
+
+const filteredTickets = computed(() => {
+  const q = String(search.value || '').trim().toLowerCase()
+  const list = tickets.value || []
+  if (!q) return list
+  return list.filter((t) => {
+    return [
+      t.ticketNumber,
+      t.acn,
+      t.serialNumber,
+      t.issue,
+      t.serviceProvider
+    ]
+      .map((v) => String(v || '').toLowerCase())
+      .some((str) => str.includes(q))
+  })
+})
+
+function statusBadgeClass(status) {
+  switch (status) {
+    case 'pending':
+      return 'bg-bodydark/10 text-bodydark'
+    case 'in_progress':
+      return 'bg-warning/10 text-warning'
+    case 'completed':
+      return 'bg-success/10 text-success'
+    case 'beyond_repair':
+      return 'bg-danger/10 text-danger'
+    default:
+      return 'bg-bodydark/10 text-bodydark'
+  }
+}
+
+function labelForStatus(status) {
+  switch (status) {
+    case 'pending':
+      return 'Under Repair'
+    case 'in_progress':
+      return 'In Progress'
+    case 'completed':
+      return 'Repaired'
+    case 'beyond_repair':
+      return 'Beyond Repair'
+    default:
+      return status || '—'
+  }
+}
+
+function formatDate(d) {
+  try {
+    return d ? new Date(d).toLocaleDateString() : '—'
+  } catch (_) {
+    return '—'
+  }
+}
 </script>
 
 <template>
   <DefaultLayout>
-    <BreadcrumbDefault pageTitle="Maintenance & Repair" />
+    <BreadcrumbDefault pageTitle="Repair & Maintenance" />
     <div class="p-6">
-      <div class="flex justify-between mb-4">
-        <select v-model="filterStatus" @change="fetchTickets" class="rounded border px-4 py-2">
-          <option value="">All Status</option>
-          <option value="pending">Pending</option>
-          <option value="in_progress">In Progress</option>
-          <option value="completed">Completed</option>
-          <option value="beyond_repair">Beyond Repair</option>
-        </select>
-        <button @click="createTicket" class="bg-primary text-white px-6 py-2 rounded">Create Repair Ticket</button>
+      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+        <div class="flex gap-2 items-center">
+          <select v-model="filterStatus" @change="fetchTickets" class="rounded border px-3 py-2 bg-white">
+            <option value="">All Status</option>
+            <option value="pending">Under Repair</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Repaired</option>
+            <option value="beyond_repair">Beyond Repair</option>
+          </select>
+          <input
+            v-model="search"
+            type="text"
+            placeholder="Search tickets..."
+            class="rounded border px-3 py-2 bg-white w-48"
+          />
+        </div>
+        <button @click="createTicket" class="bg-primary text-white px-4 py-2 rounded">Create Repair</button>
       </div>
 
       <div v-if="loading" class="text-center py-8">Loading...</div>
@@ -48,24 +112,36 @@ onMounted(fetchTickets)
         <table class="w-full">
           <thead class="bg-gray-100">
             <tr>
-              <th class="p-3 text-left">Ticket #</th>
-              <th class="p-3 text-left">ACN</th>
-              <th class="p-3 text-left">Serial</th>
-              <th class="p-3 text-left">Issue</th>
-              <th class="p-3 text-left">Service Provider</th>
-              <th class="p-3 text-left">Status</th>
-              <th class="p-3 text-left">Date Sent</th>
+              <th class="p-3 text-left w-1/3">Ticket</th>
+              <th class="p-3 text-left w-1/3">Asset</th>
+              <th class="p-3 text-left w-1/6">Status</th>
+              <th class="p-3 text-left w-1/6">Sent</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="ticket in tickets" :key="ticket._id" @click="viewTicket(ticket._id)" class="border-t hover:bg-gray-50 cursor-pointer">
-              <td class="p-3">{{ ticket.ticketNumber }}</td>
-              <td class="p-3">{{ ticket.acn }}</td>
-              <td class="p-3">{{ ticket.serialNumber }}</td>
-              <td class="p-3">{{ ticket.issue }}</td>
-              <td class="p-3">{{ ticket.serviceProvider }}</td>
-              <td class="p-3"><span :class="{'bg-yellow-100 text-yellow-800': ticket.status === 'pending', 'bg-blue-100 text-blue-800': ticket.status === 'in_progress', 'bg-green-100 text-green-800': ticket.status === 'completed', 'bg-red-100 text-red-800': ticket.status === 'beyond_repair'}" class="px-2 py-1 rounded text-xs">{{ ticket.status }}</span></td>
-              <td class="p-3">{{ new Date(ticket.dateSent).toLocaleDateString() }}</td>
+            <tr
+              v-for="ticket in filteredTickets"
+              :key="ticket._id"
+              @click="viewTicket(ticket._id)"
+              class="border-t hover:bg-gray-50 cursor-pointer"
+            >
+              <td class="p-3">
+                <div class="text-sm font-medium">{{ ticket.ticketNumber }}</div>
+                <div class="text-xs text-bodydark2 truncate">{{ ticket.issue }}</div>
+              </td>
+              <td class="p-3">
+                <div class="text-sm">{{ ticket.acn || ticket.serialNumber || '—' }}</div>
+                <div class="text-xs text-bodydark2 truncate">{{ ticket.serviceProvider || '—' }}</div>
+              </td>
+              <td class="p-3">
+                <span :class="statusBadgeClass(ticket.status)" class="px-2 py-1 rounded text-xs">
+                  {{ labelForStatus(ticket.status) }}
+                </span>
+              </td>
+              <td class="p-3">{{ formatDate(ticket.dateSent) }}</td>
+            </tr>
+            <tr v-if="filteredTickets.length === 0">
+              <td colspan="4" class="p-6 text-center text-sm text-bodydark2">No tickets found</td>
             </tr>
           </tbody>
         </table>
