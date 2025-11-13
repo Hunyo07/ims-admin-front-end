@@ -254,7 +254,7 @@ const acnsUsed = computed(() => {
   const s = new Set<string>()
   cards.value.forEach((c) => {
     if (c.acn) s.add(c.acn)
-    c.secondaries.forEach((x) => {
+    c.secondaries.forEach((x: any) => {
       if (x.acn) s.add(x.acn)
     })
   })

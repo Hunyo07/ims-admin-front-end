@@ -276,12 +276,6 @@ const routes = [
     meta: { title: 'Repair Logs', requiresAuth: true }
   },
   {
-    path: '/maintenance/logs/create',
-    name: 'repair-log-create',
-    component: () => import('../views/Maintenance/CreateRepairLogView.vue'),
-    meta: { title: 'Create Repair Log', requiresAuth: true }
-  },
-  {
     path: '/maintenance/logs/:id',
     name: 'repair-log-detail',
     component: () => import('../views/Maintenance/RepairLogDetailView.vue'),

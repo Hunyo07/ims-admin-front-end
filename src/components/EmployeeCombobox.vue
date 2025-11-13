@@ -45,6 +45,8 @@ const openIfNot = () => {
 
 const onInput = (e) => {
   search.value = e.target.value
+  // Keep parent v-model in sync even when typing free text
+  emit('update:modelValue', search.value)
   openIfNot()
 }
 

@@ -970,53 +970,6 @@ const handleDeleteProduct = async (productId: string) => {
   }
 }
 
-const handleToggleStatus = async (productId: string, currentStatus: boolean) => {
-  try {
-    const result = await Swal.fire({
-      title: `${currentStatus ? 'Deactivate' : 'Activate'} Product?`,
-      text: `Are you sure you want to ${currentStatus ? 'deactivate' : 'activate'} this product?`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: currentStatus ? '#d33' : '#3085d6',
-      cancelButtonColor: '#6B7280',
-      confirmButtonText: `Yes, ${currentStatus ? 'deactivate' : 'activate'} it!`
-    })
-
-    if (result.isConfirmed) {
-      const response = await axios.patch(
-        `http://localhost:5000/api/products/${productId}/toggle-status`,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${authStore.token}`
-          }
-        }
-      )
-
-      // Update local state
-      products.value = products.value.map((product) =>
-        product._id === productId ? { ...product, isActive: !currentStatus } : product
-      )
-
-      // Emit socket event
-      socket.emit('updateProduct', response.data.product)
-
-      Swal.fire({
-        icon: 'success',
-        title: 'Success!',
-        text: `Product ${!currentStatus ? 'activated' : 'deactivated'} successfully`,
-        timer: 1000,
-        showConfirmButton: false
-      })
-    }
-  } catch (error: any) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: error.response?.data?.message || 'Error toggling product status'
-    })
-  }
-}
 const handleAddProduct = async () => {
   try {
     isSubmitting.value = true
@@ -1661,13 +1614,20 @@ watch(
               <label class="mb-2.5 block text-black dark:text-white">
                 Item Name <span class="text-danger">*</span>
               </label>
-              <input
-                v-model="newProduct.name"
-                type="text"
-                required
-                placeholder="Enter item name"
-                class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-              />
+              <div class="flex">
+                <input
+                  :value="nextItemId"
+                  readonly
+                  class="w-[64px] rounded border-[1.5px] border-stroke bg-gray-100 px-5 py-2 outline-none dark:border-form-strokedark dark:bg-form-input"
+                />
+                <input
+                  v-model="newProduct.name"
+                  type="text"
+                  required
+                  placeholder="Enter item name"
+                  class="w-full rounded border-[1.5px] border-stroke bg-transparent px-5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+                />
+              </div>
             </div>
 
             <!-- Description -->
@@ -1888,8 +1848,8 @@ watch(
             </div>
 
             <!-- Item ID (readonly) -->
-            <div>
-              <label class="mb-2.5 block text-black dark:text-white"> Item ID </label>
+            <!-- <div> -->
+            <!-- <label class="mb-2.5 block text-black dark:text-white"> Item ID </label>
               <input
                 :value="nextItemId"
                 readonly
@@ -1898,7 +1858,7 @@ watch(
               <div class="text-xs text-bodydark2 mt-1">
                 Used for ACN generation (format: XXX-###-YY-###)
               </div>
-            </div>
+            </div> -->
 
             <!-- SKU -->
             <div>
@@ -2014,16 +1974,16 @@ watch(
                 {{ detailsProduct.currentStock }} {{ detailsProduct.unit }}
               </div>
             </div>
-            <div>
-              <div class="text-sm text-bodydark2">Category</div>
-              <div class="font-medium">
-                {{ (detailsProduct as any).category?.name || 'Not Assigned' }}
-              </div>
+          <div>
+            <div class="text-sm text-bodydark2">Category</div>
+            <div class="font-medium">
+              {{ detailsProduct?.category?.name || 'Not Assigned' }}
             </div>
-            <div>
-              <div class="text-sm text-bodydark2">Supplier</div>
-              <div class="font-medium">{{ (detailsProduct as any).supplier?.name || '—' }}</div>
-            </div>
+          </div>
+          <div>
+            <div class="text-sm text-bodydark2">Supplier</div>
+            <div class="font-medium">{{ detailsProduct?.supplier?.name || '—' }}</div>
+          </div>
           </div>
 
           <div>

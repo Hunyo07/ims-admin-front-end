@@ -1,13 +1,11 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '@/utils/axios'
-import { useAuthStore } from '@/stores'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import EmployeeCombobox from '@/components/EmployeeCombobox.vue'
 import AcnCombobox from '@/components/AcnCombobox.vue'
 
-const auth = useAuthStore()
 const router = useRouter()
 
 const form = ref({
@@ -48,6 +46,41 @@ const onAcnSelect = (payload) => {
     form.value.broughtByName = defaultRequester
   }
 }
+
+// Dynamic preview helpers: render only existing fields
+const isSecondary = computed(() => !!selectedItem.value?._selectedSecondary)
+const descText = computed(() => {
+  if (isSecondary.value) {
+    const sec = selectedItem.value?._selectedSecondary
+    if (!sec) return ''
+    const pname = sec.productName || ''
+    if (pname) return pname
+    const name = sec.item || ''
+    if (name) return name
+    const t = sec.type || ''
+    const pn = sec.propertyNumber ? ` • ${sec.propertyNumber}` : ''
+    return `${t}${pn}`.trim()
+  }
+  return selectedItem.value?.productName || selectedItem.value?.name || selectedItem.value?.description || ''
+})
+const productText = computed(() => {
+  if (isSecondary.value) return selectedItem.value?._selectedSecondary?.type || ''
+  return (
+    selectedItem.value?.product ||
+    selectedItem.value?.specs?.brand ||
+    selectedItem.value?.specs?.monitorSize ||
+    ''
+  )
+})
+const hasDescription = computed(() => !!descText.value)
+const hasEndUser = computed(() => !!(selectedItem.value?.endUserOrMR))
+const hasDepartment = computed(() => !!(selectedRecord.value?.department))
+const hasProduct = computed(() => !!productText.value)
+const hasAnySpecs = computed(() => {
+  if (isSecondary.value) return false
+  const s = selectedItem.value?.specs || {}
+  return !!(s.processor || s.storage || s.ram || s.videoCard)
+})
 
 const submit = async () => {
   loading.value = true
@@ -214,48 +247,54 @@ const submit = async () => {
                   <div class="text-lg font-semibold">{{ form.acn || '—' }}</div>
                 </div>
                 <div class="grid grid-cols-2 gap-3 text-sm">
-                  <div>
+                  <div v-if="hasDescription">
                     <div class="text-bodydark2">Description</div>
-                    <div class="font-medium">{{ selectedItem?.description || '—' }}</div>
+                    <div class="font-medium">{{ descText }}</div>
                   </div>
-                  <div>
+                  <div v-if="hasEndUser">
                     <div class="text-bodydark2">End User</div>
-                    <div class="font-medium">{{ selectedItem?.endUserOrMR || '—' }}</div>
+                    <div class="font-medium">{{ selectedItem?.endUserOrMR }}</div>
                   </div>
-                  <div>
+                  <div v-if="hasDepartment">
                     <div class="text-bodydark2">Department</div>
-                    <div class="font-medium">{{ selectedRecord?.department || '—' }}</div>
+                    <div class="font-medium">{{ selectedRecord?.department }}</div>
                   </div>
-                  <div>
+                  <div v-if="hasProduct">
                     <div class="text-bodydark2">Product</div>
-                    <div class="font-medium">
-                      {{
-                        selectedItem?.product ||
-                        selectedItem?.specs?.brand ||
-                        selectedItem?.specs?.monitorSize ||
-                        '—'
-                      }}
+                    <div class="font-medium">{{ productText }}</div>
+                  </div>
+                </div>
+                <div class="mt-4" v-if="hasAnySpecs">
+                  <div class="text-sm text-bodydark2 mb-2">Specs</div>
+                  <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div v-if="selectedItem?.specs?.processor">
+                      <div class="text-bodydark2">Processor</div>
+                      <div class="font-medium">{{ selectedItem?.specs?.processor }}</div>
+                    </div>
+                    <div v-if="selectedItem?.specs?.storage">
+                      <div class="text-bodydark2">Storage</div>
+                      <div class="font-medium">{{ selectedItem?.specs?.storage }}</div>
+                    </div>
+                    <div v-if="selectedItem?.specs?.ram">
+                      <div class="text-bodydark2">RAM</div>
+                      <div class="font-medium">{{ selectedItem?.specs?.ram }}</div>
+                    </div>
+                    <div v-if="selectedItem?.specs?.videoCard">
+                      <div class="text-bodydark2">Video Card</div>
+                      <div class="font-medium">{{ selectedItem?.specs?.videoCard }}</div>
                     </div>
                   </div>
                 </div>
-                <div class="mt-4">
-                  <div class="text-sm text-bodydark2 mb-2">Specs</div>
+                <div class="mt-4" v-if="isSecondary && (selectedItem?._selectedSecondary?.propertyNumber || selectedItem?._selectedSecondary?.serialNumber)">
+                  <div class="text-sm text-bodydark2 mb-2">Secondary Item Details</div>
                   <div class="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <div class="text-bodydark2">Processor</div>
-                      <div class="font-medium">{{ selectedItem?.specs?.processor || '—' }}</div>
+                    <div v-if="selectedItem?._selectedSecondary?.propertyNumber">
+                      <div class="text-bodydark2">Property #</div>
+                      <div class="font-medium">{{ selectedItem?._selectedSecondary?.propertyNumber }}</div>
                     </div>
-                    <div>
-                      <div class="text-bodydark2">Storage</div>
-                      <div class="font-medium">{{ selectedItem?.specs?.storage || '—' }}</div>
-                    </div>
-                    <div>
-                      <div class="text-bodydark2">RAM</div>
-                      <div class="font-medium">{{ selectedItem?.specs?.ram || '—' }}</div>
-                    </div>
-                    <div>
-                      <div class="text-bodydark2">Video Card</div>
-                      <div class="font-medium">{{ selectedItem?.specs?.videoCard || '—' }}</div>
+                    <div v-if="selectedItem?._selectedSecondary?.serialNumber">
+                      <div class="text-bodydark2">Serial</div>
+                      <div class="font-medium">{{ selectedItem?._selectedSecondary?.serialNumber }}</div>
                     </div>
                   </div>
                 </div>
