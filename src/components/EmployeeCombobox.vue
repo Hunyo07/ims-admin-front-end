@@ -6,7 +6,8 @@ const props = defineProps({
   modelValue: { type: String, default: '' },
   department: { type: String, default: '' },
   placeholder: { type: String, default: 'Search employee' },
-  disabled: { type: Boolean, default: false }
+  disabled: { type: Boolean, default: false },
+  limit: { type: Number, default: 100 }
 })
 
 const emit = defineEmits(['update:modelValue', 'select'])
@@ -27,7 +28,7 @@ const fetchEmployees = async () => {
     const params = {}
     if (search.value) params.search = search.value
     if (props.department) params.department = props.department
-    params.limit = 10
+    params.limit = props.limit
     const { data } = await axios.get('/employees', { params })
     options.value = Array.isArray(data?.employees) ? data.employees : []
   } catch (e) {

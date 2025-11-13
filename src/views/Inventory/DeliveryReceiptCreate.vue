@@ -8,6 +8,7 @@ import { useAuthStore } from '../../stores/auth'
 
 const authStore = useAuthStore()
 const router = useRouter()
+const hasWarrantyState = ref(false)
 
 const form = reactive({
   drNumber: '',
@@ -27,7 +28,26 @@ const suppliers = ref([])
 const products = ref([])
 const departments = ref([])
 
-const items = ref([{ productId: '', qty: 1, serialsText: '', notes: '', departmentId: '', endUserId: '' }])
+const items = ref([
+  {
+    productId: '',
+    qty: 1,
+    serialsText: '',
+    notes: '',
+    departmentId: '',
+    endUserId: '',
+    warrantyOverrideEnabled: false,
+    warranty: {
+      hasWarranty: true,
+      provider: 'supplier',
+      duration: 0,
+      startDate: '',
+      expiryDate: '',
+      terms: '',
+      supplierId: ''
+    }
+  }
+])
 
 const users = ref([])
 const usersByDepartment = ref({})
@@ -109,7 +129,24 @@ const setToday = () => {
   form.dateReceived = new Date().toISOString().slice(0, 10)
 }
 
-const addRow = () => items.value.push({ productId: '', qty: 1, serialsText: '', notes: '', departmentId: '', endUserId: '' })
+const addRow = () =>
+  items.value.push({
+    productId: '',
+    qty: 1,
+    serialsText: '',
+    notes: '',
+    departmentId: '',
+    endUserId: '',
+    warrantyOverrideEnabled: false,
+    warranty: {
+      hasWarranty: true,
+      provider: 'supplier',
+      duration: 0,
+      startDate: '',
+      expiryDate: '',
+      terms: ''
+    }
+  })
 
 const duplicateRow = (idx) => {
   const copy = JSON.parse(JSON.stringify(items.value[idx]))
@@ -117,19 +154,39 @@ const duplicateRow = (idx) => {
 }
 
 const clearAllRows = () => {
-  items.value = [{ productId: '', qty: 1, serialsText: '', notes: '', departmentId: '', endUserId: '' }]
+  items.value = [
+    {
+      productId: '',
+      qty: 1,
+      serialsText: '',
+      notes: '',
+      departmentId: '',
+      endUserId: '',
+      warrantyOverrideEnabled: false,
+      warranty: {
+        hasWarranty: true,
+        provider: 'supplier',
+        duration: 0,
+        startDate: '',
+        expiryDate: '',
+        terms: ''
+      }
+    }
+  ]
 }
 
 const fetchUsersForDepartment = async (departmentId) => {
   if (!departmentId) return []
-  
+
   // Check if already cached
   if (usersByDepartment.value[departmentId]) {
     return usersByDepartment.value[departmentId]
   }
-  
+
   try {
-    const { data } = await axios.get(`/delivery-receipts/deployment/available-users?departmentId=${departmentId}`)
+    const { data } = await axios.get(
+      `/delivery-receipts/deployment/available-users?departmentId=${departmentId}`
+    )
     const fetchedUsers = data?.users || []
     usersByDepartment.value[departmentId] = fetchedUsers
     return fetchedUsers
@@ -142,7 +199,7 @@ const fetchUsersForDepartment = async (departmentId) => {
 const onDepartmentChange = async (itemIndex, departmentId) => {
   // Reset end user when department changes
   items.value[itemIndex].endUserId = ''
-  
+
   // Fetch users for the new department
   if (departmentId) {
     await fetchUsersForDepartment(departmentId)
@@ -176,47 +233,60 @@ const submit = async () => {
   fd.append('purpose', form.purpose)
   form.images.forEach((img) => fd.append('images', img))
 
-  const itemsPayload = items.value.map((it) => ({
-    productId: it.productId,
-    qty: Number(it.qty),
-    notes: it.notes || '',
-    serialNumbers: isSerializedProduct(it.productId)
-      ? (it.serialsText || '')
-          .split(/\r?\n|,/)
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : []
-  }))
+  const itemsPayload = items.value.map((it) => {
+    const base = {
+      productId: it.productId,
+      qty: Number(it.qty),
+      notes: it.notes || '',
+      serialNumbers: isSerializedProduct(it.productId)
+        ? (it.serialsText || '')
+            .split(/\r?\n|,/)
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : []
+    }
+    if (it.warrantyOverrideEnabled) {
+      base.warranty = {
+        hasWarranty: !!it?.warrantyOverrideEnabled,
+        provider: it.warranty?.provider || 'supplier',
+        duration: typeof it.warranty?.duration === 'number' ? it.warranty.duration : undefined,
+        startDate: it.warranty?.startDate || undefined,
+        expiryDate: it.warranty?.expiryDate || undefined,
+        terms: it.warranty?.terms || undefined
+      }
+    }
+    return base
+  })
 
   fd.append('items', JSON.stringify(itemsPayload))
 
   try {
     ui.submitting = true
-    
+
     // Step 1: Create the DR
     const { data } = await axios.post('/delivery-receipts', fd)
     const drId = data?.deliveryReceipt?._id
     const createdItems = data?.deliveryReceipt?.items || []
-    
+
     if (!drId) {
       ui.errors.push('Failed to create delivery receipt')
       return
     }
-    
+
     // Step 2: Update items with department and end user assignments
     const itemUpdates = items.value
       .map((it, index) => {
         const createdItem = createdItems[index]
         if (!createdItem) return null
-        
+
         return {
           itemId: createdItem._id,
           departmentId: it.departmentId || undefined,
           endUserId: it.endUserId || undefined
         }
       })
-      .filter(update => update && (update.departmentId || update.endUserId))
-    
+      .filter((update) => update && (update.departmentId || update.endUserId))
+
     if (itemUpdates.length > 0) {
       try {
         await axios.patch(`/delivery-receipts/${drId}/items`, { items: itemUpdates })
@@ -225,7 +295,7 @@ const submit = async () => {
         // Continue anyway - DR was created successfully
       }
     }
-    
+
     router.push(`/inventory/delivery-receipts/${drId}`)
   } catch (e) {
     ui.errors = [e?.response?.data?.message || 'Failed to create delivery receipt']
@@ -269,6 +339,11 @@ const fetchDepartments = async () => {
   }
 }
 
+const handleClickHasWarranty = () => {
+  console.log('Checkbox clicked!')
+  // You can perform other actions here, like updating data or emitting events
+  // If using v-model, the value will automatically update before this handler
+}
 onMounted(() => {
   fetchSuppliers()
   fetchProducts()
@@ -516,8 +591,53 @@ onMounted(() => {
               </div>
             </div>
 
+            <!-- Warranty Supplier selection inside override (dynamic) -->
+
+            <!-- Warranty Override -->
+            <div class="mt-4 pt-3 border-t border-stroke dark:border-strokedark">
+              <div class="flex items-center justify-between">
+                <div>
+                  <label class="font-medium text-sm">Warranty Settings (Per Item)</label>
+                  <p class="text-xs text-bodydark2 mt-1">
+                    Defaults come from the product. Enable override to set custom warranty.
+                  </p>
+                </div>
+                <label class="flex items-center gap-2 text-sm">
+                  <input type="checkbox" v-model="it.warrantyOverrideEnabled" />
+                  <span>Has warranty</span>
+                </label>
+              </div>
+
+              <div
+                v-if="it.warrantyOverrideEnabled"
+                class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3"
+              >
+                <!-- Warranty supplier selection removed as per request -->
+
+                <div>
+                  <label class="block text-sm font-medium mb-1">Duration (months)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    v-model.number="it.warranty.duration"
+                    class="w-full rounded border border-stroke p-2 dark:border-strokedark dark:bg-form-input"
+                  />
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    v-model="it.warranty.startDate"
+                    class="w-full rounded border border-stroke p-2 dark:border-strokedark dark:bg-form-input"
+                  />
+                </div>
+              </div>
+            </div>
             <!-- Department and End User Assignment -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pt-3 border-t border-stroke dark:border-strokedark">
+            <div
+              class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pt-3 border-t border-stroke dark:border-strokedark"
+            >
               <div>
                 <label class="block text-sm font-medium mb-1">Department (Optional)</label>
                 <BaseCombobox
@@ -535,7 +655,12 @@ onMounted(() => {
                 <label class="block text-sm font-medium mb-1">End User (Optional)</label>
                 <BaseCombobox
                   v-model="it.endUserId"
-                  :options="getUsersForItem(idx).map(u => ({ ...u, label: `${u.firstName} ${u.lastName}` }))"
+                  :options="
+                    getUsersForItem(idx).map((u) => ({
+                      ...u,
+                      label: `${u.firstName} ${u.lastName}`
+                    }))
+                  "
                   labelKey="label"
                   valueKey="_id"
                   placeholder="Select end user"

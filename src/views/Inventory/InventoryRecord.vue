@@ -5,9 +5,10 @@ import DefaultLayout from '../../layouts/DefaultLayout.vue'
 import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
 import BaseCombobox from '../../components/Forms/BaseCombobox.vue'
 import { useAuthStore } from '../../stores/auth'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 
 const pageTitle = ref('Inventory Records')
+const route = useRoute()
 
 // State
 const records = ref([])
@@ -23,6 +24,14 @@ const textSearch = ref('')
 // Item-level server filters
 const serialSearch = ref('')
 const acnSearch = ref('')
+
+// Initialize from query params if provided
+if (route.query.acn) {
+  acnSearch.value = String(route.query.acn)
+}
+if (route.query.serialNumber) {
+  serialSearch.value = String(route.query.serialNumber)
+}
 
 // Pagination
 const currentPage = ref(1)
@@ -65,6 +74,8 @@ function extractAcnsFromDisplayStrings(item) {
 
   return acns.map((acn) => acn.trim().toUpperCase()).filter(Boolean)
 }
+
+// Warranty display has been moved to the Warranty pages.
 async function fetchDeployedAcnCodes() {
   try {
     const { data } = await axios.get('/inventory-records', {
@@ -101,6 +112,167 @@ async function fetchDeployedAcnCodes() {
 // Details Modal
 const isDetailsOpen = ref(false)
 const selectedRecord = ref(null)
+
+// Per-ACN/Serial status (assignment + repair) for selected record
+const statusAssignments = ref({ acn: {}, serial: {} })
+const statusLoading = ref(false)
+const statusError = ref(null)
+
+function collectIdentifiers(rec) {
+  const acnSet = new Set()
+  const serialSet = new Set()
+  const list = Array.isArray(rec?.items) ? rec.items : []
+  for (const it of list) {
+    const acn = String(it?.acn || '').trim()
+    const sn = String(it?.serialNumber || '').trim()
+    if (acn) acnSet.add(acn.toUpperCase())
+    else if (sn) serialSet.add(sn)
+    for (const sec of it?.secondaryItems || []) {
+      const sacn = String(sec?.acn || '').trim()
+      const ssn = String(sec?.serialNumber || '').trim()
+      if (sacn) acnSet.add(sacn.toUpperCase())
+      else if (ssn) serialSet.add(ssn)
+    }
+  }
+  return {
+    acnCodes: Array.from(acnSet),
+    serialNumbers: Array.from(serialSet)
+  }
+}
+
+async function fetchAssignmentStatusForSelectedRecord() {
+  statusLoading.value = true
+  statusError.value = null
+  try {
+    const { acnCodes, serialNumbers } = collectIdentifiers(selectedRecord.value)
+    if (!acnCodes.length && !serialNumbers.length) {
+      statusAssignments.value = { acn: {}, serial: {} }
+      return
+    }
+    const { data } = await axios.post('/acns/assignment-status', {
+      acnCodes,
+      serialNumbers
+    })
+    statusAssignments.value = data?.assignments || { acn: {}, serial: {} }
+  } catch (err) {
+    statusError.value = err?.response?.data?.message || err.message || 'Failed to load statuses'
+  } finally {
+    statusLoading.value = false
+  }
+}
+
+function statusForRow(row) {
+  try {
+    const endUser = String(row?.endUserOrMR || '').trim()
+    const items = Array.isArray(selectedRecord.value?.items) ? selectedRecord.value.items : []
+    const exemplars = items.filter(
+      (it) => String(it?.endUserOrMR || '').trim() === endUser
+    )
+    const byCat = (pid) => {
+      const p = products.value.find((x) => String(x._id) === String(pid))
+      return String(p?.category?.name || '').toLowerCase()
+    }
+    const primary =
+      exemplars.find((it) => {
+        const cname = byCat(it.product)
+        return cname.includes('desktop') || cname.includes('laptop') || cname.includes('computer')
+      }) || exemplars[0] || null
+
+    const acn = String(primary?.acn || '').trim().toUpperCase()
+    const sn = String(primary?.serialNumber || '').trim()
+    const info = acn
+      ? statusAssignments.value?.acn?.[acn]
+      : sn
+      ? statusAssignments.value?.serial?.[sn]
+      : null
+
+    let status = '—'
+    if (info) {
+      status = String(info?.repairStatus || '')
+        ? 'under_repair'
+        : String(info?.status || (info?.assigned ? 'deployed' : 'unassigned'))
+    } else {
+      status = String(primary?.status || '').trim() || '—'
+    }
+
+    return { status, label: status ? status.replace(/_/g, ' ') : '—' }
+  } catch (_) {
+    return { status: '—', label: '—' }
+  }
+}
+
+function lifecycleBadgeClass(status) {
+  const base = 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium '
+  const map = {
+    deployed: 'bg-green-100 text-green-700',
+    returned: 'bg-yellow-100 text-yellow-800',
+    repair: 'bg-orange-100 text-orange-800',
+    under_repair: 'bg-orange-100 text-orange-800',
+    replaced: 'bg-blue-100 text-blue-700',
+    retired: 'bg-gray-200 text-gray-700',
+    for_disposal: 'bg-gray-300 text-gray-800',
+    unassigned: 'bg-gray-100 text-gray-600'
+  }
+  return base + (map[status] || 'bg-gray-100 text-gray-700')
+}
+
+// (Removed refreshSelectedStatus; statuses now shown inline per row)
+
+function getSecondaryStatusesForRow(row) {
+  const result = { monitors: [], printersScanners: [] }
+  try {
+    const endUser = String(row?.endUserOrMR || '').trim()
+    const items = Array.isArray(selectedRecord.value?.items) ? selectedRecord.value.items : []
+    const group = items.filter((it) => String(it?.endUserOrMR || '').trim() === endUser)
+
+    const byCat = (pid) => {
+      const p = products.value.find((x) => String(x._id) === String(pid))
+      return String(p?.category?.name || '').toLowerCase()
+    }
+    const pushStatus = (sec, bucket) => {
+      const acn = String(sec?.acn || '').trim().toUpperCase()
+      const sn = String(sec?.serialNumber || '').trim()
+      const info = acn
+        ? statusAssignments.value?.acn?.[acn]
+        : sn
+        ? statusAssignments.value?.serial?.[sn]
+        : null
+      let status = '—'
+      if (info) {
+        status = String(info?.repairStatus || '') ? 'under_repair' : String(info?.status || (info?.assigned ? 'deployed' : 'unassigned'))
+      }
+      const label = acn ? `ACN ${acn}` : sn ? `SN ${sn}` : '—'
+      bucket.push({ key: `${acn || sn || Math.random()}`, status, label })
+    }
+
+    // 1) Secondary items array on primary items
+    for (const it of group) {
+      for (const sec of it?.secondaryItems || []) {
+        if (sec?.type === 'monitor') pushStatus(sec, result.monitors)
+        else if (sec?.type === 'printer' || sec?.type === 'scanner') pushStatus(sec, result.printersScanners)
+      }
+    }
+    // 2) Separate items typed as monitors/printers/scanners
+    for (const it of group) {
+      const cname = byCat(it.product)
+      const isMonitor = cname.includes('monitor')
+      const isPrinter = cname.includes('printer')
+      const isScanner = cname.includes('scanner')
+      if (isMonitor || isPrinter || isScanner) {
+        const sec = {
+          type: isMonitor ? 'monitor' : isPrinter ? 'printer' : 'scanner',
+          acn: it.acn,
+          serialNumber: it.serialNumber
+        }
+        if (sec.type === 'monitor') pushStatus(sec, result.monitors)
+        else pushStatus(sec, result.printersScanners)
+      }
+    }
+    return result
+  } catch (_) {
+    return result
+  }
+}
 
 // Add Modal
 const isAddOpen = ref(false)
@@ -1336,6 +1508,8 @@ async function fetchDepartments() {
 function openDetails(rec) {
   selectedRecord.value = rec
   isDetailsOpen.value = true
+  // Fetch per-ACN/Serial status when opening details
+  fetchAssignmentStatusForSelectedRecord()
 }
 
 function closeDetails() {
@@ -1393,7 +1567,8 @@ function buildMergedRows(items) {
         monitors: [],
         propertyNumber: '',
         printerOrScannerList: [],
-        remarksYearsList: []
+        remarksYearsList: [],
+        warranty: null
       }
     }
     const row = groups[endUser]
@@ -1432,9 +1607,11 @@ function buildMergedRows(items) {
       row.ram = specFrom(it, 'ram') || specVal('RAM') || ''
       row.videoCard = specFrom(it, 'videoCard') || specVal('Video Card') || ''
       if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
+      if (!row.warranty && it.warranty) row.warranty = it.warranty
     } else if (isMonitor) {
       if (monitorStr) row.monitors.push(monitorStr)
       if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
+      if (!row.warranty && it.warranty) row.warranty = it.warranty
     } else if (isPrinter || isScanner) {
       const t = isPrinter ? 'Printer' : 'Scanner'
       const name = product?.name || it.description || ''
@@ -1442,10 +1619,12 @@ function buildMergedRows(items) {
       const psStr = [t, name, serialPS].filter(Boolean).join(' - ')
       row.printerOrScannerList.push(psStr)
       if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
+      if (!row.warranty && it.warranty) row.warranty = it.warranty
     } else if (String(it.printerOrScanner || '').trim()) {
       // If printer/scanner info is embedded on a non-printer item, take it literally
       row.printerOrScannerList.push(String(it.printerOrScanner).trim())
       if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
+      if (!row.warranty && it.warranty) row.warranty = it.warranty
     } else {
       // Fallback: if this item carries specs (or product specs), use as primary if none yet
       if (
@@ -1465,6 +1644,7 @@ function buildMergedRows(items) {
         row.ram = specFrom(it, 'ram') || specVal('RAM') || ''
         row.videoCard = specFrom(it, 'videoCard') || specVal('Video Card') || ''
         if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
+        if (!row.warranty && it.warranty) row.warranty = it.warranty
       }
     }
 
@@ -1486,7 +1666,8 @@ function buildMergedRows(items) {
     propertyNumber: row.propertyNumber || '—',
     printerOrScanner: row.printerOrScannerList.length ? row.printerOrScannerList.join('\n') : '—',
     endUserOrMR: row.endUserOrMR || '—',
-    remarksYears: row.remarksYearsList.length ? row.remarksYearsList.join('\n') : '—'
+    remarksYears: row.remarksYearsList.length ? row.remarksYearsList.join('\n') : '—',
+    warranty: row.warranty || null
   }))
   return merged.filter((r) => {
     return !(
@@ -2377,7 +2558,7 @@ const mergedPreviewRows = computed(() => {
                           </td>
                         </tr>
                         <tr v-if="!rec || (rec.items || []).length === 0">
-                          <td colspan="13" class="px-4 py-6 text-center text-gray-500">
+                          <td colspan="14" class="px-4 py-6 text-center text-gray-500">
                             No items in this record.
                           </td>
                         </tr>
@@ -2447,6 +2628,8 @@ const mergedPreviewRows = computed(() => {
             </div>
           </div>
 
+          
+
           <!-- Items Table (Preview Format) -->
           <div class="overflow-x-auto mt-2 border border-stroke rounded">
             <table class="min-w-full text-sm border border-stroke">
@@ -2464,6 +2647,7 @@ const mergedPreviewRows = computed(() => {
                   <th class="px-3 py-2 text-left border border-stroke">Printer or Scanner</th>
                   <th class="px-3 py-2 text-left border border-stroke">End User or MR</th>
                   <th class="px-3 py-2 text-left border border-stroke">Remarks / Years</th>
+                  <th class="px-3 py-2 text-left border border-stroke">Status</th>
                   <th class="px-3 py-2 text-left border border-stroke">Actions</th>
                 </tr>
               </thead>
@@ -2504,6 +2688,15 @@ const mergedPreviewRows = computed(() => {
                     :title="row.monitorAndSerial"
                   >
                     {{ row.monitorAndSerial || '—' }}
+                    <div class="mt-1 flex flex-wrap gap-1">
+                      <span
+                        v-for="m in getSecondaryStatusesForRow(row).monitors"
+                        :key="`mon-${m.key}-${idx}`"
+                        :class="lifecycleBadgeClass(m.status)"
+                      >
+                        {{ m.label }}
+                      </span>
+                    </div>
                   </td>
                   <td
                     class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
@@ -2516,6 +2709,15 @@ const mergedPreviewRows = computed(() => {
                     :title="row.printerOrScanner"
                   >
                     {{ row.printerOrScanner || '—' }}
+                    <div class="mt-1 flex flex-wrap gap-1">
+                      <span
+                        v-for="p in getSecondaryStatusesForRow(row).printersScanners"
+                        :key="`ps-${p.key}-${idx}`"
+                        :class="lifecycleBadgeClass(p.status)"
+                      >
+                        {{ p.label }}
+                      </span>
+                    </div>
                   </td>
                   <td
                     class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
@@ -2529,6 +2731,9 @@ const mergedPreviewRows = computed(() => {
                   >
                     {{ row.remarksYears || '—' }}
                   </td>
+                  <td class="px-3 py-2 border border-stroke whitespace-normal break-words align-top">
+                    <span :class="lifecycleBadgeClass(statusForRow(row).status)">{{ statusForRow(row).label }}</span>
+                  </td>
                   <td class="px-3 py-2 border border-stroke">
                     <div class="text-xs text-gray-500">
                       Edit items individually in source record
@@ -2536,7 +2741,7 @@ const mergedPreviewRows = computed(() => {
                   </td>
                 </tr>
                 <tr v-if="selectedMergedRows.length === 0">
-                  <td colspan="11" class="px-3 py-4 text-center text-gray-500">
+                  <td colspan="12" class="px-3 py-4 text-center text-gray-500">
                     No items in this record.
                   </td>
                 </tr>

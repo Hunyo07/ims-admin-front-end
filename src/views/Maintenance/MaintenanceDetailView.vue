@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from '@/utils/axios'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
+import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -11,12 +12,13 @@ const ticket = ref(null)
 const loading = ref(false)
 const error = ref('')
 const updatingTicket = ref(false)
-const updatingAsset = ref(false)
 const newTicketStatus = ref('')
 const returnDate = ref('')
 const repairRemarks = ref('')
-const assetStatus = ref('under_repair')
-const assetStatusNotes = ref('')
+const estimatedCost = ref(0)
+const actualCost = ref(0)
+const repairHistory = ref([])
+const loadingHistory = ref(false)
 
 const id = computed(() => String(route.params.id || ''))
 
@@ -31,6 +33,8 @@ async function fetchTicket() {
     if (ticket.value) {
       newTicketStatus.value = ticket.value.status || 'pending'
       repairRemarks.value = ticket.value.repairRemarks || ''
+      estimatedCost.value = ticket.value.estimatedCost || 0
+      actualCost.value = ticket.value.actualCost || 0
       // If returnDate exists, normalize to yyyy-mm-dd
       if (ticket.value.returnDate) {
         try {
@@ -40,11 +44,30 @@ async function fetchTicket() {
           console.log(_)
         }
       }
+      // Fetch repair history
+      fetchRepairHistory()
     }
   } catch (e) {
     error.value = e?.response?.data?.message || e.message || 'Failed to load ticket'
   } finally {
     loading.value = false
+  }
+}
+
+async function fetchRepairHistory() {
+  if (!ticket.value?.acn && !ticket.value?.serialNumber) return
+  loadingHistory.value = true
+  try {
+    const params = {}
+    if (ticket.value.acn) params.acn = ticket.value.acn
+    if (ticket.value.serialNumber) params.serialNumber = ticket.value.serialNumber
+    const { data } = await axios.get('/maintenance/history', { params })
+    // Exclude current ticket from history
+    repairHistory.value = (data?.history || []).filter(h => h._id !== id.value)
+  } catch (e) {
+    console.error('Failed to fetch repair history:', e)
+  } finally {
+    loadingHistory.value = false
   }
 }
 
@@ -65,6 +88,28 @@ function statusBadgeClass(status) {
   }
 }
 
+function labelForStatus(status) {
+  switch (status) {
+    case 'pending':
+      return 'Under Repair'
+    case 'in_progress':
+      return 'In Progress'
+    case 'completed':
+      return 'Repaired'
+    case 'beyond_repair':
+      return 'Beyond Repair'
+    default:
+      return status || '—'
+  }
+}
+
+const costDifference = computed(() => {
+  const est = Number(estimatedCost.value) || 0
+  const act = Number(actualCost.value) || 0
+  if (est === 0 || act === 0) return null
+  return act - est
+})
+
 function formatDate(d) {
   if (!d) return '—'
   try {
@@ -74,7 +119,7 @@ function formatDate(d) {
   }
 }
 
-// Update ticket status and details
+// Update ticket status and details (consolidated - updates both ticket and inventory)
 async function updateTicketStatus() {
   if (!id.value || !ticket.value) return
   updatingTicket.value = true
@@ -83,7 +128,9 @@ async function updateTicketStatus() {
     await axios.patch(`/maintenance/${id.value}`, {
       status: newTicketStatus.value || undefined,
       returnDate: returnDate.value || undefined,
-      repairRemarks: repairRemarks.value || undefined
+      repairRemarks: repairRemarks.value || undefined,
+      estimatedCost: estimatedCost.value || undefined,
+      actualCost: actualCost.value || undefined
     })
     await fetchTicket()
   } catch (e) {
@@ -93,66 +140,11 @@ async function updateTicketStatus() {
   }
 }
 
-// Update underlying asset status directly (e.g., repaired/claimed/for disposal)
-async function updateAssetItemStatus() {
-  const acn = ticket.value?.acn
-  const serial = ticket.value?.serialNumber
-  let recordId = ticket.value?.inventoryRecordId
-  // Fallback: resolve recordId by ACN/Serial if not linked on ticket
-  if (!recordId) {
-    if (!acn && !serial) {
-      error.value = 'Ticket lacks ACN or serial number to locate item'
-      return
-    }
-    try {
-      const params = acn ? { acn, limit: 1 } : { serialNumber: serial, limit: 1 }
-      const { data } = await axios.get('/inventory-records', { params })
-      const rec = (data?.records || [])[0]
-      if (!rec) {
-        error.value = 'No matching inventory record found for this ACN/Serial'
-        return
-      }
-      recordId = rec._id
-    } catch (e) {
-      error.value = e?.response?.data?.message || e.message || 'Failed to locate inventory record'
-      return
-    }
-  }
-  if (!acn && !serial) {
-    error.value = 'Ticket lacks ACN or serial number to locate item'
-    return
-  }
-  if (!acn && !serial) {
-    error.value = 'Ticket lacks ACN or serial number to locate item'
-    return
-  }
-  // Map UI labels to inventory item statuses
-  const chosen = assetStatus.value
-  let mapped = chosen
-  if (chosen === 'repaired') mapped = 'deployed'
-  else if (chosen === 'claimed') mapped = 'returned'
-  else if (chosen === 'under_repair') mapped = 'under_repair'
-  else if (chosen === 'for_disposal') mapped = 'for_disposal'
-
-  updatingAsset.value = true
-  error.value = ''
-  try {
-    const body = { status: mapped, statusNotes: assetStatusNotes.value || '' }
-    if (serial) body.serialNumber = serial
-    else body.acn = acn
-    await axios.patch(`/inventory-records/${recordId}/items/status`, body)
-    // Reload to reflect changes; fetchTicket shows ticket, but ACN status is not on ticket
-    await fetchTicket()
-  } catch (e) {
-    error.value = e?.response?.data?.message || e.message || 'Failed to update asset status'
-  } finally {
-    updatingAsset.value = false
-  }
-}
 </script>
 
 <template>
   <DefaultLayout>
+    <BreadcrumbDefault pageTitle="Repair Ticket Details" />
     <div class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-black dark:text-white">Repair Ticket</h1>
@@ -174,7 +166,7 @@ async function updateAssetItemStatus() {
             <p class="text-xs text-bodydark2 mt-1">Ticket ID: {{ id }}</p>
           </div>
           <span v-if="ticket" :class="`inline-block px-3 py-1 rounded text-xs font-medium ${statusBadgeClass(ticket.status)}`">
-            {{ ticket.status || '—' }}
+            {{ labelForStatus(ticket.status) }}
           </span>
         </div>
       </div>
@@ -182,6 +174,20 @@ async function updateAssetItemStatus() {
       <div class="p-6">
         <div v-if="loading" class="text-sm">Loading ticket...</div>
         <div v-else-if="error" class="text-danger text-sm">{{ error }}</div>
+
+        <!-- Link to Inventory Record -->
+        <div v-if="ticket?.acn || ticket?.serialNumber" class="mb-4">
+          <router-link 
+            :to="{ name: 'InventoryRecord', query: { acn: ticket.acn, serialNumber: ticket.serialNumber } }"
+            class="text-primary hover:underline flex items-center gap-1 text-sm"
+          >
+            <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+              <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"/>
+            </svg>
+            View in Inventory Records
+          </router-link>
+        </div>
 
         <div v-else-if="ticket" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div>
@@ -236,9 +242,60 @@ async function updateAssetItemStatus() {
           <div class="text-sm bg-gray-50 dark:bg-meta-4 p-3 rounded">{{ ticket.repairRemarks }}</div>
         </div>
 
-        <!-- Actions: Ticket status update -->
+        <!-- Repair History -->
+        <div v-if="repairHistory.length > 0" class="mb-6">
+          <div class="font-medium mb-3">Repair History ({{ repairHistory.length }} previous repairs)</div>
+          <div class="space-y-2">
+            <div 
+              v-for="h in repairHistory" 
+              :key="h._id" 
+              class="flex justify-between items-start p-3 bg-gray-50 dark:bg-meta-4 rounded border border-stroke dark:border-strokedark hover:bg-gray-100 dark:hover:bg-meta-4/80 cursor-pointer transition"
+              @click="router.push(`/maintenance/${h._id}`)"
+            >
+              <div class="flex-1">
+                <div class="text-sm font-medium">{{ h.ticketNumber }}</div>
+                <div class="text-xs text-bodydark2 mt-1">{{ h.issue }}</div>
+                <div v-if="h.serviceProvider" class="text-xs text-bodydark2 mt-1">
+                  Provider: {{ h.serviceProvider }}
+                </div>
+              </div>
+              <div class="text-right ml-4">
+                <div class="text-xs text-bodydark2">{{ formatDate(h.dateSent) }}</div>
+                <span :class="`inline-block px-2 py-1 rounded text-xs font-medium mt-1 ${statusBadgeClass(h.status)}`">
+                  {{ labelForStatus(h.status) }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-else-if="loadingHistory" class="mb-6 text-sm text-bodydark2">
+          Loading repair history...
+        </div>
+
+        <!-- Cost Tracking Summary -->
+        <div v-if="ticket && (ticket.estimatedCost || ticket.actualCost)" class="mb-6 p-4 rounded border border-stroke" :class="costDifference && costDifference > 0 ? 'bg-red-50 border-danger' : costDifference && costDifference < 0 ? 'bg-green-50 border-success' : 'bg-blue-50'">
+          <div class="font-medium mb-2">Cost Summary</div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <div class="text-xs text-bodydark2 mb-1">Estimated Cost</div>
+              <div class="text-lg font-semibold">₱{{ Number(ticket.estimatedCost || 0).toLocaleString() }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-bodydark2 mb-1">Actual Cost</div>
+              <div class="text-lg font-semibold">₱{{ Number(ticket.actualCost || 0).toLocaleString() }}</div>
+            </div>
+          </div>
+          <div v-if="costDifference !== null" class="mt-3 pt-3 border-t" :class="costDifference > 0 ? 'border-danger' : 'border-success'">
+            <div class="text-sm font-medium" :class="costDifference > 0 ? 'text-danger' : 'text-success'">
+              {{ costDifference > 0 ? 'Over' : 'Under' }} budget by ₱{{ Math.abs(costDifference).toLocaleString() }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions: Consolidated Status Update -->
         <div v-if="ticket" class="mb-6 rounded border border-stroke p-4 bg-gray-50">
-          <div class="font-medium mb-3">Update Ticket Status</div>
+          <div class="font-medium mb-3">Update Status & Details</div>
+          <p class="text-xs text-bodydark2 mb-3">Updating the status here will automatically sync with the inventory record</p>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
             <div>
               <label class="block text-xs mb-1">Ticket Status</label>
@@ -253,6 +310,26 @@ async function updateAssetItemStatus() {
               <label class="block text-xs mb-1">Return Date</label>
               <input type="date" v-model="returnDate" class="w-full border rounded px-3 py-2 bg-white" />
             </div>
+            <div>
+              <label class="block text-xs mb-1">Estimated Cost</label>
+              <input 
+                v-model="estimatedCost" 
+                type="number" 
+                step="0.01"
+                class="w-full border rounded px-3 py-2 bg-white"
+                placeholder="0.00"
+              />
+            </div>
+            <div>
+              <label class="block text-xs mb-1">Actual Cost</label>
+              <input 
+                v-model="actualCost" 
+                type="number" 
+                step="0.01"
+                class="w-full border rounded px-3 py-2 bg-white"
+                placeholder="0.00"
+              />
+            </div>
             <div class="md:col-span-3">
               <label class="block text-xs mb-1">Repair Remarks</label>
               <textarea v-model="repairRemarks" rows="2" class="w-full border rounded px-3 py-2"></textarea>
@@ -264,38 +341,7 @@ async function updateAssetItemStatus() {
                 @click="updateTicketStatus"
                 class="bg-primary text-white px-4 py-2 rounded"
               >
-                {{ updatingTicket ? 'Updating...' : 'Save Ticket Status' }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Actions: Asset status update -->
-        <div v-if="ticket" class="rounded border border-stroke p-4 bg-gray-50">
-          <div class="font-medium mb-3">Update Asset Status</div>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-            <div>
-              <label class="block text-xs mb-1">Asset Status</label>
-              <select v-model="assetStatus" class="w-full border rounded px-3 py-2 bg-white">
-                <option value="under_repair">Under Repair</option>
-                <option value="repaired">Repaired</option>
-                <option value="claimed">Claimed</option>
-                <option value="for_disposal">For Disposal</option>
-              </select>
-            </div>
-            <div class="md:col-span-2">
-              <label class="block text-xs mb-1">Notes</label>
-              <input v-model="assetStatusNotes" type="text" class="w-full border rounded px-3 py-2 bg-white" />
-            </div>
-            <div>
-              <button
-                type="button"
-                :disabled="updatingAsset"
-                @click="updateAssetItemStatus"
-                class="border px-4 py-2 rounded"
-                title="Applies status using ACN/Serial to the linked inventory item"
-              >
-                {{ updatingAsset ? 'Updating...' : 'Save Asset Status' }}
+                {{ updatingTicket ? 'Updating...' : 'Save Changes' }}
               </button>
             </div>
           </div>

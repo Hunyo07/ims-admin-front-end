@@ -147,12 +147,18 @@ const allMenuGroups = ref([
         children: [
           { label: 'Memorandum Receipt', route: '/mr', roles: ['superadmin', 'admin', 'staff'] },
           {
-            label: 'Repair & Maintenance ',
-            route: '/maintenance',
+            label: 'Repair & Maintenance',
+            route: '/maintenance/logs',
             roles: ['superadmin', 'admin', 'staff']
           },
           { label: 'Disposal', route: '/disposal', roles: ['superadmin', 'admin', 'staff'] },
-          { label: 'Borrow Items', route: '/borrow', roles: ['superadmin', 'admin', 'staff'] }
+          { label: 'Borrow Items', route: '/borrow', roles: ['superadmin', 'admin', 'staff'] },
+          { 
+            label: 'Warranty & Returns', 
+            route: '/warranty/supplier-returns', 
+            roles: ['superadmin', 'admin', 'staff'],
+            permissions: ['view_supplier_returns']
+          }
         ],
         roles: ['superadmin', 'admin', 'staff']
       },

@@ -89,7 +89,8 @@ const getAssignmentForRow = (row) => {
 // Prefer inventory record statusDate for deployed date display
 const getDeployedAtForRow = (row) => {
   const assign = getAssignmentForRow(row)
-  const candidate = (assign?.status === 'deployed' ? assign.statusDate : null) || row.deployedAt || ''
+  const candidate =
+    (assign?.status === 'deployed' ? assign.statusDate : null) || row.deployedAt || ''
   return candidate
 }
 
@@ -103,7 +104,12 @@ const formatDateForDisplay = (val) => {
 // Determine effective item status preferring assignment map
 const getEffectiveStatusForRow = (row) => {
   const assign = getAssignmentForRow(row)
-  return assign?.status || row.status || 'pending'
+  // If this specific ACN/Serial is assigned in inventory, use that status
+  if (assign?.assigned) {
+    return assign.status || 'deployed'
+  }
+  // If not assigned in inventory, it's not actually deployed yet
+  return 'pending'
 }
 
 // Human-friendly label for status
@@ -330,6 +336,38 @@ const getDeploymentStatusClass = (status) => {
     default:
       return 'bg-warning/10 text-warning'
   }
+}
+
+const getInventoryStatusClass = (status) => {
+  switch (status) {
+    case 'deployed':
+      return 'bg-success/10 text-success'
+    case 'under_repair':
+    case 'repair':
+      return 'bg-warning/10 text-warning'
+    case 'returned':
+      return 'bg-primary/10 text-primary'
+    case 'retired':
+    case 'for_disposal':
+      return 'bg-danger/10 text-danger'
+    case 'replaced':
+      return 'bg-bodydark/10 text-bodydark'
+    default:
+      return 'bg-gray/10 text-gray'
+  }
+}
+
+const formatInventoryStatusLabel = (status) => {
+  const labels = {
+    deployed: 'Deployed',
+    under_repair: 'Under Repair',
+    repair: 'Repair',
+    returned: 'Returned',
+    retired: 'Retired',
+    for_disposal: 'For Disposal',
+    replaced: 'Replaced'
+  }
+  return labels[status] || status
 }
 
 onMounted(() => {
@@ -585,13 +623,39 @@ onMounted(() => {
                   <span class="text-sm">{{ getAssignmentForRow(row)?.department || '—' }}</span>
                 </td>
                 <td class="py-3 px-4">
-                  <span
-                    :class="`inline-block px-2 py-1 rounded text-xs font-medium ${getDeploymentStatusClass(
-                      getEffectiveStatusForRow(row)
-                    )}`"
-                  >
-                    {{ formatStatusLabel(getEffectiveStatusForRow(row)) }}
-                  </span>
+                  <div class="flex flex-col gap-1">
+                    <!-- Item Status (from inventory if assigned, otherwise pending) -->
+                    <div class="flex items-center gap-2">
+                      <span
+                        :class="`inline-block px-2 py-1 rounded text-xs font-medium ${
+                          getAssignmentForRow(row)?.assigned
+                            ? getInventoryStatusClass(getAssignmentForRow(row).status)
+                            : 'bg-warning/10 text-warning'
+                        }`"
+                      >
+                        {{
+                          getAssignmentForRow(row)?.assigned
+                            ? formatInventoryStatusLabel(getAssignmentForRow(row).status)
+                            : 'Pending'
+                        }}
+                      </span>
+                    </div>
+
+                    <!-- Repair Ticket Link (if under repair) -->
+                    <div v-if="getAssignmentForRow(row)?.repairTicket" class="mt-1">
+                      <router-link
+                        :to="`/maintenance/repair/${getAssignmentForRow(row).repairTicket}`"
+                        class="text-xs text-primary hover:underline flex items-center gap-1"
+                      >
+                        <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path
+                            d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"
+                          />
+                        </svg>
+                        {{ getAssignmentForRow(row).repairTicketNumber }}
+                      </router-link>
+                    </div>
+                  </div>
                 </td>
                 <td class="py-3 px-4">
                   <span class="text-sm">

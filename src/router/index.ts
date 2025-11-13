@@ -4,10 +4,14 @@ import { createRouter, createWebHistory } from 'vue-router'
 // import CreatSaleView from '../views/Sales/CreateSaleView.vue'
 const RISListView = () => import('../views/Inventory/RISListView.vue')
 const RISDetailView = () => import('../views/Inventory/RISDetailView.vue')
-
 const RISPrintView = () => import('../views/Inventory/RISPrintView.vue')
 const CreateRISView = () => import('../views/Inventory/CreateRISView.vue')
 const DepartmentManagementView = () => import('../views/Department/DepartmentManagementView.vue')
+
+// Lazy load warranty components
+const SupplierReturnListView = () => import('../views/Warranty/SupplierReturnListView.vue')
+const CreateSupplierReturnView = () => import('../views/Warranty/CreateSupplierReturnView.vue')
+const SupplierReturnDetailView = () => import('../views/Warranty/SupplierReturnDetailView.vue')
 
 const routes = [
   {
@@ -191,6 +195,41 @@ const routes = [
     component: () => import('../views/Inventory/DeliveryReceiptDetail.vue'),
     meta: { title: 'Delivery Receipt Detail', requiresAuth: true }
   },
+  // Warranty & Supplier Returns routes
+  {
+    path: '/warranty/supplier-returns',
+    name: 'supplier-returns',
+    component: SupplierReturnListView,
+    meta: {
+      title: 'Supplier Returns',
+      requiresAuth: true,
+      roles: ['superadmin', 'admin', 'staff'],
+      permissions: ['view_supplier_returns']
+    }
+  },
+  {
+    path: '/warranty/supplier-returns/new',
+    name: 'create-supplier-return',
+    component: CreateSupplierReturnView,
+    meta: {
+      title: 'Create Supplier Return',
+      requiresAuth: true,
+      roles: ['superadmin', 'admin', 'staff'],
+      permissions: ['create_supplier_returns']
+    }
+  },
+  {
+    path: '/warranty/supplier-returns/:id',
+    name: 'supplier-return-detail',
+    component: SupplierReturnDetailView,
+    meta: {
+      title: 'Supplier Return Details',
+      requiresAuth: true,
+      roles: ['superadmin', 'admin', 'staff'],
+      permissions: ['view_supplier_returns']
+    },
+    props: true
+  },
   // MR routes
   {
     path: '/mr',
@@ -228,6 +267,25 @@ const routes = [
     name: 'maintenance-detail',
     component: () => import('../views/Maintenance/MaintenanceDetailView.vue'),
     meta: { title: 'Repair Ticket Detail', requiresAuth: true }
+  },
+  // Repair Log routes (new log-based workflow)
+  {
+    path: '/maintenance/logs',
+    name: 'repair-log-list',
+    component: () => import('../views/Maintenance/RepairLogListView.vue'),
+    meta: { title: 'Repair Logs', requiresAuth: true }
+  },
+  {
+    path: '/maintenance/logs/create',
+    name: 'repair-log-create',
+    component: () => import('../views/Maintenance/CreateRepairLogView.vue'),
+    meta: { title: 'Create Repair Log', requiresAuth: true }
+  },
+  {
+    path: '/maintenance/logs/:id',
+    name: 'repair-log-detail',
+    component: () => import('../views/Maintenance/RepairLogDetailView.vue'),
+    meta: { title: 'Repair Log Detail', requiresAuth: true }
   },
   // Disposal routes
   {
