@@ -112,6 +112,23 @@ const submitClaim = async () => {
     })
     const data = await res.json()
     if (!data.success) throw new Error(data.message || 'Failed to mark claimed')
+
+    await fetch(`${apiBase}/maintenance/logs/${selectedLog.value._id}/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
+      body: JSON.stringify({
+        consultFindings: '',
+        actionTaken: '',
+        result: 'repaired',
+        repairedStatus: 'claim_now',
+        claimDetails: {
+          dateClaimed: claimForm.value.dateClaimed,
+          claimedBy: claimForm.value.claimedBy,
+          remarks: claimForm.value.remarks
+        },
+        replacementParts: []
+      })
+    })
     await fetchLogs()
     closeClaim()
   } catch (e) {

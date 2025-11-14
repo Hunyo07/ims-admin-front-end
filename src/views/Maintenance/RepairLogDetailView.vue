@@ -13,11 +13,6 @@ const log = ref(null)
 const loading = ref(false)
 const error = ref('')
 
-// Removed unused action/replacement form state
-
-// Removed unused employee picker state
-
-// Linked statuses
 const inventoryItemStatus = ref(null)
 const drItemStatus = ref(null)
 // Linked item details for spec-based part suggestions
@@ -44,6 +39,10 @@ const getStatusBadge = (s) => {
 const acnRecord = ref(null)
 const acnItem = ref(null)
 const acnIsSecondary = ref(false)
+const repairCount = ref(0)
+const acnHistoryActions = ref([])
+const loadingAcnHistory = ref(false)
+const acnHistoryError = ref('')
 
 const fetchProductName = async (pid) => {
   try {
@@ -113,6 +112,8 @@ const fetchLog = async () => {
     log.value = data.log
     // Fetch linked statuses once log is loaded
     await fetchLinkedStatuses()
+    await fetchRepairCount()
+    await fetchAcnHistory()
   } catch (e) {
     error.value = e.message || String(e)
   } finally {
@@ -147,9 +148,29 @@ const fetchLinkedStatuses = async () => {
       return
     }
 
-    const { data } = await axios.get('/inventory-records', { params })
-    const records = data?.records || []
-    const rec = Array.isArray(records) && records.length ? records[0] : null
+    // First attempt: query with direct params (acn or serial)
+    let { data } = await axios.get('/inventory-records', { params })
+    let records = data?.records || []
+    let rec = Array.isArray(records) && records.length ? records[0] : null
+
+    // Fallback: if searching by ACN did not return a record, broaden the search
+    if (!rec && acn) {
+      const fbParams = { status: 'deployed', limit: 25, page: 1 }
+      const fbRes = await axios.get('/inventory-records', { params: fbParams })
+      const fbRecords = fbRes?.data?.records || []
+      // Find any record whose item's secondaryItems contain this ACN
+      rec =
+        fbRecords.find((r) =>
+          (r.items || []).some(
+            (it) =>
+              Array.isArray(it.secondaryItems) &&
+              it.secondaryItems.some(
+                (s) => String(s?.acn || '').toUpperCase() === acn.toUpperCase()
+              )
+          )
+        ) || null
+    }
+
     if (!rec) {
       inventoryItemStatus.value = null
       drItemStatus.value = null
@@ -220,7 +241,7 @@ const fetchLinkedStatuses = async () => {
           if (pname) acnItem.value = { ...item, productName: pname }
         }
       } catch (_) {
-        console.log(e)
+        console.log(_)
       }
     } else {
       inventoryItemStatus.value = null
@@ -250,7 +271,6 @@ const fetchLinkedStatuses = async () => {
       drItemStatus.value = null
     }
   } catch (err) {
-    // Do not surface errors loudly; keep panel silent
     inventoryItemStatus.value = null
     drItemStatus.value = null
     acnRecord.value = null
@@ -261,6 +281,127 @@ const fetchLinkedStatuses = async () => {
 
 onMounted(fetchLog)
 watch(() => route.params.id, fetchLog)
+
+const fetchRepairCount = async () => {
+  try {
+    const acn = String(log.value?.acn || '').trim()
+    const serial = String(log.value?.serialNumber || '').trim()
+    if (!acn && !serial) {
+      repairCount.value = 0
+      return
+    }
+    const url = new URL(`${apiBase}/maintenance/logs`)
+    url.searchParams.set('status', 'repaired')
+    if (acn) url.searchParams.set('acn', acn)
+    else url.searchParams.set('serialNumber', serial)
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${auth.token}` }
+    })
+    const data = await res.json()
+    const arr = Array.isArray(data?.logs) ? data.logs : []
+    repairCount.value = arr.length
+  } catch (_) {
+    repairCount.value = 0
+  }
+}
+
+const fetchAcnHistory = async () => {
+  try {
+    loadingAcnHistory.value = true
+    acnHistoryError.value = ''
+    acnHistoryActions.value = []
+    const acn = String(log.value?.acn || '').trim()
+    const serial = String(log.value?.serialNumber || '').trim()
+    if (!acn && !serial) {
+      loadingAcnHistory.value = false
+      return
+    }
+    const url = new URL(`${apiBase}/maintenance/logs`)
+    if (acn) url.searchParams.set('acn', acn)
+    else url.searchParams.set('serialNumber', serial)
+    url.searchParams.set('limit', '50')
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${auth.token}` }
+    })
+    const data = await res.json()
+    const list = Array.isArray(data?.logs) ? data.logs : []
+    const others = list.filter((l) => String(l._id) !== String(route.params.id))
+    const details = [log.value]
+    for (const item of others) {
+      try {
+        const r = await fetch(`${apiBase}/maintenance/logs/${item._id}`, {
+          headers: { Authorization: `Bearer ${auth.token}` }
+        })
+        const d = await r.json()
+        if (d?.success && d?.log) details.push(d.log)
+      } catch (_) {
+        acnHistoryError.value = ''
+      }
+    }
+    const timeline = []
+    for (const dlog of details) {
+      const actions = Array.isArray(dlog.actions) ? dlog.actions : []
+      let hasClaimEntry = false
+      let hasDisposalEntry = false
+      for (const a of actions) {
+        const entry = {
+          date: a.dateUpdated || dlog.updatedAt || dlog.createdAt,
+          logNumber: dlog.logNumber,
+          result: a.result,
+          consultFindings: a.consultFindings,
+          actionTaken: a.actionTaken,
+          updatedBy: a.updatedBy,
+          claimDetails: a.claimDetails,
+          replacementParts: Array.isArray(dlog.replacementParts) ? dlog.replacementParts : []
+        }
+        if (entry.claimDetails) hasClaimEntry = true
+        if (entry.result === 'beyond_repair' || entry.result === 'for_disposal')
+          hasDisposalEntry = true
+        timeline.push(entry)
+      }
+
+      if (String(dlog.status) === 'claimed' && !hasClaimEntry) {
+        const cd = dlog.claimDetails ||
+          dlog.claim || {
+            dateClaimed: dlog.dateClaimed,
+            claimedBy: dlog.claimedBy,
+            remarks: dlog.claimRemarks
+          }
+        if (cd && (cd.dateClaimed || cd.claimedBy || cd.remarks)) {
+          timeline.push({
+            date: cd.dateClaimed || dlog.updatedAt || dlog.createdAt,
+            logNumber: dlog.logNumber,
+            result: 'claimed',
+            consultFindings: '',
+            actionTaken: '',
+            updatedBy: null,
+            claimDetails: cd,
+            replacementParts: []
+          })
+        }
+      }
+
+      if (String(dlog.status) === 'for_disposal' && !hasDisposalEntry) {
+        timeline.push({
+          date: dlog.updatedAt || dlog.createdAt,
+          logNumber: dlog.logNumber,
+          result: 'for_disposal',
+          consultFindings: '',
+          actionTaken: '',
+          updatedBy: null,
+          claimDetails: null,
+          replacementParts: []
+        })
+      }
+    }
+    timeline.sort((x, y) => new Date(x.date).getTime() - new Date(y.date).getTime())
+    acnHistoryActions.value = timeline
+  } catch (e) {
+    acnHistoryError.value = e.message || String(e)
+  } finally {
+    loadingAcnHistory.value = false
+  }
+}
 </script>
 
 <template>
@@ -307,6 +448,7 @@ watch(() => route.params.id, fetchLog)
                 }}</span>
               </div>
               <div><span class="font-medium">ACN:</span> {{ log.acn || '—' }}</div>
+              <div><span class="font-medium">Repairs:</span> {{ repairCount }}</div>
               <div v-if="!acnIsSecondary">
                 <span class="font-medium">Item:</span> {{ descText || '—' }}
               </div>
@@ -345,15 +487,68 @@ watch(() => route.params.id, fetchLog)
             <ul class="space-y-2">
               <li v-for="(a, i) in log.actions || []" :key="i" class="border rounded p-2">
                 <div class="text-sm text-gray-600">
-                  {{ new Date(a.dateUpdated).toLocaleString() }}
+                  {{ new Date(a.dateUpdated || a.updatedAt || a.createdAt).toLocaleString() }}
                 </div>
-                <div><span class="font-medium">Result:</span> {{ a.result || '—' }}</div>
+                <div><span class="font-medium">Result:</span> {{ a.claimDetails ? 'claimed' : (a.result || '—') }}</div>
                 <div><span class="font-medium">Findings:</span> {{ a.consultFindings || '—' }}</div>
                 <div><span class="font-medium">Action:</span> {{ a.actionTaken || '—' }}</div>
                 <div>
                   <span class="font-medium">Updated by:</span> {{ a.updatedBy?.name || '—' }}
                 </div>
               </li>
+            </ul>
+          </div>
+
+          <div
+            class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark p-4"
+          >
+            <h3 class="font-semibold mb-2">ACN Repair History</h3>
+            <div v-if="loadingAcnHistory" class="text-sm text-gray-600">Loading history...</div>
+            <div v-else-if="acnHistoryError" class="text-sm text-danger">{{ acnHistoryError }}</div>
+            <ul v-else class="space-y-2">
+              <li v-for="(h, idx) in acnHistoryActions" :key="idx" class="border rounded p-2">
+                <div class="flex justify-between items-center">
+                  <div class="text-sm text-gray-600">{{ new Date(h.date).toLocaleString() }}</div>
+                  <div class="text-xs text-bodydark2">Log {{ h.logNumber }}</div>
+                </div>
+                <div><span class="font-medium">Result:</span> {{ h.claimDetails ? 'claimed' : (h.result || '—') }}</div>
+                <div v-if="h.consultFindings">
+                  <span class="font-medium">Findings:</span> {{ h.consultFindings }}
+                </div>
+                <div v-if="h.actionTaken">
+                  <span class="font-medium">Action:</span> {{ h.actionTaken }}
+                </div>
+                <div v-if="h.updatedBy">
+                  <span class="font-medium">Updated by:</span> {{ h.updatedBy?.name || '—' }}
+                </div>
+                <div v-if="h.claimDetails" class="mt-1 text-sm">
+                  <div>
+                    <span class="font-medium">Claimed Date:</span>
+                    {{ h.claimDetails?.dateClaimed || '—' }}
+                  </div>
+                  <div>
+                    <span class="font-medium">Claimed By:</span>
+                    {{ h.claimDetails?.claimedBy || '—' }}
+                  </div>
+                  <div v-if="h.claimDetails?.remarks">
+                    <span class="font-medium">Remarks:</span> {{ h.claimDetails?.remarks }}
+                  </div>
+                </div>
+                <div
+                  v-if="Array.isArray(h.replacementParts) && h.replacementParts.length"
+                  class="mt-1 text-sm"
+                >
+                  <div class="font-medium">Replacement Parts</div>
+                  <div class="text-xs text-bodydark2">
+                    <span v-for="(rp, i) in h.replacementParts" :key="i" class="inline-block mr-2">
+                      {{ rp.part }} x{{ rp.quantity }}
+                    </span>
+                  </div>
+                </div>
+              </li>
+              <!-- <li v-if="acnHistoryActions.length === 0" class="text-sm text-bodydark2">
+                No history found
+              </li> -->
             </ul>
           </div>
           <div

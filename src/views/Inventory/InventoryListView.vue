@@ -199,7 +199,7 @@
   </DefaultLayout>
 </template>
 
-<script setup lang="ts">
+<script setup>
 import { ref, computed } from 'vue'
 import DefaultLayout from '../../layouts/DefaultLayout.vue'
 
@@ -212,7 +212,7 @@ const header = ref({
   recordType: ''
 })
 const primary = ref({ desktopQty: 0, laptopQty: 0 })
-const cards = ref<any[]>([])
+const cards = ref([])
 
 function generateCards() {
   cards.value = []
@@ -241,7 +241,7 @@ function generateCards() {
       showAddSecondary: false
     })
 }
-function copyPrevious(idx: number) {
+function copyPrevious(idx) {
   cards.value[idx] = {
     ...cards.value[idx - 1],
     category: cards.value[idx].category,
@@ -251,10 +251,10 @@ function copyPrevious(idx: number) {
 
 const newSecondary = ref({ type: 'monitor', item: '', acn: '', remarks: '', duplicate: false })
 const acnsUsed = computed(() => {
-  const s = new Set<string>()
+  const s = new Set()
   cards.value.forEach((c) => {
     if (c.acn) s.add(c.acn)
-    c.secondaries.forEach((x: any) => {
+    c.secondaries.forEach((x) => {
       if (x.acn) s.add(x.acn)
     })
   })
@@ -262,7 +262,7 @@ const acnsUsed = computed(() => {
 })
 const acnCount = computed(() => acnsUsed.value.size)
 
-function addSecondary(idx: number) {
+function addSecondary(idx) {
   const s = { ...newSecondary.value }
   if (!s.item || !s.acn) {
     alert('Secondary Item and ACN are required')
@@ -282,7 +282,7 @@ function addSecondary(idx: number) {
 }
 
 function validateAll() {
-  const errs: string[] = []
+  const errs = []
   cards.value.forEach((c, i) => {
     if (!c.employee) errs.push(`Card ${i + 1}: Employee required`)
     if (!c.item) errs.push(`Card ${i + 1}: Item required`)
