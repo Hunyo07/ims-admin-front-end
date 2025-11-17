@@ -1,11 +1,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import axios from '@/utils/axios'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
 
 const router = useRouter()
+const route = useRoute()
 const inventoryRecordId = ref('')
 const itemId = ref('')
 const acn = ref('')
@@ -36,6 +37,40 @@ const onRecordSelect = () => {
     description.value = item.description
     acn.value = item.acn
     serialNumber.value = item.serialNumber
+  }
+}
+
+const prefillFromQuery = () => {
+  const q = route.query || {}
+  const qInv = String(q.inventoryRecordId || '')
+  const qItem = String(q.itemId || '')
+  const qAcn = String(q.acn || '')
+  const qSerial = String(q.serialNumber || '')
+  const qDesc = String(q.description || '')
+
+  if (qInv) inventoryRecordId.value = qInv
+  if (qItem) itemId.value = qItem
+  if (qAcn) acn.value = qAcn
+  if (qSerial) serialNumber.value = qSerial
+  if (qDesc) description.value = qDesc
+
+  // If we only received ACN/Serial, try to locate the matching record/item
+  if ((!qInv || !qItem) && (qAcn || qSerial) && Array.isArray(inventoryRecords.value)) {
+    for (const rec of inventoryRecords.value) {
+      const items = Array.isArray(rec.items) ? rec.items : []
+      for (const it of items) {
+        const matchAcn = qAcn && String(it.acn || '') === qAcn
+        const matchSerial = qSerial && String(it.serialNumber || '') === qSerial
+        if (matchAcn || matchSerial) {
+          inventoryRecordId.value = rec._id
+          itemId.value = it._id
+          description.value = qDesc || it.description || ''
+          acn.value = qAcn || it.acn || ''
+          serialNumber.value = qSerial || it.serialNumber || ''
+          return
+        }
+      }
+    }
   }
 }
 
@@ -75,7 +110,10 @@ const submitDisposal = async () => {
   }
 }
 
-onMounted(fetchInventoryRecords)
+onMounted(async () => {
+  await fetchInventoryRecords()
+  prefillFromQuery()
+})
 </script>
 
 <template>

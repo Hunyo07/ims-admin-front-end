@@ -295,6 +295,12 @@ const routes = [
     meta: { title: 'Create Disposal Record', requiresAuth: true }
   },
   {
+    path: '/disposal/bulk',
+    name: 'disposal-bulk',
+    component: () => import('../views/Disposal/BulkDisposalView.vue'),
+    meta: { title: 'Bulk Disposal', requiresAuth: true }
+  },
+  {
     path: '/disposal/:id',
     name: 'disposal-detail',
     component: () => import('../views/Disposal/DisposalDetailView.vue'),

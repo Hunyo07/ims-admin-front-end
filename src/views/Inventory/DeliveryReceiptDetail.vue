@@ -350,6 +350,8 @@ const getInventoryStatusClass = (status) => {
     case 'retired':
     case 'for_disposal':
       return 'bg-danger/10 text-danger'
+    case 'repaired':
+      return 'bg-sky-blue/100 text-bodydark'
     case 'replaced':
       return 'bg-bodydark/10 text-bodydark'
     default:

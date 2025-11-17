@@ -20,6 +20,8 @@ const form = ref({
 const loading = ref(false)
 const error = ref('')
 const success = ref('')
+const createdLog = ref(null)
+const downloading = ref(false)
 
 // Modal state
 const isOpen = ref(false)
@@ -61,7 +63,12 @@ const descText = computed(() => {
     const pn = sec.propertyNumber ? ` • ${sec.propertyNumber}` : ''
     return `${t}${pn}`.trim()
   }
-  return selectedItem.value?.productName || selectedItem.value?.name || selectedItem.value?.description || ''
+  return (
+    selectedItem.value?.productName ||
+    selectedItem.value?.name ||
+    selectedItem.value?.description ||
+    ''
+  )
 })
 const productText = computed(() => {
   if (isSecondary.value) return selectedItem.value?._selectedSecondary?.type || ''
@@ -73,8 +80,8 @@ const productText = computed(() => {
   )
 })
 const hasDescription = computed(() => !!descText.value)
-const hasEndUser = computed(() => !!(selectedItem.value?.endUserOrMR))
-const hasDepartment = computed(() => !!(selectedRecord.value?.department))
+const hasEndUser = computed(() => !!selectedItem.value?.endUserOrMR)
+const hasDepartment = computed(() => !!selectedRecord.value?.department)
 const hasProduct = computed(() => !!productText.value)
 const hasAnySpecs = computed(() => {
   if (isSecondary.value) return false
@@ -83,9 +90,13 @@ const hasAnySpecs = computed(() => {
 })
 
 const submit = async () => {
-  loading.value = true
   error.value = ''
   success.value = ''
+  if (!form.value.remarks || !form.value.remarks.trim()) {
+    error.value = 'Remarks is required.'
+    return
+  }
+  loading.value = true
   try {
     const payload = {
       acn: form.value.acn || undefined,
@@ -98,13 +109,87 @@ const submit = async () => {
       },
       technician: { name: form.value.technicianName || '' }
     }
+    payload.serialNumber =
+      (isSecondary.value
+        ? selectedItem.value?._selectedSecondary?.serialNumber
+        : selectedItem.value?.serialNumber) || undefined
+    payload.inventoryRecordId = selectedRecord.value?._id || undefined
+    payload.itemId = selectedItem.value?._id || undefined
     const { data } = await axios.post('/maintenance/logs', payload)
     if (!data?.success) throw new Error(data?.message || 'Failed to create repair log')
     success.value = `Created Repair Log ${data.log?.logNumber}`
+    createdLog.value = data.log || null
+    await downloadLabel()
   } catch (e) {
     error.value = e.response?.data?.message || e.message || String(e)
   } finally {
     loading.value = false
+  }
+}
+
+const downloadLabel = async () => {
+  if (!createdLog.value) return
+  downloading.value = true
+  try {
+    const name = form.value.broughtByName || ''
+    const dept = selectedRecord.value?.department || ''
+    const dstr = new Date(createdLog.value?.date || Date.now()).toISOString().slice(0, 10)
+    const remarks = form.value.remarks || ''
+    const canvas = document.createElement('canvas')
+    canvas.width = 800
+    canvas.height = 600
+    const ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = '#000000'
+    ctx.font = 'bold 28px Arial'
+    ctx.fillText(`Repair Log Number: ${createdLog.value?.logNumber || ''}`, 30, 60)
+    ctx.font = '20px Arial'
+    ctx.fillText(`Brought By: ${name}`, 30, 120)
+    ctx.fillText(`Department: ${dept}`, 30, 160)
+    ctx.fillText(`Date: ${dstr}`, 30, 200)
+    const drawWrapped = (t, x, y, maxWidth, lineHeight) => {
+      const words = String(t).split(' ')
+      let line = ''
+      let cursorY = y
+      for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' '
+        const metrics = ctx.measureText(testLine)
+        if (metrics.width > maxWidth && n > 0) {
+          ctx.fillText(line, x, cursorY)
+          line = words[n] + ' '
+          cursorY += lineHeight
+        } else {
+          line = testLine
+        }
+      }
+      if (line) ctx.fillText(line, x, cursorY)
+      return cursorY
+    }
+    ctx.fillText('Remarks:', 30, 240)
+    const lastY = drawWrapped(remarks, 30, 270, canvas.width - 60, 26)
+    ctx.strokeStyle = '#000000'
+    ctx.lineWidth = 3
+    const lineY = Math.min(canvas.height - 40, lastY + 40)
+    ctx.beginPath()
+    ctx.moveTo(30, lineY)
+    ctx.lineTo(canvas.width - 30, lineY)
+    ctx.stroke()
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob((b) => resolve(b || new Blob()), 'image/png')
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `repair-label-${createdLog.value.logNumber}.png`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  } catch (e) {
+    error.value = e?.message || 'Failed to download label'
+  } finally {
+    downloading.value = false
   }
 }
 </script>
@@ -124,16 +209,25 @@ const submit = async () => {
               class="bg-white dark:bg-boxdark z-10 flex items-center justify-between border-b border-stroke dark:border-strokedark"
             >
               <div>
-                <h2 class="text-xl font-semibold text-black dark:text-white">Create Repair Log</h2>
+                <h2 class="text-xl font-semibold text-black dark:text-white">Create Respair Log</h2>
                 <p class="text-xs text-bodydark2">Record a new maintenance or repair activity</p>
               </div>
-              <button
-                type="button"
-                @click="close"
-                class="px-3 py-1 rounded bg-gray-100 hover:bg-gray-200 text-sm"
-              >
-                Close
-              </button>
+              <div class="flex items-center gap-2">
+                <button
+                  @click="downloadLabel"
+                  :disabled="downloading || !createdLog"
+                  class="px-3 py-1 rounded border border-stroke bg-white text-black hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  {{ downloading ? 'Preparing...' : 'Download Label' }}
+                </button>
+                <button
+                  type="button"
+                  @click="close"
+                  class="px-3 py-1 rounded bg-gray-100 hover:bg-gray-200 text-sm"
+                >
+                  Close
+                </button>
+              </div>
             </div>
             <div
               v-if="error"
@@ -146,6 +240,16 @@ const submit = async () => {
               class="mb-3 p-3 rounded bg-success/10 text-success text-sm border border-success/20"
             >
               {{ success }}
+              <div class="mt-2">
+                <button
+                  v-if="createdLog"
+                  @click="downloadLabel"
+                  :disabled="downloading"
+                  class="px-3 py-1 rounded-sm border border-stroke bg-white text-black hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {{ downloading ? 'Preparing...' : 'Download Label' }}
+                </button>
+              </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -175,6 +279,7 @@ const submit = async () => {
                 <div>
                   <label class="block text-sm font-medium mb-2">Remarks</label>
                   <textarea
+                    required
                     v-model="form.remarks"
                     class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
                     placeholder="Remarks"
@@ -231,6 +336,13 @@ const submit = async () => {
                     {{ loading ? 'Creating...' : 'Create Log' }}
                   </button>
                   <button
+                    @click="downloadLabel"
+                    :disabled="downloading || !createdLog"
+                    class="px-4 py-2 rounded-sm border border-stroke bg-white text-black hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {{ downloading ? 'Preparing...' : 'Download Label' }}
+                  </button>
+                  <button
                     type="button"
                     @click="close"
                     class="px-4 py-2 rounded-sm border border-stroke bg-white text-black hover:bg-gray-50"
@@ -285,16 +397,27 @@ const submit = async () => {
                     </div>
                   </div>
                 </div>
-                <div class="mt-4" v-if="isSecondary && (selectedItem?._selectedSecondary?.propertyNumber || selectedItem?._selectedSecondary?.serialNumber)">
+                <div
+                  class="mt-4"
+                  v-if="
+                    isSecondary &&
+                    (selectedItem?._selectedSecondary?.propertyNumber ||
+                      selectedItem?._selectedSecondary?.serialNumber)
+                  "
+                >
                   <div class="text-sm text-bodydark2 mb-2">Secondary Item Details</div>
                   <div class="grid grid-cols-2 gap-3 text-sm">
                     <div v-if="selectedItem?._selectedSecondary?.propertyNumber">
                       <div class="text-bodydark2">Property #</div>
-                      <div class="font-medium">{{ selectedItem?._selectedSecondary?.propertyNumber }}</div>
+                      <div class="font-medium">
+                        {{ selectedItem?._selectedSecondary?.propertyNumber }}
+                      </div>
                     </div>
                     <div v-if="selectedItem?._selectedSecondary?.serialNumber">
                       <div class="text-bodydark2">Serial</div>
-                      <div class="font-medium">{{ selectedItem?._selectedSecondary?.serialNumber }}</div>
+                      <div class="font-medium">
+                        {{ selectedItem?._selectedSecondary?.serialNumber }}
+                      </div>
                     </div>
                   </div>
                 </div>

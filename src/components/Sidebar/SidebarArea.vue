@@ -98,6 +98,14 @@ const allMenuGroups = ref([
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
+                <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/>
+              </svg>`,
+        label: 'Borrow Items',
+        route: '/borrow',
+        roles: ['superadmin', 'admin', 'staff']
+      },
+      {
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
                 <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 14H4v-4h11v4zm0-5H4V9h11v4zm5 5h-4V9h4v9z"/>
               </svg>`,
         label: 'Inventory ',
@@ -152,10 +160,9 @@ const allMenuGroups = ref([
             roles: ['superadmin', 'admin', 'staff']
           },
           { label: 'Disposal', route: '/disposal', roles: ['superadmin', 'admin', 'staff'] },
-          { label: 'Borrow Items', route: '/borrow', roles: ['superadmin', 'admin', 'staff'] },
-          { 
-            label: 'Warranty & Returns', 
-            route: '/warranty/supplier-returns', 
+          {
+            label: 'Warranty & Returns',
+            route: '/warranty/supplier-returns',
             roles: ['superadmin', 'admin', 'staff'],
             permissions: ['view_supplier_returns']
           }

@@ -43,6 +43,33 @@ const repairCount = ref(0)
 const acnHistoryActions = ref([])
 const loadingAcnHistory = ref(false)
 const acnHistoryError = ref('')
+const acnHistoryFilter = ref('all')
+const acnHistorySort = ref('asc')
+const filteredAcnHistory = computed(() => {
+  const arr = Array.isArray(acnHistoryActions.value) ? [...acnHistoryActions.value] : []
+  let f = arr
+  if (acnHistoryFilter.value === 'claimed') {
+    f = f.filter((h) => h.claimDetails || h.result === 'claimed')
+  } else if (acnHistoryFilter.value === 'disposal') {
+    f = f.filter((h) => h.result === 'for_disposal' || h.result === 'beyond_repair')
+  } else if (acnHistoryFilter.value === 'repairs') {
+    f = f.filter(
+      (h) =>
+        !(
+          h.claimDetails ||
+          h.result === 'claimed' ||
+          h.result === 'for_disposal' ||
+          h.result === 'beyond_repair'
+        )
+    )
+  }
+  f.sort((x, y) => {
+    const dx = new Date(x.date).getTime()
+    const dy = new Date(y.date).getTime()
+    return acnHistorySort.value === 'desc' ? dy - dx : dx - dy
+  })
+  return f
+})
 
 const fetchProductName = async (pid) => {
   try {
@@ -98,6 +125,71 @@ const hasAnySpecs = computed(() => {
     return !!(s1 || s2 || linkedItemSpecs.value)
   }
 })
+
+const effectiveStatus = computed(() => {
+  const logStatus = String(log.value?.status || '').trim()
+  if (logStatus) return logStatus
+  const inv = String(inventoryItemStatus.value?.status || '').trim()
+  if (!inv) return ''
+  if (inv === 'for_disposal') return 'for_disposal'
+  if (inv === 'deployed' || inv === 'returned') return 'repaired'
+  if (inv === 'repair' || inv === 'under_repair') return 'under_repair'
+  if (inv === 'replaced') return 'pending_replacement'
+  return inv
+})
+
+const formatTimelineDate = (entry) => {
+  const format = (value) => {
+    const dt = new Date(value)
+    const time = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return `${dt.toLocaleDateString()} ${time}`
+  }
+
+  const ca = entry?.claimDetails?.claimedAt
+  if (ca) {
+    try {
+      return format(ca)
+    } catch (_) {
+      return String(ca)
+    }
+  }
+
+  const d = entry?.claimDetails?.dateClaimed
+  if (d) {
+    try {
+      return format(d)
+    } catch (_) {
+      return String(d)
+    }
+  }
+
+  try {
+    return format(entry?.date)
+  } catch (_) {
+    return String(entry?.date || '')
+  }
+}
+
+const formatDateOnly = (val) => {
+  if (!val) return ''
+  const s = String(val)
+  try {
+    const hasTime = s.includes('T')
+    const d = new Date(hasTime ? s : s + 'T00:00:00')
+    return d.toLocaleDateString()
+  } catch (_) {
+    return s
+  }
+}
+
+const formatDateTime = (val) => {
+  if (!val) return ''
+  try {
+    return new Date(val).toLocaleString()
+  } catch (_) {
+    return String(val)
+  }
+}
 
 const fetchLog = async () => {
   loading.value = true
@@ -352,6 +444,7 @@ const fetchAcnHistory = async () => {
           actionTaken: a.actionTaken,
           updatedBy: a.updatedBy,
           claimDetails: a.claimDetails,
+          disposalDetails: a.disposalDetails,
           replacementParts: Array.isArray(dlog.replacementParts) ? dlog.replacementParts : []
         }
         if (entry.claimDetails) hasClaimEntry = true
@@ -360,7 +453,10 @@ const fetchAcnHistory = async () => {
         timeline.push(entry)
       }
 
-      if (String(dlog.status) === 'claimed' && !hasClaimEntry) {
+      if (
+        (String(dlog.status) === 'claimed' || String(dlog.status) === 'repaired') &&
+        !hasClaimEntry
+      ) {
         const cd = dlog.claimDetails ||
           dlog.claim || {
             dateClaimed: dlog.dateClaimed,
@@ -443,8 +539,8 @@ const fetchAcnHistory = async () => {
             <div class="mt-2 grid grid-cols-2 gap-2 text-sm">
               <div>
                 <span class="font-medium">Status:</span>
-                <span :class="getStatusBadge(log.status)" class="ml-1">{{
-                  formatStatus(log.status)
+                <span :class="getStatusBadge(effectiveStatus)" class="ml-1">{{
+                  formatStatus(effectiveStatus)
                 }}</span>
               </div>
               <div><span class="font-medium">ACN:</span> {{ log.acn || '—' }}</div>
@@ -480,51 +576,71 @@ const fetchAcnHistory = async () => {
               <div><span class="font-medium">Specs:</span> {{ hasAnySpecs ? 'Yes' : '—' }}</div>
             </div>
           </div>
-          <div
-            class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark p-4 mt-4"
-          >
-            <h3 class="font-semibold mb-2">Action History</h3>
-            <ul class="space-y-2">
-              <li v-for="(a, i) in log.actions || []" :key="i" class="border rounded p-2">
-                <div class="text-sm text-gray-600">
-                  {{ new Date(a.dateUpdated || a.updatedAt || a.createdAt).toLocaleString() }}
-                </div>
-                <div><span class="font-medium">Result:</span> {{ a.claimDetails ? 'claimed' : (a.result || '—') }}</div>
-                <div><span class="font-medium">Findings:</span> {{ a.consultFindings || '—' }}</div>
-                <div><span class="font-medium">Action:</span> {{ a.actionTaken || '—' }}</div>
-                <div>
-                  <span class="font-medium">Updated by:</span> {{ a.updatedBy?.name || '—' }}
-                </div>
-              </li>
-            </ul>
-          </div>
 
           <div
             class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark p-4"
           >
             <h3 class="font-semibold mb-2">ACN Repair History</h3>
+            <div
+              v-if="!loadingAcnHistory && !acnHistoryError"
+              class="mb-2 flex gap-2 items-center text-sm"
+            >
+              <select v-model="acnHistoryFilter" class="border rounded px-2 py-1 bg-white">
+                <option value="all">All</option>
+                <option value="claimed">Claims</option>
+                <option value="disposal">Disposals</option>
+                <option value="repairs">Repairs</option>
+              </select>
+              <select v-model="acnHistorySort" class="border rounded px-2 py-1 bg-white">
+                <option value="asc">Oldest first</option>
+                <option value="desc">Newest first</option>
+              </select>
+            </div>
             <div v-if="loadingAcnHistory" class="text-sm text-gray-600">Loading history...</div>
             <div v-else-if="acnHistoryError" class="text-sm text-danger">{{ acnHistoryError }}</div>
             <ul v-else class="space-y-2">
-              <li v-for="(h, idx) in acnHistoryActions" :key="idx" class="border rounded p-2">
+              <li v-for="(h, idx) in filteredAcnHistory" :key="idx" class="border rounded p-2">
                 <div class="flex justify-between items-center">
-                  <div class="text-sm text-gray-600">{{ new Date(h.date).toLocaleString() }}</div>
+                  <div class="text-sm text-gray-600">{{ formatTimelineDate(h) }}</div>
                   <div class="text-xs text-bodydark2">Log {{ h.logNumber }}</div>
                 </div>
-                <div><span class="font-medium">Result:</span> {{ h.claimDetails ? 'claimed' : (h.result || '—') }}</div>
+                <div>
+                  <span class="font-medium">Result:</span>
+                  {{
+                    h.claimDetails
+                      ? 'claimed'
+                      : h.result === 'beyond_repair' || h.result === 'for_disposal'
+                        ? 'for_disposal'
+                        : h.result || '—'
+                  }}
+                </div>
                 <div v-if="h.consultFindings">
                   <span class="font-medium">Findings:</span> {{ h.consultFindings }}
                 </div>
                 <div v-if="h.actionTaken">
                   <span class="font-medium">Action:</span> {{ h.actionTaken }}
                 </div>
-                <div v-if="h.updatedBy">
-                  <span class="font-medium">Updated by:</span> {{ h.updatedBy?.name || '—' }}
-                </div>
+
                 <div v-if="h.claimDetails" class="mt-1 text-sm">
                   <div>
                     <span class="font-medium">Claimed Date:</span>
-                    {{ h.claimDetails?.dateClaimed || '—' }}
+                    {{ formatDateOnly(h.claimDetails?.dateClaimed) || '—' }}
+                  </div>
+                  <div>
+                    <span class="font-medium">Claimed At:</span>
+                    {{
+                      h.claimDetails?.claimedAt
+                        ? new Date(h.claimDetails.claimedAt).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
+                        : h.claimDetails?.dateClaimed
+                          ? new Date(h.claimDetails.dateClaimed).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })
+                          : '—'
+                    }}
                   </div>
                   <div>
                     <span class="font-medium">Claimed By:</span>
@@ -532,6 +648,19 @@ const fetchAcnHistory = async () => {
                   </div>
                   <div v-if="h.claimDetails?.remarks">
                     <span class="font-medium">Remarks:</span> {{ h.claimDetails?.remarks }}
+                  </div>
+                </div>
+                <div v-if="h.disposalDetails" class="mt-1 text-sm">
+                  <div>
+                    <span class="font-medium">Disposed Date:</span>
+                    {{ h.disposalDetails?.dateDisposed || '—' }}
+                  </div>
+                  <div>
+                    <span class="font-medium">Disposed By:</span>
+                    {{ h.disposalDetails?.disposedBy || '—' }}
+                  </div>
+                  <div v-if="h.disposalDetails?.remarks">
+                    <span class="font-medium">Remarks:</span> {{ h.disposalDetails?.remarks }}
                   </div>
                 </div>
                 <div
@@ -546,9 +675,6 @@ const fetchAcnHistory = async () => {
                   </div>
                 </div>
               </li>
-              <!-- <li v-if="acnHistoryActions.length === 0" class="text-sm text-bodydark2">
-                No history found
-              </li> -->
             </ul>
           </div>
           <div
@@ -594,7 +720,6 @@ const fetchAcnHistory = async () => {
               </div>
             </div>
           </div>
-
           <div
             v-if="log.status === 'for_disposal'"
             class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark p-4"
@@ -611,7 +736,6 @@ const fetchAcnHistory = async () => {
             >
           </div>
         </div>
-
         <div></div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import axios from '@/utils/axios'
@@ -7,6 +8,7 @@ import EmployeeCombobox from '@/components/EmployeeCombobox.vue'
 import AcnCombobox from '@/components/AcnCombobox.vue'
 
 const auth = useAuthStore()
+const router = useRouter()
 const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5001/api'
 const loading = ref(false)
 const error = ref('')
@@ -31,6 +33,9 @@ const consultForm = ref({
 // Claim Modal State
 const claimForm = ref({
   dateClaimed: new Date().toISOString().slice(0, 10),
+  claimedTime: `${String(new Date().getHours()).padStart(2, '0')}:${String(
+    new Date().getMinutes()
+  ).padStart(2, '0')}`,
   claimedBy: '',
   remarks: ''
 })
@@ -80,6 +85,9 @@ const openClaim = async (log) => {
   showClaimModal.value = true
   claimForm.value = {
     dateClaimed: new Date().toISOString().slice(0, 10),
+    claimedTime: `${String(new Date().getHours()).padStart(2, '0')}:${String(
+      new Date().getMinutes()
+    ).padStart(2, '0')}`,
     claimedBy: log?.broughtBy?.name || '',
     remarks: ''
   }
@@ -101,19 +109,32 @@ const submitClaim = async () => {
   if (!selectedLog.value) return
   savingClaim.value = true
   try {
+    const cbRaw = claimForm.value.claimedBy
+    const claimedByStr =
+      typeof cbRaw === 'string'
+        ? cbRaw
+        : `${cbRaw?.firstName || ''} ${cbRaw?.lastName || ''}`.trim() || cbRaw?.name || ''
+    const time =
+      claimForm.value.claimedTime ||
+      `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(
+        2,
+        '0'
+      )}`
+    const dateTimeStr = `${claimForm.value.dateClaimed}T${time}:00`
     const res = await fetch(`${apiBase}/maintenance/logs/${selectedLog.value._id}/claimed`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
       body: JSON.stringify({
-        dateClaimed: claimForm.value.dateClaimed,
-        claimedBy: claimForm.value.claimedBy,
-        remarks: claimForm.value.remarks
+        dateClaimed: dateTimeStr,
+        claimedBy: claimedByStr,
+        remarks: claimForm.value.remarks,
+        claimedAt: new Date(dateTimeStr).toISOString()
       })
     })
     const data = await res.json()
     if (!data.success) throw new Error(data.message || 'Failed to mark claimed')
 
-    await fetch(`${apiBase}/maintenance/logs/${selectedLog.value._id}/actions`, {
+    const actRes = await fetch(`${apiBase}/maintenance/logs/${selectedLog.value._id}/actions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
       body: JSON.stringify({
@@ -122,13 +143,16 @@ const submitClaim = async () => {
         result: 'repaired',
         repairedStatus: 'claim_now',
         claimDetails: {
-          dateClaimed: claimForm.value.dateClaimed,
-          claimedBy: claimForm.value.claimedBy,
-          remarks: claimForm.value.remarks
+          dateClaimed: dateTimeStr,
+          claimedBy: claimedByStr,
+          remarks: claimForm.value.remarks,
+          claimedAt: new Date(dateTimeStr).toISOString()
         },
         replacementParts: []
       })
     })
+    const actData = await actRes.json()
+    if (!actData.success) throw new Error(actData.message || 'Failed to record claim action')
     await fetchLogs()
     closeClaim()
   } catch (e) {
@@ -154,6 +178,12 @@ const submitConsult = async () => {
   if (!consultForm.value.result) {
     error.value = 'Please select a status in the modal.'
     return
+  }
+  if (consultForm.value.result === 'repaired' && consultForm.value.repairedStatus === 'claim_now') {
+    consultForm.value.claimDetails = {
+      ...(consultForm.value.claimDetails || {}),
+      claimedAt: new Date().toISOString()
+    }
   }
   savingConsult.value = true
   try {
@@ -188,6 +218,32 @@ const submitConsult = async () => {
   } finally {
     savingConsult.value = false
   }
+}
+
+const goToDisposalForLog = async (log) => {
+  if (!log) return
+  let acn = log?.acn || ''
+  let serial = log?.serialNumber || ''
+  let description = log?.description || ''
+  let inventoryRecordId = log?.inventoryRecordId?._id || log?.inventoryRecordId || ''
+  let itemId = log?.itemId?._id || log?.itemId || ''
+  try {
+    if (!inventoryRecordId || !itemId || !description || !serial || !acn) {
+      const { data } = await axios.get(`/maintenance/logs/${log._id}`)
+      const l = data?.log || {}
+      acn = acn || l?.acn || ''
+      serial = serial || l?.serialNumber || ''
+      description = description || l?.description || ''
+      inventoryRecordId = inventoryRecordId || l?.inventoryRecordId?._id || l?.inventoryRecordId || ''
+      itemId = itemId || l?.itemId?._id || l?.itemId || ''
+    }
+  } catch (_) {
+    void 0
+  }
+  router.push({
+    name: 'disposal-create',
+    query: { inventoryRecordId, itemId, acn, serialNumber: serial, description }
+  })
 }
 
 const fetchLogs = async () => {
@@ -303,8 +359,12 @@ const hasAnySpecs = computed(() => {
   return !!(s.processor || s.storage || s.ram || s.videoCard)
 })
 const submitCreateLog = async () => {
-  createLoading.value = true
   createError.value = ''
+  if (!createForm.value.remarks || !createForm.value.remarks.trim()) {
+    createError.value = 'Remarks is required.'
+    return
+  }
+  createLoading.value = true
   try {
     const payload = {
       acn: createForm.value.acn || undefined,
@@ -315,22 +375,166 @@ const submitCreateLog = async () => {
         name: createForm.value.broughtByName || '',
         employee: createForm.value.broughtByEmployeeId || undefined
       }
-      // technician: { name: createForm.value.technicianName || '' }
     }
-    // Only include inventory linkage for primary items
-    if (!selectedIsSecondary.value) {
-      payload.serialNumber = selectedItem.value?.serialNumber || undefined
-      payload.inventoryRecordId = selectedRecord.value?._id || undefined
-      payload.itemId = selectedItem.value?._id || undefined
-    }
+    payload.serialNumber =
+      (selectedIsSecondary.value
+        ? selectedItem.value?._selectedSecondary?.serialNumber
+        : selectedItem.value?.serialNumber) || undefined
+    payload.inventoryRecordId = selectedRecord.value?._id || undefined
+    payload.itemId = selectedItem.value?._id || undefined
     const { data } = await axios.post('/maintenance/logs', payload)
     if (!data?.success) throw new Error(data?.message || 'Failed to create repair log')
+    try {
+      const name = createForm.value.broughtByName || ''
+      const dept = selectedRecord.value?.department || ''
+      const dstr = new Date(data.log?.date || Date.now()).toISOString().slice(0, 10)
+      const remarks = createForm.value.remarks || ''
+      const canvas = document.createElement('canvas')
+      canvas.width = 800
+      canvas.height = 450
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.fillStyle = '#000000'
+      ctx.font = '15px Arial'
+      ctx.fillText(`${dstr}`, canvas.width - ctx.measureText(`Date: ${dstr}`).width - 10, 15)
+      ctx.font = 'bold 28px Arial'
+      ctx.fillText(`Repair Log # ${data.log?.logNumber || ''}`, 30, 60)
+      ctx.font = '20px Arial'
+      ctx.fillText(`Brought By: ${name}`, 30, 120)
+      ctx.fillText(`Department: ${dept}`, 30, 160)
+      ctx.fillText('Remarks:', 30, 240)
+      const drawWrapped = (t, x, y, maxWidth, lineHeight) => {
+        const words = String(t).split(' ')
+        let line = ''
+        let cursorY = y
+        for (let n = 0; n < words.length; n++) {
+          const testLine = line + words[n] + ' '
+          const metrics = ctx.measureText(testLine)
+          if (metrics.width > maxWidth && n > 0) {
+            ctx.fillText(line, x, cursorY)
+            line = words[n] + ' '
+            cursorY += lineHeight
+          } else {
+            line = testLine
+          }
+        }
+        if (line) ctx.fillText(line, x, cursorY)
+        return cursorY
+      }
+      const lastY = drawWrapped(remarks, 30, 270, canvas.width - 60, 26)
+      ctx.strokeStyle = '#000000'
+      ctx.lineWidth = 3
+      const lineY = Math.min(canvas.height - 40, lastY + 40)
+      ctx.beginPath()
+      ctx.moveTo(30, lineY)
+      ctx.lineTo(canvas.width - 30, lineY)
+      ctx.stroke()
+      ctx.font = '20px Arial'
+      ctx.fillText('Status:', 30, 380)
+      const blob = await new Promise((resolve) => {
+        canvas.toBlob((b) => resolve(b || new Blob()), 'image/png')
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `repair-label-${data.log.logNumber}.png`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 0)
+    } catch (_) {
+      console.log(_)
+    }
     await fetchLogs()
     closeCreateModal()
   } catch (e) {
     createError.value = e.response?.data?.message || e.message || String(e)
   } finally {
     createLoading.value = false
+  }
+}
+
+const downloadingLabelId = ref('')
+const downloadLabelForLog = async (log) => {
+  if (!log?._id) return
+  downloadingLabelId.value = log._id
+  try {
+    let name = log?.broughtBy?.name || ''
+    let dept = ''
+    let dateStr = new Date(log.date || log.createdAt || Date.now()).toISOString().slice(0, 10)
+    let remarks = log?.remarks || ''
+    try {
+      const { data } = await axios.get(`/maintenance/logs/${log._id}`)
+      if (data?.success && data?.log) {
+        const l = data.log
+        name = name || l?.broughtBy?.name || ''
+        dept = l?.inventoryRecordId?.department || ''
+        dateStr = new Date(l.date || l.createdAt || Date.now()).toISOString().slice(0, 10)
+        remarks = remarks || l?.remarks || ''
+      }
+    } catch (_) {
+      console.log(_)
+    }
+
+    const canvas = document.createElement('canvas')
+    canvas.width = 800
+    canvas.height = 450
+    const ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = '#000000'
+    ctx.font = '15px Arial'
+    ctx.fillText(`${dateStr}`, canvas.width - ctx.measureText(`Date: ${dateStr}`).width - 10, 15)
+    ctx.font = 'bold 28px Arial'
+    ctx.fillText(`Repair Log # ${log?.logNumber || ''}`, 30, 60)
+    ctx.font = '20px Arial'
+    ctx.fillText(`Brought By: ${name}`, 30, 120)
+    ctx.fillText(`Department: ${dept}`, 30, 160)
+    const drawWrapped = (t, x, y, maxWidth, lineHeight) => {
+      const words = String(t).split(' ')
+      let line = ''
+      let cursorY = y
+      for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' '
+        const metrics = ctx.measureText(testLine)
+        if (metrics.width > maxWidth && n > 0) {
+          ctx.fillText(line, x, cursorY)
+          line = words[n] + ' '
+          cursorY += lineHeight
+        } else {
+          line = testLine
+        }
+      }
+      if (line) ctx.fillText(line, x, cursorY)
+      return cursorY
+    }
+    ctx.fillText('Remarks:', 30, 240)
+    const lastY = drawWrapped(remarks, 30, 270, canvas.width - 60, 26)
+    ctx.strokeStyle = '#000000'
+    ctx.lineWidth = 3
+    const lineY = Math.min(canvas.height - 40, lastY + 40)
+    ctx.beginPath()
+    ctx.moveTo(30, lineY)
+    ctx.lineTo(canvas.width - 30, lineY)
+    ctx.stroke()
+    ctx.font = '20px Arial'
+    ctx.fillText('Status:', 30, 380)
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob((b) => resolve(b || new Blob()), 'image/png')
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `repair-label-${log.logNumber}.png`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  } catch (_) {
+    console.log(_)
+  } finally {
+    downloadingLabelId.value = ''
   }
 }
 </script>
@@ -502,6 +706,13 @@ const submitCreateLog = async () => {
                     >
                       Action
                     </button>
+                    <button
+                      @click="downloadLabelForLog(l)"
+                      :disabled="downloadingLabelId === l._id"
+                      class="inline-flex items-center gap-1 rounded border border-stroke bg-white text-black px-3 py-1 text-xs font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                    >
+                      {{ downloadingLabelId === l._id ? 'Preparing...' : 'Download Label' }}
+                    </button>
                     <router-link
                       :to="`/maintenance/logs/${l._id}`"
                       class="inline-flex items-center gap-1 text-primary text-sm font-medium hover:underline"
@@ -516,6 +727,13 @@ const submitCreateLog = async () => {
                         />
                       </svg>
                     </router-link>
+                    <button
+                      v-if="l.status === 'for_disposal'"
+                      @click="goToDisposalForLog(l)"
+                      class="inline-flex items-center gap-1 rounded border border-danger bg-danger/10 text-danger px-3 py-1 text-xs font-medium hover:bg-danger/20 transition"
+                    >
+                      Disposal
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -576,6 +794,15 @@ const submitCreateLog = async () => {
               This marks the unit as <span class="font-semibold">for disposal</span>. You can create
               a disposal record from the Disposal module.
             </p>
+            <div v-if="consultForm.result === 'beyond_repair'" class="mt-2">
+              <button
+                type="button"
+                @click="goToDisposalForLog(selectedLogDetails || selectedLog)"
+                class="inline-flex items-center gap-1 rounded border border-danger bg-danger/10 text-danger px-3 py-1 text-xs font-medium hover:bg-danger/20 transition"
+              >
+                Go to Disposal
+              </button>
+            </div>
           </div>
 
           <!-- Repaired outcome options -->
@@ -718,9 +945,24 @@ const submitCreateLog = async () => {
             />
           </div>
           <div>
+            <label class="block mb-1 text-sm">Time Claimed</label>
+            <input
+              type="time"
+              v-model="claimForm.claimedTime"
+              class="w-full border rounded px-3 py-2"
+            />
+          </div>
+
+          <div>
             <label class="block mb-1 text-sm">Claimed By</label>
             <EmployeeCombobox
               v-model="claimForm.claimedBy"
+              @select="
+                (emp) => {
+                  claimForm.claimedBy =
+                    emp?.name || ((emp?.firstName || '') + ' ' + (emp?.lastName || '')).trim()
+                }
+              "
               :placeholder="'Search or type employee name'"
             />
           </div>
@@ -806,6 +1048,7 @@ const submitCreateLog = async () => {
                 <div>
                   <label class="block text-sm font-medium mb-2">Remarks</label>
                   <textarea
+                    required
                     v-model="createForm.remarks"
                     class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
                     placeholder="Remarks"
@@ -850,7 +1093,7 @@ const submitCreateLog = async () => {
                     :disabled="createLoading"
                     class="px-4 py-2 rounded-sm border border-stroke bg-primary text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {{ createLoading ? 'Creating...' : 'Create Log' }}
+                    {{ createLoading ? 'Creating...' : 't' }}
                   </button>
                   <button
                     type="button"
