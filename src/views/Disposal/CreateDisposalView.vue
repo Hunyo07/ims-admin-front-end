@@ -12,8 +12,11 @@ const itemId = ref('')
 const acn = ref('')
 const serialNumber = ref('')
 const description = ref('')
+const propertyNumber = ref('')
+const endUserOffice = ref('')
 const reason = ref('')
 const reasonDetails = ref('')
+const remarks = ref('')
 const notes = ref('')
 const proofImages = ref([])
 const inventoryRecords = ref([])
@@ -37,6 +40,8 @@ const onRecordSelect = () => {
     description.value = item.description
     acn.value = item.acn
     serialNumber.value = item.serialNumber
+    propertyNumber.value = item.propertyNumber || ''
+    endUserOffice.value = item.endUserOrMR || record.department || ''
   }
 }
 
@@ -67,6 +72,8 @@ const prefillFromQuery = () => {
           description.value = qDesc || it.description || ''
           acn.value = qAcn || it.acn || ''
           serialNumber.value = qSerial || it.serialNumber || ''
+          propertyNumber.value = it.propertyNumber || ''
+          endUserOffice.value = it.endUserOrMR || rec.department || ''
           return
         }
       }
@@ -97,10 +104,17 @@ const submitDisposal = async () => {
       acn: acn.value,
       serialNumber: serialNumber.value,
       description: description.value,
+      propertyNumber: propertyNumber.value,
+      endUserOrOffice: endUserOffice.value,
       reason: reason.value,
       reasonDetails: reasonDetails.value,
       proofImages: proofImages.value,
-      notes: notes.value
+      notes: [
+        notes.value || '',
+        propertyNumber.value ? `Property #: ${propertyNumber.value}` : '',
+        endUserOffice.value ? `End User/Office: ${endUserOffice.value}` : ''
+      ].filter(Boolean).join('\n'),
+      remarks: remarks.value || (reason.value === 'damaged_beyond_repair' ? 'DEFECTIVE' : '')
     })
     router.push({ name: 'disposal-detail', params: { id: data.disposal._id } })
   } catch (err) {
@@ -125,47 +139,63 @@ onMounted(async () => {
         
         <form @submit.prevent="submitDisposal">
           <div class="grid grid-cols-2 gap-4 mb-4">
-            <div class="col-span-2">
-              <label class="block mb-2">Select Inventory Item</label>
-              <select v-model="inventoryRecordId" @change="onRecordSelect" class="w-full border rounded px-3 py-2">
-                <option value="">Select Item</option>
-                <option v-for="rec in inventoryRecords" :key="rec._id" :value="rec._id">{{ rec.items?.[0]?.acn }} - {{ rec.items?.[0]?.description }}</option>
-              </select>
-            </div>
-            <div>
-              <label class="block mb-2">ACN</label>
-              <input v-model="acn" type="text" readonly class="w-full border rounded px-3 py-2 bg-gray-50" />
-            </div>
-            <div>
-              <label class="block mb-2">Serial Number</label>
-              <input v-model="serialNumber" type="text" readonly class="w-full border rounded px-3 py-2 bg-gray-50" />
-            </div>
-            <div>
-              <label class="block mb-2">Reason <span class="text-red-500">*</span></label>
-              <select v-model="reason" required class="w-full border rounded px-3 py-2">
-                <option value="">Select Reason</option>
-                <option value="obsolete">Obsolete</option>
-                <option value="damaged_beyond_repair">Damaged Beyond Repair</option>
-                <option value="lost">Lost</option>
-                <option value="stolen">Stolen</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div>
-              <label class="block mb-2">Reason Details</label>
-              <input v-model="reasonDetails" type="text" class="w-full border rounded px-3 py-2" />
-            </div>
-            <div class="col-span-2">
-              <label class="block mb-2">Proof Images</label>
-              <input type="file" @change="handleImageUpload" multiple accept="image/*" class="w-full border rounded px-3 py-2" />
-              <div v-if="proofImages.length" class="flex gap-2 mt-2">
-                <img v-for="(img, i) in proofImages" :key="i" :src="img" class="w-20 h-20 object-cover rounded" />
-              </div>
-            </div>
-            <div class="col-span-2">
-              <label class="block mb-2">Notes</label>
-              <textarea v-model="notes" class="w-full border rounded px-3 py-2" rows="3"></textarea>
-            </div>
+        <div class="col-span-2">
+          <label class="block mb-2">Select Inventory Item</label>
+          <select v-model="inventoryRecordId" @change="onRecordSelect" class="w-full border rounded px-3 py-2">
+            <option value="">Select Item</option>
+            <option v-for="rec in inventoryRecords" :key="rec._id" :value="rec._id">{{ rec.items?.[0]?.acn }} - {{ rec.items?.[0]?.description }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block mb-2">Description</label>
+          <input v-model="description" type="text" readonly class="w-full border rounded px-3 py-2 bg-gray-50" />
+        </div>
+        <div>
+          <label class="block mb-2">Property Number</label>
+          <input v-model="propertyNumber" type="text" readonly class="w-full border rounded px-3 py-2 bg-gray-50" />
+        </div>
+        <div>
+          <label class="block mb-2">ACN</label>
+          <input v-model="acn" type="text" readonly class="w-full border rounded px-3 py-2 bg-gray-50" />
+        </div>
+        <div>
+          <label class="block mb-2">Serial Number</label>
+          <input v-model="serialNumber" type="text" readonly class="w-full border rounded px-3 py-2 bg-gray-50" />
+        </div>
+        <div>
+          <label class="block mb-2">Name of End User/Office</label>
+          <input v-model="endUserOffice" type="text" readonly class="w-full border rounded px-3 py-2 bg-gray-50" />
+        </div>
+        <div>
+          <label class="block mb-2">Reason <span class="text-red-500">*</span></label>
+          <select v-model="reason" required class="w-full border rounded px-3 py-2">
+            <option value="">Select Reason</option>
+            <option value="obsolete">Obsolete</option>
+            <option value="damaged_beyond_repair">Damaged Beyond Repair</option>
+            <option value="lost">Lost</option>
+            <option value="stolen">Stolen</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="block mb-2">Reason Details</label>
+          <input v-model="reasonDetails" type="text" class="w-full border rounded px-3 py-2" />
+        </div>
+        <div>
+          <label class="block mb-2">Remarks</label>
+          <input v-model="remarks" type="text" placeholder="e.g., DEFECTIVE" class="w-full border rounded px-3 py-2" />
+        </div>
+        <div class="col-span-2">
+          <label class="block mb-2">Proof Images</label>
+          <input type="file" @change="handleImageUpload" multiple accept="image/*" class="w-full border rounded px-3 py-2" />
+          <div v-if="proofImages.length" class="flex gap-2 mt-2">
+            <img v-for="(img, i) in proofImages" :key="i" :src="img" class="w-20 h-20 object-cover rounded" />
+          </div>
+        </div>
+        <div class="col-span-2">
+          <label class="block mb-2">Notes</label>
+          <textarea v-model="notes" class="w-full border rounded px-3 py-2" rows="3"></textarea>
+        </div>
           </div>
 
           <div class="flex gap-2">

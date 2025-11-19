@@ -234,7 +234,8 @@ const goToDisposalForLog = async (log) => {
       acn = acn || l?.acn || ''
       serial = serial || l?.serialNumber || ''
       description = description || l?.description || ''
-      inventoryRecordId = inventoryRecordId || l?.inventoryRecordId?._id || l?.inventoryRecordId || ''
+      inventoryRecordId =
+        inventoryRecordId || l?.inventoryRecordId?._id || l?.inventoryRecordId || ''
       itemId = itemId || l?.itemId?._id || l?.itemId || ''
     }
   } catch (_) {
@@ -274,6 +275,29 @@ const filteredLogs = computed(() => {
     return !q || s.includes(q)
   })
 })
+
+const isDisposed = (l) => {
+  const rec = l?.inventoryRecordId || null
+  const items = Array.isArray(rec?.items) ? rec.items : []
+  const id = l?.itemId?._id || l?.itemId || ''
+  const acn = String(l?.acn || '').trim().toUpperCase()
+  const serial = String(l?.serialNumber || '').trim()
+  let it = null
+  if (id) it = items.find((i) => String(i._id) === String(id)) || null
+  if (!it && acn) it = items.find((i) => String(i?.acn || '').toUpperCase() === acn) || null
+  if (!it && serial) it = items.find((i) => String(i?.serialNumber || '') === serial) || null
+  if (!it && acn)
+    it =
+      items.find(
+        (i) => Array.isArray(i.secondaryItems) && i.secondaryItems.some((s) => String(s?.acn || '').toUpperCase() === acn)
+      ) || null
+  if (!it && serial)
+    it =
+      items.find(
+        (i) => Array.isArray(i.secondaryItems) && i.secondaryItems.some((s) => String(s?.serialNumber || '') === serial)
+      ) || null
+  return String(it?.status || '') === 'disposed'
+}
 
 onMounted(fetchLogs)
 
@@ -397,7 +421,7 @@ const submitCreateLog = async () => {
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       ctx.fillStyle = '#000000'
       ctx.font = '15px Arial'
-      ctx.fillText(`${dstr}`, canvas.width - ctx.measureText(`Date: ${dstr}`).width - 10, 15)
+      ctx.fillText(`${dateStr}`, canvas.width - ctx.measureText(`Date: ${dateStr}`).width - 15, 35)
       ctx.font = 'bold 28px Arial'
       ctx.fillText(`Repair Log # ${data.log?.logNumber || ''}`, 30, 60)
       ctx.font = '20px Arial'
@@ -430,8 +454,44 @@ const submitCreateLog = async () => {
       ctx.moveTo(30, lineY)
       ctx.lineTo(canvas.width - 30, lineY)
       ctx.stroke()
-      ctx.font = '20px Arial'
-      ctx.fillText('Status:', 30, 380)
+      const drawCheckbox = (x, y, label, checked, size = 18, fontSize = 18) => {
+        ctx.strokeStyle = '#000000'
+        ctx.lineWidth = 2
+        ctx.strokeRect(x, y, size, size)
+
+        if (checked) {
+          ctx.beginPath()
+          ctx.moveTo(x + 3, y + size / 2)
+          ctx.lineTo(x + size / 2, y + size - 3)
+          ctx.lineTo(x + size - 3, y + 3)
+          ctx.stroke()
+        }
+
+        ctx.font = `${fontSize}px Arial`
+        ctx.fillStyle = '#000000'
+        ctx.fillText(label, x + size + 10, y + size - 4)
+      }
+
+      const st = createForm.value.status || 'ready_to_claim'
+      const yBox = Math.min(canvas.height - 30, lineY + 20)
+
+      // Only ONE checkbox, made BIGGER
+      drawCheckbox(
+        40,
+        yBox,
+        'Repaired and Ready to claim',
+        st === 'ready_to_claim',
+        28, // BIGGER checkbox
+        26 // BIGGER text
+      ),
+        drawCheckbox(
+          550,
+          yBox,
+          'For disposal',
+          st === 'for_disposal',
+          28, // BIGGER checkbox
+          26 // BIGGER text
+        )
       const blob = await new Promise((resolve) => {
         canvas.toBlob((b) => resolve(b || new Blob()), 'image/png')
       })
@@ -476,7 +536,6 @@ const downloadLabelForLog = async (log) => {
     } catch (_) {
       console.log(_)
     }
-
     const canvas = document.createElement('canvas')
     canvas.width = 800
     canvas.height = 450
@@ -485,7 +544,7 @@ const downloadLabelForLog = async (log) => {
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.fillStyle = '#000000'
     ctx.font = '15px Arial'
-    ctx.fillText(`${dateStr}`, canvas.width - ctx.measureText(`Date: ${dateStr}`).width - 10, 15)
+    ctx.fillText(`${dateStr}`, canvas.width - ctx.measureText(`Date: ${dateStr}`).width - 15, 35)
     ctx.font = 'bold 28px Arial'
     ctx.fillText(`Repair Log # ${log?.logNumber || ''}`, 30, 60)
     ctx.font = '20px Arial'
@@ -518,8 +577,39 @@ const downloadLabelForLog = async (log) => {
     ctx.moveTo(30, lineY)
     ctx.lineTo(canvas.width - 30, lineY)
     ctx.stroke()
-    ctx.font = '20px Arial'
-    ctx.fillText('Status:', 30, 380)
+    const drawCheckbox = (x, y, label, checked, size = 18, fontSize = 18) => {
+      ctx.strokeStyle = '#000000'
+      ctx.lineWidth = 2
+      ctx.strokeRect(x, y, size, size)
+      if (checked) {
+        ctx.beginPath()
+        ctx.moveTo(x + 3, y + size / 2)
+        ctx.lineTo(x + size / 2, y + size - 3)
+        ctx.lineTo(x + size - 3, y + 3)
+        ctx.stroke()
+      }
+      ctx.font = `${fontSize}px Arial`
+      ctx.fillStyle = '#000000'
+      ctx.fillText(label, x + size + 10, y + size - 4)
+    }
+    const st = createForm.value.status || 'ready_to_claim'
+    const yBox = Math.min(canvas.height - 30, lineY + 20)
+    drawCheckbox(
+      45,
+      yBox,
+      'Repaired and ready to claim',
+      st === 'ready_to_claim',
+      28, // BIGGER checkbox
+      26 // BIGGER text
+    ),
+      drawCheckbox(
+        550,
+        yBox,
+        'For disposal',
+        st === 'for_disposal',
+        28, // BIGGER checkbox
+        26 // BIGGER text
+      )
     const blob = await new Promise((resolve) => {
       canvas.toBlob((b) => resolve(b || new Blob()), 'image/png')
     })
@@ -693,20 +783,21 @@ const downloadLabelForLog = async (log) => {
                 <td class="py-3 px-4">
                   <div class="flex gap-3 items-center">
                     <button
-                      v-if="l.status === 'ready_to_claim'"
+                      v-if="l.status === 'ready_to_claim' && !isDisposed(l)"
                       @click="openClaim(l)"
                       class="inline-flex items-center gap-1 rounded border border-primary bg-primary/10 text-primary px-3 py-1 text-xs font-medium hover:bg-primary/20 transition"
                     >
                       Claim
                     </button>
                     <button
-                      v-else-if="l.status !== 'repaired' && l.status !== 'claimed'"
+                      v-else-if="l.status !== 'repaired' && l.status !== 'claimed' && !isDisposed(l)"
                       @click="openConsult(l)"
                       class="inline-flex items-center gap-1 rounded border border-primary bg-primary/10 text-primary px-3 py-1 text-xs font-medium hover:bg-primary/20 transition"
                     >
                       Action
                     </button>
                     <button
+                      v-if="!isDisposed(l)"
                       @click="downloadLabelForLog(l)"
                       :disabled="downloadingLabelId === l._id"
                       class="inline-flex items-center gap-1 rounded border border-stroke bg-white text-black px-3 py-1 text-xs font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
@@ -728,7 +819,7 @@ const downloadLabelForLog = async (log) => {
                       </svg>
                     </router-link>
                     <button
-                      v-if="l.status === 'for_disposal'"
+                      v-if="l.status === 'for_disposal' && !isDisposed(l)"
                       @click="goToDisposalForLog(l)"
                       class="inline-flex items-center gap-1 rounded border border-danger bg-danger/10 text-danger px-3 py-1 text-xs font-medium hover:bg-danger/20 transition"
                     >

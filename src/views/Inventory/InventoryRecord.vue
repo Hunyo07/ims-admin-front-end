@@ -1601,7 +1601,7 @@ function buildMergedRows(items) {
     }
 
     if (isDesktop || (!row.description && isLaptop)) {
-      row.description = product?.name || it.description || ''
+      row.description = product?.name || it.description || it.productName || ''
       row.processor = specFrom(it, 'processor') || specVal('Processor') || ''
       row.storage = specFrom(it, 'storage') || specVal('Storage') || ''
       row.ram = specFrom(it, 'ram') || specVal('RAM') || ''
@@ -1614,7 +1614,7 @@ function buildMergedRows(items) {
       if (!row.warranty && it.warranty) row.warranty = it.warranty
     } else if (isPrinter || isScanner) {
       const t = isPrinter ? 'Printer' : 'Scanner'
-      const name = product?.name || it.description || ''
+      const name = product?.name || it.description || it.productName || ''
       const serialPS = it.serialNumber || ''
       const psStr = [t, name, serialPS].filter(Boolean).join(' - ')
       row.printerOrScannerList.push(psStr)
@@ -1638,7 +1638,7 @@ function buildMergedRows(items) {
           specVal('RAM') ||
           specVal('Video Card'))
       ) {
-        row.description = product?.name || it.description || ''
+        row.description = product?.name || it.description || it.productName || ''
         row.processor = specFrom(it, 'processor') || specVal('Processor') || ''
         row.storage = specFrom(it, 'storage') || specVal('Storage') || ''
         row.ram = specFrom(it, 'ram') || specVal('RAM') || ''
@@ -1669,6 +1669,14 @@ function buildMergedRows(items) {
     remarksYears: row.remarksYearsList.length ? row.remarksYearsList.join('\n') : '—',
     warranty: row.warranty || null
   }))
+  // Final fallback: if description is still "—" but there is any item with description/productName, use the first one per group
+  for (const key of Object.keys(groups)) {
+    const row = groups[key]
+    if (!row.description) {
+      const candidate = (list || []).find((it) => String(it.endUserOrMR || '').trim() === key && (it.description || it.productName))
+      if (candidate) row.description = candidate.productName || candidate.description || ''
+    }
+  }
   return merged.filter((r) => {
     return !(
       r.description === '—' &&
@@ -2573,14 +2581,15 @@ const mergedPreviewRows = computed(() => {
       </div>
 
       <!-- Details Modal -->
-      <div
-        v-if="isDetailsOpen"
-        class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50"
-      >
+      <teleport to="body">
         <div
-          id="printArea"
-          class="bg-white max-h-[80%] overflow-auto dark:bg-boxdark rounded-md shadow-lg w-full max-w-[90%] p-6"
+          v-if="isDetailsOpen"
+          class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[10000]"
         >
+          <div
+            id="printArea"
+            class="bg-white dark:bg-boxdark rounded-md shadow-lg w-full max-w-[95%] md:max-w-[85%] max-h-[85vh] overflow-auto p-6"
+          >
           <div class="flex justify-between items-start mb-4">
             <div>
               <h2 class="text-lg font-semibold flex items-center gap-2">
@@ -2938,8 +2947,9 @@ const mergedPreviewRows = computed(() => {
               </tbody>
             </table>
           </div>
+          </div>
         </div>
-      </div>
+      </teleport>
 
       <!-- Add Modal -->
       <div

@@ -33,11 +33,9 @@ const close = () => {
 onMounted(() => {
   isOpen.value = true
 })
-
 // Selected ACN item details (for display-only)
 const selectedItem = ref(null)
 const selectedRecord = ref(null)
-
 const onAcnSelect = (payload) => {
   form.value.acn = payload?.acn || ''
   selectedItem.value = payload?.item || null
@@ -48,7 +46,6 @@ const onAcnSelect = (payload) => {
     form.value.broughtByName = defaultRequester
   }
 }
-
 // Dynamic preview helpers: render only existing fields
 const isSecondary = computed(() => !!selectedItem.value?._selectedSecondary)
 const descText = computed(() => {

@@ -349,6 +349,7 @@ const getInventoryStatusClass = (status) => {
       return 'bg-primary/10 text-primary'
     case 'retired':
     case 'for_disposal':
+    case 'disposed':
       return 'bg-danger/10 text-danger'
     case 'repaired':
       return 'bg-sky-blue/100 text-bodydark'
@@ -367,6 +368,7 @@ const formatInventoryStatusLabel = (status) => {
     returned: 'Returned',
     retired: 'Retired',
     for_disposal: 'For Disposal',
+    disposed: 'Disposed',
     replaced: 'Replaced'
   }
   return labels[status] || status
