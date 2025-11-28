@@ -1,51 +1,64 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from '@/utils/axios'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
+import BaseCombobox from '@/components/Forms/BaseCombobox.vue'
+import EmployeeCombobox from '@/components/EmployeeCombobox.vue'
+import AcnCombobox from '@/components/AcnCombobox.vue'
 
 const router = useRouter()
 const route = useRoute()
+
+// Item context (optional ACN/Serial association)
 const inventoryRecordId = ref('')
 const itemId = ref('')
 const acn = ref('')
 const serialNumber = ref('')
+
+// First field: Item combobox (select product or type manually)
+const products = ref([])
+const selectedProductId = ref('')
 const description = ref('')
-const propertyNumber = ref('')
-const endUserOffice = ref('')
-const reason = ref('')
-const reasonDetails = ref('')
+const productOptions = computed(() => (products.value || []).map((p) => ({ ...p, label: p.name })))
+
+// Required fields
+const departments = ref([])
+const department = ref('')
+const endUser = ref('')
+const endUserId = ref('')
+
+// Keep reason and remarks
+const reason = ref('damaged_beyond_repair')
 const remarks = ref('')
-const notes = ref('')
-const proofImages = ref([])
-const inventoryRecords = ref([])
+
+// UI state
 const loading = ref(false)
 const error = ref(null)
 
-const fetchInventoryRecords = async () => {
+// Fetch options
+const fetchProducts = async () => {
   try {
-    const { data } = await axios.get('/inventory-records')
-    inventoryRecords.value = data.records
-  } catch (err) {
-    console.error('Error fetching inventory records:', err)
+    const { data } = await axios.get('/products')
+    const list = data?.products || data || []
+    products.value = Array.isArray(list) ? list : []
+  } catch (_) {
+    products.value = []
+  }
+}
+const fetchDepartments = async () => {
+  try {
+    const { data } = await axios.get('/departments')
+    const list = data?.departments || data || []
+    departments.value = Array.isArray(list) ? list : []
+  } catch (_) {
+    departments.value = []
   }
 }
 
-const onRecordSelect = () => {
-  const record = inventoryRecords.value.find(r => r._id === inventoryRecordId.value)
-  if (record && record.items?.length) {
-    const item = record.items[0]
-    itemId.value = item._id
-    description.value = item.description
-    acn.value = item.acn
-    serialNumber.value = item.serialNumber
-    propertyNumber.value = item.propertyNumber || ''
-    endUserOffice.value = item.endUserOrMR || record.department || ''
-  }
-}
-
-const prefillFromQuery = () => {
+// Prefill from query when coming from logs list
+const prefillFromQuery = async () => {
   const q = route.query || {}
   const qInv = String(q.inventoryRecordId || '')
   const qItem = String(q.itemId || '')
@@ -58,149 +71,192 @@ const prefillFromQuery = () => {
   if (qAcn) acn.value = qAcn
   if (qSerial) serialNumber.value = qSerial
   if (qDesc) description.value = qDesc
+}
 
-  // If we only received ACN/Serial, try to locate the matching record/item
-  if ((!qInv || !qItem) && (qAcn || qSerial) && Array.isArray(inventoryRecords.value)) {
-    for (const rec of inventoryRecords.value) {
-      const items = Array.isArray(rec.items) ? rec.items : []
-      for (const it of items) {
-        const matchAcn = qAcn && String(it.acn || '') === qAcn
-        const matchSerial = qSerial && String(it.serialNumber || '') === qSerial
-        if (matchAcn || matchSerial) {
-          inventoryRecordId.value = rec._id
-          itemId.value = it._id
-          description.value = qDesc || it.description || ''
-          acn.value = qAcn || it.acn || ''
-          serialNumber.value = qSerial || it.serialNumber || ''
-          propertyNumber.value = it.propertyNumber || ''
-          endUserOffice.value = it.endUserOrMR || rec.department || ''
-          return
-        }
-      }
-    }
+// When selecting ACN via combobox, prefill linked details
+const onAcnSelect = (payload) => {
+  try {
+    acn.value = payload?.acn || ''
+    const sec = payload?.item?._selectedSecondary || null
+    const serial = sec?.serialNumber || payload?.item?.serialNumber || ''
+    const pname = payload?.item?.productName || payload?.product?.name || ''
+    const descr = payload?.item?.description || ''
+    serialNumber.value = serial || serialNumber.value || ''
+    description.value = descr || pname || description.value || ''
+    inventoryRecordId.value = payload?.record?._id || inventoryRecordId.value || ''
+    itemId.value = payload?.item?._id || itemId.value || ''
+    const deptName =
+      (payload?.record?.department && payload.record.department.name) ||
+      payload?.record?.department ||
+      ''
+    if (deptName) department.value = deptName
+    const eu = payload?.item?.endUserOrMR || ''
+    if (eu) endUser.value = eu
+  } catch (_) {
+    void 0
   }
 }
 
-const handleImageUpload = (e) => {
-  const files = Array.from(e.target.files)
-  files.forEach(file => {
-    const reader = new FileReader()
-    reader.onload = (event) => proofImages.value.push(event.target.result)
-    reader.readAsDataURL(file)
-  })
+// When selecting product, set description
+const onProductChange = (pid) => {
+  const p = (products.value || []).find((x) => String(x._id) === String(pid))
+  selectedProductId.value = pid || ''
+  description.value = p?.name || description.value || ''
 }
 
-const submitDisposal = async () => {
-  if (!reason.value) {
-    error.value = 'Disposal reason is required'
+// Submit: create maintenance log with status for_disposal (goes to pending table)
+const submitForDisposal = async () => {
+  // Validation per requirements
+  const desc = String(description.value || '').trim()
+  const dept = String(department.value || '').trim()
+  const eu = String(endUser.value || '').trim()
+  const rsn = String(reason.value || '').trim()
+  if (!desc || !dept || !eu || !rsn) {
+    error.value = 'Please provide item, department, end user, and reason.'
     return
   }
   loading.value = true
   error.value = null
   try {
-    const { data } = await axios.post('/disposal', {
-      inventoryRecordId: inventoryRecordId.value,
-      itemId: itemId.value,
-      acn: acn.value,
-      serialNumber: serialNumber.value,
-      description: description.value,
-      propertyNumber: propertyNumber.value,
-      endUserOrOffice: endUserOffice.value,
-      reason: reason.value,
-      reasonDetails: reasonDetails.value,
-      proofImages: proofImages.value,
-      notes: [
-        notes.value || '',
-        propertyNumber.value ? `Property #: ${propertyNumber.value}` : '',
-        endUserOffice.value ? `End User/Office: ${endUserOffice.value}` : ''
-      ].filter(Boolean).join('\n'),
-      remarks: remarks.value || (reason.value === 'damaged_beyond_repair' ? 'DEFECTIVE' : '')
-    })
-    router.push({ name: 'disposal-detail', params: { id: data.disposal._id } })
-  } catch (err) {
-    error.value = err.response?.data?.message || err.message
+    const payload = {
+      acn: acn.value || undefined,
+      serialNumber: serialNumber.value || undefined,
+      description: desc,
+      productName: desc,
+      status: 'for_disposal',
+      purpose: 'Disposal',
+      department: department.value || undefined,
+      broughtBy: { name: eu, employee: endUserId.value || undefined, department: department.value || undefined },
+      remarks:
+        desc || remarks.value || (rsn === 'damaged_beyond_repair' ? 'DEFECTIVE' : rsn)
+    }
+    payload.inventoryRecordId = inventoryRecordId.value || undefined
+    payload.itemId = itemId.value || undefined
+    const { data } = await axios.post('/maintenance/logs', payload)
+    if (!data?.success) throw new Error(data?.message || 'Failed to create for-disposal log')
+    router.push({ name: 'disposal-list' })
+  } catch (e) {
+    error.value = e?.response?.data?.message || e.message || String(e)
   } finally {
     loading.value = false
   }
 }
 
 onMounted(async () => {
-  await fetchInventoryRecords()
-  prefillFromQuery()
+  await Promise.all([fetchProducts(), fetchDepartments()])
+  await prefillFromQuery()
 })
 </script>
 
 <template>
   <DefaultLayout>
-    <BreadcrumbDefault pageTitle="Create Disposal Record" />
+    <BreadcrumbDefault pageTitle="Create For Disposal" />
     <div class="p-6">
       <div class="bg-white rounded shadow p-6">
         <div v-if="error" class="bg-red-100 text-red-700 p-3 rounded mb-4">{{ error }}</div>
-        
-        <form @submit.prevent="submitDisposal">
+
+        <form @submit.prevent="submitForDisposal">
           <div class="grid grid-cols-2 gap-4 mb-4">
-        <div class="col-span-2">
-          <label class="block mb-2">Select Inventory Item</label>
-          <select v-model="inventoryRecordId" @change="onRecordSelect" class="w-full border rounded px-3 py-2">
-            <option value="">Select Item</option>
-            <option v-for="rec in inventoryRecords" :key="rec._id" :value="rec._id">{{ rec.items?.[0]?.acn }} - {{ rec.items?.[0]?.description }}</option>
-          </select>
-        </div>
-        <div>
-          <label class="block mb-2">Description</label>
-          <input v-model="description" type="text" readonly class="w-full border rounded px-3 py-2 bg-gray-50" />
-        </div>
-        <div>
-          <label class="block mb-2">Property Number</label>
-          <input v-model="propertyNumber" type="text" readonly class="w-full border rounded px-3 py-2 bg-gray-50" />
-        </div>
-        <div>
-          <label class="block mb-2">ACN</label>
-          <input v-model="acn" type="text" readonly class="w-full border rounded px-3 py-2 bg-gray-50" />
-        </div>
-        <div>
-          <label class="block mb-2">Serial Number</label>
-          <input v-model="serialNumber" type="text" readonly class="w-full border rounded px-3 py-2 bg-gray-50" />
-        </div>
-        <div>
-          <label class="block mb-2">Name of End User/Office</label>
-          <input v-model="endUserOffice" type="text" readonly class="w-full border rounded px-3 py-2 bg-gray-50" />
-        </div>
-        <div>
-          <label class="block mb-2">Reason <span class="text-red-500">*</span></label>
-          <select v-model="reason" required class="w-full border rounded px-3 py-2">
-            <option value="">Select Reason</option>
-            <option value="obsolete">Obsolete</option>
-            <option value="damaged_beyond_repair">Damaged Beyond Repair</option>
-            <option value="lost">Lost</option>
-            <option value="stolen">Stolen</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-        <div>
-          <label class="block mb-2">Reason Details</label>
-          <input v-model="reasonDetails" type="text" class="w-full border rounded px-3 py-2" />
-        </div>
-        <div>
-          <label class="block mb-2">Remarks</label>
-          <input v-model="remarks" type="text" placeholder="e.g., DEFECTIVE" class="w-full border rounded px-3 py-2" />
-        </div>
-        <div class="col-span-2">
-          <label class="block mb-2">Proof Images</label>
-          <input type="file" @change="handleImageUpload" multiple accept="image/*" class="w-full border rounded px-3 py-2" />
-          <div v-if="proofImages.length" class="flex gap-2 mt-2">
-            <img v-for="(img, i) in proofImages" :key="i" :src="img" class="w-20 h-20 object-cover rounded" />
-          </div>
-        </div>
-        <div class="col-span-2">
-          <label class="block mb-2">Notes</label>
-          <textarea v-model="notes" class="w-full border rounded px-3 py-2" rows="3"></textarea>
-        </div>
+            <div class="col-span-2">
+              <label class="block mb-2">Item</label>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <BaseCombobox
+                    v-model="selectedProductId"
+                    :options="productOptions"
+                    labelKey="label"
+                    valueKey="_id"
+                    placeholder="Select item (optional)"
+                    @change="onProductChange"
+                  />
+                </div>
+                <div>
+                  <input
+                    v-model="description"
+                    type="text"
+                    class="w-full border border-stroke rounded px-3 py-2 bg-white"
+                    placeholder="Or type description"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label class="block mb-2">ACN (Optional)</label>
+              <AcnCombobox v-model="acn" placeholder="Type or search ACN" @select="onAcnSelect" />
+            </div>
+            <div>
+              <label class="block mb-2">Serial Number (Optional)</label>
+              <input
+                v-model="serialNumber"
+                type="text"
+                class="w-full border border-stroke rounded px-3 py-2 bg-white"
+              />
+            </div>
+
+            <div>
+              <label class="block mb-2">Department <span class="text-red-500">*</span></label>
+              <BaseCombobox
+                v-model="department"
+                :options="departments"
+                labelKey="name"
+                valueKey="name"
+                placeholder="Select department"
+              />
+            </div>
+            <div>
+              <label class="block mb-2">End User <span class="text-red-500">*</span></label>
+              <EmployeeCombobox
+                v-model="endUser"
+                :department="department"
+                :disabled="!department"
+                :limit="1000"
+                placeholder="Search employee"
+                @select="(e) => {
+                  endUserId.value = e?._id || ''
+                  department.value = e?.department || department.value || ''
+                }"
+              />
+              <div v-if="!department" class="text-xs text-bodydark2 mt-1">Select department first</div>
+            </div>
+
+            <div>
+              <label class="block mb-2">Reason <span class="text-red-500">*</span></label>
+              <select
+                v-model="reason"
+                required
+                class="w-full border-stroke border rounded px-3 py-2"
+              >
+                <option value="damaged_beyond_repair">Damaged Beyond Repair</option>
+                <option value="unserviceable">Unserviceable</option>
+                <option value="obsolete">Obsolete</option>
+                <option value="lost">Lost</option>
+                <option value="stolen">Stolen</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label class="block mb-2">Remarks</label>
+              <input
+                v-model="remarks"
+                type="text"
+                class="w-full border border-stroke rounded px-3 py-2 bg-white"
+                placeholder="e.g., DEFECTIVE"
+              />
+            </div>
           </div>
 
           <div class="flex gap-2">
-            <button type="submit" :disabled="loading" class="bg-primary text-white px-6 py-2 rounded">{{ loading ? 'Creating...' : 'Create Disposal Record' }}</button>
-            <button type="button" @click="router.back()" class="border px-6 py-2 rounded">Cancel</button>
+            <button
+              type="submit"
+              :disabled="loading"
+              class="bg-primary text-white px-6 py-2 rounded"
+            >
+              {{ loading ? 'Creating...' : 'Create For Disposal' }}
+            </button>
+            <button type="button" @click="router.back()" class="border px-6 py-2 rounded">
+              Cancel
+            </button>
           </div>
         </form>
       </div>

@@ -5,7 +5,7 @@ import DefaultLayout from '../../layouts/DefaultLayout.vue'
 import BreadcrumbDefault from '../../components/Breadcrumbs/BreadcrumbDefault.vue'
 import BaseCombobox from '../../components/Forms/BaseCombobox.vue'
 import { useAuthStore } from '../../stores/auth'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 
 const pageTitle = ref('Inventory Records')
 const route = useRoute()
@@ -42,8 +42,553 @@ const departments = ref([])
 const authStore = useAuthStore()
 const createdByName = computed(() => authStore?.user?.name || authStore?.user?.email || '')
 
-// Lifecycle status options
-const statusOptions = ['deployed', 'returned', 'repair', 'retired']
+// Centralized Status Management
+const STATUS_CONFIG = {
+  // Status definitions with display labels and styling
+  statuses: {
+    deployed: {
+      label: 'Deployed',
+      badgeClass: 'bg-green-100 text-green-700',
+      description: 'Item is deployed and in use'
+    },
+    returned: {
+      label: 'Returned',
+      badgeClass: 'bg-yellow-100 text-yellow-800',
+      description: 'Item has been returned'
+    },
+    repair: {
+      label: 'Repair',
+      badgeClass: 'bg-orange-100 text-orange-800',
+      description: 'Item needs repair'
+    },
+    under_repair: {
+      label: 'Under Repair',
+      badgeClass: 'bg-orange-300 text-orange-800',
+      description: 'Item is currently being repaired'
+    },
+    'under repair': {
+      label: 'Under Repair',
+      badgeClass: 'bg-orange-300 text-orange-800',
+      description: 'Item is currently being repaired'
+    },
+    replaced: {
+      label: 'Replaced',
+      badgeClass: 'bg-blue-100 text-blue-700',
+      description: 'Item has been replaced'
+    },
+    retired: {
+      label: 'Retired',
+      badgeClass: 'bg-gray-200 text-gray-700',
+      description: 'Item is retired from service'
+    },
+    for_disposal: {
+      label: 'For Disposal',
+      badgeClass: 'bg-gray-300 text-gray-800',
+      description: 'Item is marked for disposal'
+    },
+    'for disposal': {
+      label: 'For Disposal',
+      badgeClass: 'bg-gray-300 text-gray-800',
+      description: 'Item is marked for disposal'
+    },
+    disposed: {
+      label: 'Disposed',
+      badgeClass: 'bg-red-100 text-red-700',
+      description: 'Item has been disposed'
+    },
+    mixed: {
+      label: 'Mixed',
+      badgeClass: 'bg-gray-300 text-gray-800',
+      description: 'Items have mixed statuses'
+    },
+    unassigned: {
+      label: 'Unassigned',
+      badgeClass: 'bg-gray-100 text-gray-600',
+      description: 'Item is not assigned'
+    },
+    repaired: {
+      label: 'Repaired',
+      badgeClass: 'bg-green-200 text-green-800',
+      description: 'Item has been repaired'
+    }
+  },
+
+  // Get all available status options for dropdowns
+  getOptions() {
+    return [
+      'deployed',
+      'returned',
+      'repair',
+      'retired',
+      'under_repair',
+      'for_disposal',
+      'replaced',
+      'repaired'
+    ]
+  },
+
+  // Normalize status string to consistent format
+  normalizeStatus(status) {
+    if (!status) return ''
+    return status.toLowerCase().trim().replace(/\s+/g, '_')
+  },
+
+  // Get status configuration
+  getStatusConfig(status) {
+    const normalized = this.normalizeStatus(status)
+
+    // Handle special cases for display
+    if (normalized === 'under_repair' || normalized === 'under-repair') {
+      return this.statuses.under_repair
+    }
+    if (normalized === 'for_disposal' || normalized === 'for-disposal') {
+      return this.statuses.for_disposal
+    }
+
+    return this.statuses[normalized] || this.statuses.unassigned
+  },
+
+  // Get display label for status
+  getLabel(status) {
+    return this.getStatusConfig(status).label
+  },
+
+  // Get badge CSS classes for status
+  getBadgeClass(status) {
+    const base = 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium '
+    return base + this.getStatusConfig(status).badgeClass
+  }
+}
+
+// Helper functions for working with primary and secondary items
+const ITEM_FINDER = {
+  // Find any item (primary or secondary) by ACN
+  findItemByAcn(acnCode, items) {
+    const normalizedAcn = String(acnCode).trim().toUpperCase()
+
+    // Check primary items first
+    const primaryItem = items.find(
+      (it) =>
+        String(it?.acn || '')
+          .trim()
+          .toUpperCase() === normalizedAcn
+    )
+    if (primaryItem) {
+      return { item: primaryItem, type: 'primary', container: primaryItem }
+    }
+
+    // Check secondary items
+    for (const container of items) {
+      if (container?.secondaryItems && Array.isArray(container.secondaryItems)) {
+        const secondaryItem = container.secondaryItems.find(
+          (sec) =>
+            String(sec?.acn || '')
+              .trim()
+              .toUpperCase() === normalizedAcn
+        )
+        if (secondaryItem) {
+          return { item: secondaryItem, type: 'secondary', container }
+        }
+      }
+    }
+
+    return null
+  },
+  // Get all ACNs from an item (primary + secondary)
+  getAllAcnsFromItem(item) {
+    const acns = []
+    if (item?.acn) acns.push(String(item.acn).trim())
+
+    if (item?.secondaryItems && Array.isArray(item.secondaryItems)) {
+      item.secondaryItems.forEach((sec) => {
+        if (sec?.acn) acns.push(String(sec.acn).trim())
+      })
+    }
+    return acns
+  },
+
+  // Get status for any item (primary or secondary)
+  getItemStatus(item, itemType = 'primary', container = null) {
+    if (itemType === 'secondary') {
+      // Secondary items inherit repair status from their container
+      // But maintain their own deployment status
+      const containerRepairStatus = container?.repairStatus || container?.status || 'unassigned'
+      const itemStatus = item?.status || 'deployed' // Secondary items default to deployed
+
+      // Check if container is under repair (either via repairStatus or status field)
+      const containerIsUnderRepair =
+        containerRepairStatus === 'under_repair' ||
+        containerRepairStatus === 'under repair' ||
+        container?.status === 'under_repair' ||
+        container?.status === 'under repair'
+
+      // If container is under repair, secondary items should show as under_repair
+      if (containerIsUnderRepair) {
+        return 'under_repair'
+      }
+
+      return itemStatus
+    }
+
+    // For primary items, check if they're under repair
+    const isUnderRepair =
+      item?.repairStatus === 'under_repair' ||
+      item?.repairStatus === 'under repair' ||
+      item?.status === 'under_repair' ||
+      item?.status === 'under repair'
+
+    // Return the appropriate status based on what's being tracked
+    if (isUnderRepair) {
+      return 'under_repair'
+    }
+
+    return item?.status || 'deployed'
+  }
+}
+
+// Enhanced ACN Status Management with Priority System
+const ACN_STATUS_PRIORITY = {
+  // Priority order: Global ACN status > Local item status > Default
+  getEffectiveStatus(item, globalAssignments) {
+    const acn = String(item?.acn || '')
+      .trim()
+      .toUpperCase()
+    const serial = String(item?.serialNumber || '').trim()
+
+    // 1. Check global ACN assignment status (highest priority)
+    if (acn && globalAssignments?.acn?.[acn]) {
+      const globalInfo = globalAssignments.acn[acn]
+      return {
+        status: globalInfo.status,
+        repairStatus: globalInfo.repairStatus,
+        assigned: globalInfo.assigned,
+        source: 'global_acn',
+        isUnderRepair: globalInfo.repairStatus && globalInfo.repairStatus !== 'completed',
+        lastUpdated: globalInfo.statusDate
+      }
+    }
+    // 2. Check global serial assignment status
+    if (serial && globalAssignments?.serial?.[serial]) {
+      const globalInfo = globalAssignments.serial[serial]
+      return {
+        status: globalInfo.status,
+        repairStatus: globalInfo.repairStatus,
+        assigned: globalInfo.assigned,
+        source: 'global_serial',
+        isUnderRepair: globalInfo.repairStatus && globalInfo.repairStatus !== 'completed',
+        lastUpdated: globalInfo.statusDate
+      }
+    }
+    // 3. Fall back to local item status (lowest priority)
+    // Check if this item should be under repair based on local data
+    const localStatus = String(item?.status || '')
+      .trim()
+      .toLowerCase()
+    const localRepairStatus = String(item?.repairStatus || '')
+      .trim()
+      .toLowerCase()
+
+    // Check if under repair (either from status field or repairStatus field)
+    const isLocallyUnderRepair =
+      localStatus === 'under_repair' ||
+      localStatus === 'under repair' ||
+      (localRepairStatus && localRepairStatus !== 'completed' && localRepairStatus !== 'none')
+
+    return {
+      status: isLocallyUnderRepair ? 'under_repair' : item?.status || 'unassigned',
+      repairStatus: item?.repairStatus,
+      assigned: item?.assigned !== false, // Assume assigned unless explicitly false
+      source: 'local_item',
+      isUnderRepair: isLocallyUnderRepair,
+      lastUpdated: item?.statusDate,
+      note: acn ? 'ACN not found in global system, using local status' : 'No ACN assigned'
+    }
+  },
+
+  // Get display status with proper normalization
+  getDisplayStatus(item, globalAssignments) {
+    const effective = this.getEffectiveStatus(item, globalAssignments)
+
+    // If under repair, that takes precedence
+    if (effective.isUnderRepair) {
+      return 'under_repair'
+    }
+
+    // Use the normalized status
+    return STATUS_CONFIG.normalizeStatus(effective.status)
+  },
+
+  // Get status source information for debugging
+  getStatusSource(item, globalAssignments) {
+    const effective = this.getEffectiveStatus(item, globalAssignments)
+    return {
+      source: effective.source,
+      originalStatus: effective.status,
+      repairStatus: effective.repairStatus,
+      isUnderRepair: effective.isUnderRepair,
+      displayStatus: this.getDisplayStatus(item, globalAssignments),
+      note: effective.note
+    }
+  },
+
+  // Check if ACN exists in global system
+  isAcnInGlobalSystem(acnCode, globalAssignments) {
+    const normalized = String(acnCode || '')
+      .trim()
+      .toUpperCase()
+    return !!globalAssignments?.acn?.[normalized]
+  }
+}
+
+// Real-time Status Synchronization
+const STATUS_SYNC = {
+  // Force refresh status for specific ACN
+  async refreshAcnStatus(acnCode) {
+    try {
+      const normalized = String(acnCode).trim().toUpperCase()
+      const { data } = await axios.post('/acns/assignment-status', {
+        acns: [normalized],
+        serials: []
+      })
+
+      if (data?.assignments?.acn?.[normalized]) {
+        statusAssignments.value.acn[normalized] = data.assignments.acn[normalized]
+        console.log(`🔄 Refreshed status for ${acnCode}:`, data.assignments.acn[normalized])
+        return true
+      }
+    } catch (err) {
+      console.error(`❌ Failed to refresh status for ${acnCode}:`, err)
+    }
+    return false
+  },
+
+  // Get status with sync indicator
+  getStatusWithSyncInfo(item) {
+    const effective = ACN_STATUS_PRIORITY.getEffectiveStatus(item, statusAssignments.value)
+    const sourceInfo = ACN_STATUS_PRIORITY.getStatusSource(item, statusAssignments.value)
+
+    return {
+      ...sourceInfo,
+      needsSync: effective.source === 'local_item' && item?.acn,
+      canRefresh: !!item?.acn
+    }
+  },
+
+  // Format status display with source info
+  formatStatusWithSource(item) {
+    const info = this.getStatusWithSyncInfo(item)
+    const label = STATUS_CONFIG.getLabel(info.displayStatus)
+    const sourceIndicator =
+      info.source === 'global_acn' ? '🌐' : info.source === 'global_serial' ? '🔗' : '📋'
+
+    return {
+      label,
+      indicator: sourceIndicator,
+      tooltip: `Source: ${info.source.replace('_', ' ')}\nStatus: ${
+        info.originalStatus
+      }\nDisplay: ${label}`,
+      needsSync: info.needsSync
+    }
+  }
+}
+
+// Status Display Component (can be used anywhere in the page)
+const StatusDisplay = {
+  // Render status with source indicator and sync capability
+  render(item, options = {}) {
+    const { showSource = false, showSyncButton = false, compact = false } = options
+    const statusInfo = STATUS_SYNC.formatStatusWithSource(item)
+    const badgeClass = STATUS_CONFIG.getBadgeClass(statusInfo.displayStatus)
+
+    return {
+      class: badgeClass,
+      text: statusInfo.label,
+      title: statusInfo.tooltip,
+      showSource: showSource ? statusInfo.indicator : null,
+      canSync: showSyncButton && statusInfo.needsSync,
+      acn: item?.acn
+    }
+  },
+
+  // Get all status details for comprehensive display
+  getFullStatusDetails(item) {
+    const effective = ACN_STATUS_PRIORITY.getEffectiveStatus(item, statusAssignments.value)
+    const config = STATUS_CONFIG.getStatusConfig(effective.status)
+
+    return {
+      displayStatus: ACN_STATUS_PRIORITY.getDisplayStatus(item, statusAssignments.value),
+      displayLabel: STATUS_CONFIG.getLabel(effective.status),
+      badgeClass: STATUS_CONFIG.getBadgeClass(effective.status),
+      source: effective.source,
+      originalStatus: effective.status,
+      repairStatus: effective.repairStatus,
+      isUnderRepair: effective.isUnderRepair,
+      lastUpdated: effective.lastUpdated,
+      description: config.description,
+      needsSync: effective.source === 'local_item' && item?.acn,
+      acn: item?.acn,
+      serial: item?.serialNumber
+    }
+  }
+}
+
+// Repair & Maintenance System Integration Test
+const REPAIR_INTEGRATION_TEST = {
+  // Test ACN integration across multiple systems
+  async testAcnIntegration(acnCode) {
+    console.log(`🔧 Testing ACN integration for: ${acnCode}`)
+
+    try {
+      // 1. Check assignment status (current system)
+      const assignmentResponse = await axios.post('/acns/assignment-status', {
+        acns: [acnCode],
+        serials: []
+      })
+      console.log(`📋 Assignment Status:`, assignmentResponse.data)
+
+      // 2. Check repair system endpoints
+      const repairEndpoints = [
+        { name: 'ACN Repairs', url: `/acns/${acnCode}/repairs` },
+        { name: 'ACN Status', url: `/acns/${acnCode}/status` },
+        { name: 'Repairs by ACN', url: `/repairs?acn=${acnCode}` },
+        { name: 'Maintenance by ACN', url: `/maintenance?acn=${acnCode}` },
+        { name: 'Repair Tickets', url: `/repair-tickets?acn=${acnCode}` },
+        { name: 'Service History', url: `/service-history?acn=${acnCode}` }
+      ]
+
+      const repairResults = {}
+      for (const endpoint of repairEndpoints) {
+        try {
+          const response = await axios.get(endpoint.url)
+          if (response.data && Object.keys(response.data).length > 0) {
+            repairResults[endpoint.name] = {
+              success: true,
+              data: response.data,
+              status: response.status
+            }
+            console.log(`✅ ${endpoint.name}:`, response.data)
+          } else {
+            repairResults[endpoint.name] = { success: false, reason: 'Empty data' }
+          }
+        } catch (err) {
+          repairResults[endpoint.name] = {
+            success: false,
+            status: err.response?.status,
+            reason: err.response?.statusText || 'Not found'
+          }
+          console.log(`❌ ${endpoint.name}:`, err.response?.status)
+        }
+      }
+
+      // 3. Check ACN details endpoint
+      try {
+        const acnDetails = await axios.get(`/acns/${acnCode}`)
+        console.log(`📋 ACN Details:`, acnDetails.data)
+        repairResults['ACN Details'] = {
+          success: true,
+          data: acnDetails.data
+        }
+      } catch (err) {
+        repairResults['ACN Details'] = {
+          success: false,
+          status: err.response?.status
+        }
+      }
+
+      // 4. Analyze integration
+      const analysis = this.analyzeIntegration(acnCode, assignmentResponse.data, repairResults)
+      console.log(`🔍 Integration Analysis for ${acnCode}:`, analysis)
+
+      return {
+        acn: acnCode,
+        assignmentStatus: assignmentResponse.data,
+        repairSystemResults: repairResults,
+        analysis
+      }
+    } catch (err) {
+      console.error(`❌ Integration test failed for ${acnCode}:`, err)
+      return { acn: acnCode, error: err.message }
+    }
+  },
+
+  // Analyze integration results
+  analyzeIntegration(acnCode, assignmentData, repairResults) {
+    const hasAssignment = !!assignmentData?.assignments?.acn?.[acnCode]
+    const hasRepairData = Object.values(repairResults).some((result) => result.success)
+
+    const integration = {
+      acn: acnCode,
+      hasAssignmentData: hasAssignment,
+      hasRepairData: hasRepairData,
+      integrationLevel: 'none'
+    }
+
+    if (hasAssignment && hasRepairData) {
+      integration.integrationLevel = 'full'
+      integration.status = '✅ ACN exists in both assignment and repair systems'
+    } else if (hasAssignment) {
+      integration.integrationLevel = 'partial'
+      integration.status = '⚠️ ACN exists in assignment system but not in repair system'
+    } else if (hasRepairData) {
+      integration.integrationLevel = 'partial'
+      integration.status = '⚠️ ACN exists in repair system but not in assignment system'
+    } else {
+      integration.status = '❌ ACN not found in either system'
+    }
+
+    // Check data consistency
+    if (hasAssignment) {
+      const assignmentInfo = assignmentData.assignments.acn[acnCode]
+      integration.assignmentInfo = {
+        status: assignmentInfo.status,
+        repairStatus: assignmentInfo.repairStatus,
+        assigned: assignmentInfo.assigned,
+        lastUpdated: assignmentInfo.statusDate
+      }
+    }
+
+    return integration
+  },
+
+  // Batch test multiple ACNs
+  async batchTestIntegration(acnCodes) {
+    console.log(`🔧 Batch testing integration for ACNs:`, acnCodes)
+    const results = {}
+
+    for (const acn of acnCodes) {
+      results[acn] = await this.testAcnIntegration(acn)
+      // Small delay to avoid overwhelming the API
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    }
+
+    // Summary analysis
+    const summary = {
+      total: acnCodes.length,
+      fullIntegration: Object.values(results).filter((r) => r.analysis?.integrationLevel === 'full')
+        .length,
+      partialIntegration: Object.values(results).filter(
+        (r) => r.analysis?.integrationLevel === 'partial'
+      ).length,
+      noIntegration: Object.values(results).filter((r) => r.analysis?.integrationLevel === 'none')
+        .length
+    }
+
+    console.log(`📊 Integration Test Summary:`, summary)
+    console.log(`📊 Detailed Results:`, results)
+
+    return { summary, results }
+  }
+}
+
+// Utility function for comprehensive debugging
+function debugStatusComprehensive(item, context = '') {
+  const details = StatusDisplay.getFullStatusDetails(item)
+  console.log(`🔍 Comprehensive Status Debug ${context}:`, details)
+  return details
+}
+
+// Legacy compatibility
+const statusOptions = STATUS_CONFIG.getOptions()
 
 // Cache of globally deployed ACN codes for robust filtering
 const deployedAcnCodes = ref([])
@@ -55,6 +600,11 @@ function specFrom(item, key) {
   } catch (_) {
     return ''
   }
+}
+
+function stripInlineAcn(text) {
+  const s = String(text || '')
+  return s.replace(/\s*ACN[\s:-]*[A-Z]{3}-\d{3}-\d{2}-\d{4}\b/g, '').trim()
 }
 
 // Helper to extract ACNs from legacy display strings (backward compatibility)
@@ -102,7 +652,6 @@ async function fetchDeployedAcnCodes() {
         .filter((s) => !!s)
     )
     const uniq = Array.from(new Set(codes))
-    console.log(data)
     deployedAcnCodes.value = uniq
   } catch (_) {
     deployedAcnCodes.value = deployedAcnCodes.value || []
@@ -133,6 +682,9 @@ function collectIdentifiers(rec) {
       if (sacn) acnSet.add(sacn.toUpperCase())
       else if (ssn) serialSet.add(ssn)
     }
+    // Include ACNs embedded in legacy display strings to ensure statuses are fetched
+    const inlineAcns = extractAcnsFromDisplayStrings(it)
+    for (const code of inlineAcns) acnSet.add(code.toUpperCase())
   }
   return {
     acnCodes: Array.from(acnSet),
@@ -143,77 +695,310 @@ function collectIdentifiers(rec) {
 async function fetchAssignmentStatusForSelectedRecord() {
   statusLoading.value = true
   statusError.value = null
+
   try {
-    const { acnCodes, serialNumbers } = collectIdentifiers(selectedRecord.value)
-    if (!acnCodes.length && !serialNumbers.length) {
+    const items = Array.isArray(selectedRecord.value?.items) ? selectedRecord.value.items : []
+
+    // Collect ALL ACNs from primary items AND secondary items
+    const allAcns = new Set()
+    const allSerials = new Set()
+
+    items.forEach((item) => {
+      // Primary ACN
+      if (item?.acn) {
+        allAcns.add(String(item.acn).trim())
+      }
+      if (item?.serialNumber) {
+        allSerials.add(String(item.serialNumber).trim())
+      }
+
+      // Secondary items ACNs and serials
+      if (item?.secondaryItems && Array.isArray(item.secondaryItems)) {
+        item.secondaryItems.forEach((secItem) => {
+          if (secItem?.acn) {
+            allAcns.add(String(secItem.acn).trim())
+          }
+          if (secItem?.serialNumber) {
+            allSerials.add(String(secItem.serialNumber).trim())
+          }
+        })
+      }
+    })
+
+    const acnCodes = Array.from(allAcns)
+    const serialNumbers = Array.from(allSerials)
+
+    console.log('🔍 DEBUG fetchAssignmentStatus - Collected ACNs:', acnCodes)
+    console.log('🔍 DEBUG fetchAssignmentStatus - Collected Serials:', serialNumbers)
+    console.log(
+      '🔍 DEBUG fetchAssignmentStatus - Full items list with secondary ACNs:',
+      items.map((it) => ({
+        primaryAcn: it.acn,
+        primaryStatus: it.status,
+        primaryRepairStatus: it.repairStatus,
+        propertyNumber: it.propertyNumber,
+        secondaryAcns:
+          it.secondaryItems?.map((sec) => ({
+            type: sec.type,
+            acn: sec.acn,
+            serialNumber: sec.serialNumber
+          })) || []
+      }))
+    )
+
+    if (acnCodes.length === 0 && serialNumbers.length === 0) {
       statusAssignments.value = { acn: {}, serial: {} }
+      console.log('🔍 DEBUG fetchAssignmentStatus - No ACNs or serials to fetch')
       return
     }
-    const { data } = await axios.post('/acns/assignment-status', {
-      acnCodes,
-      serialNumbers
-    })
+
+    const requestBody = {
+      acns: acnCodes,
+      serials: serialNumbers
+    }
+
+    console.log('🔍 DEBUG fetchAssignmentStatus - Request body:', requestBody)
+
+    const { data } = await axios.post('/acns/assignment-status', requestBody)
+
+    console.log('📦 DEBUG fetchAssignmentStatus - Response data:', data)
+    console.log('📊 DEBUG fetchAssignmentStatus - Assignments:', data?.assignments)
+
+    // Detailed analysis of response
+    if (data?.assignments) {
+      console.log(
+        '🔍 DEBUG fetchAssignmentStatus - ACN assignments found:',
+        Object.keys(data.assignments.acn || {})
+      )
+      console.log(
+        '🔍 DEBUG fetchAssignmentStatus - Serial assignments found:',
+        Object.keys(data.assignments.serial || {})
+      )
+
+      // Check which ACNs were not found
+      const foundAcns = Object.keys(data.assignments.acn || {})
+      const missingAcns = acnCodes.filter((acn) => !foundAcns.includes(acn))
+      if (missingAcns.length > 0) {
+        console.log(
+          '⚠️ DEBUG fetchAssignmentStatus - ACNs not found in global system:',
+          missingAcns
+        )
+      }
+    }
+
     statusAssignments.value = data?.assignments || { acn: {}, serial: {} }
+
+    // Debug ALL ACNs, not just the first one
+    const problematicAcn = 'PRI-005-25-0275'
+
+    // Check each ACN that was requested (using enhanced finder)
+    for (const acn of acnCodes) {
+      if (statusAssignments.value?.acn?.[acn]) {
+        console.log(`🔍 DEBUG ${acn} Global Status:`, statusAssignments.value.acn[acn])
+      } else {
+        console.log(`⚠️ DEBUG ${acn} NOT found in global assignments`)
+      }
+
+      // Find the item (primary or secondary) using enhanced finder
+      const itemInfo = ITEM_FINDER.findItemByAcn(acn, items)
+      if (itemInfo) {
+        const { item, type, container } = itemInfo
+        const localStatus = String(ITEM_FINDER.getItemStatus(item, type, container))
+          .trim()
+          .toLowerCase()
+        const localRepairStatus = String(item?.repairStatus || container?.repairStatus || '')
+          .trim()
+          .toLowerCase()
+        const isLocallyUnderRepair =
+          localStatus === 'under_repair' ||
+          localStatus === 'under repair' ||
+          (localRepairStatus && localRepairStatus !== 'completed' && localRepairStatus !== 'none')
+
+        console.log(`🔍 DEBUG ${acn} Local Status (${type}):`, {
+          itemType: type,
+          deploymentStatus: item?.status,
+          repairStatus: item?.repairStatus,
+          containerDeploymentStatus: container?.status,
+          containerRepairStatus: container?.repairStatus,
+          localStatus: ITEM_FINDER.getItemStatus(item, type, container),
+          isLocallyUnderRepair,
+          globalStatus: statusAssignments.value?.acn?.[acn]?.status,
+          globalRepairStatus: statusAssignments.value?.acn?.[acn]?.repairStatus,
+          containerAcn: container?.acn,
+          remarks: item?.remarksYears || container?.remarks
+        })
+
+        // Create a mock item object for the priority system
+        const mockItem = {
+          ...item,
+          status: localStatus,
+          repairStatus: localRepairStatus,
+          acn: acn,
+          assigned: container?.assigned !== false
+        }
+
+        // Test the new priority system
+        const effectiveStatus = ACN_STATUS_PRIORITY.getEffectiveStatus(
+          mockItem,
+          statusAssignments.value
+        )
+        console.log(`🔍 DEBUG ${acn} Effective Status:`, effectiveStatus)
+        console.log(
+          `🎯 DEBUG ${acn} Final Display Status:`,
+          ACN_STATUS_PRIORITY.getDisplayStatus(mockItem, statusAssignments.value)
+        )
+      } else {
+        console.log(`❌ DEBUG ${acn} Item not found in primary or secondary items`)
+      }
+    }
+
+    // Special check for the problematic ACN if it exists in current items
+    if (acnCodes.includes(problematicAcn)) {
+      console.log(`🚨 SPECIAL DEBUG: Found problematic ACN ${problematicAcn} in current record`)
+    }
+
+    // Check if ACNs should exist in repair system (using comprehensive integration test)
+    console.log(`🔧 Running comprehensive integration test for ACNs...`)
+    setTimeout(async () => {
+      await REPAIR_INTEGRATION_TEST.batchTestIntegration(
+        missingAcns.length > 0 ? missingAcns : acnCodes
+      )
+    }, 1000) // Delay to not interfere with main debug output
+
+    console.log(
+      '✅ DEBUG fetchAssignmentStatus - Final statusAssignments:',
+      statusAssignments.value
+    )
   } catch (err) {
+    console.error('❌ DEBUG fetchAssignmentStatus - Error:', err)
+    console.error('❌ DEBUG fetchAssignmentStatus - Error response:', err?.response?.data)
     statusError.value = err?.response?.data?.message || err.message || 'Failed to load statuses'
   } finally {
     statusLoading.value = false
   }
 }
 
+function normalizeLifecycleStatus(st, rs, assigned) {
+  const status = STATUS_CONFIG.normalizeStatus(st)
+  const repairStatus = STATUS_CONFIG.normalizeStatus(rs)
+
+  // If repair is completed, return the original status or deployed if assigned
+  if (repairStatus === 'completed') {
+    return status || (assigned ? 'deployed' : 'unassigned')
+  }
+
+  // If under repair, keep that status
+  if (status === 'under_repair') return 'under_repair'
+
+  // Handle final lifecycle statuses
+  if (['returned', 'retired', 'for_disposal', 'disposed', 'replaced'].includes(status)) {
+    return status
+  }
+
+  // Default to status or assigned/unassigned
+  return status || (assigned ? 'deployed' : 'unassigned')
+}
+
 function statusForRow(row) {
   try {
     const endUser = String(row?.endUserOrMR || '').trim()
     const items = Array.isArray(selectedRecord.value?.items) ? selectedRecord.value.items : []
-    const exemplars = items.filter(
-      (it) => String(it?.endUserOrMR || '').trim() === endUser
-    )
-    const byCat = (pid) => {
-      const p = products.value.find((x) => String(x._id) === String(pid))
-      return String(p?.category?.name || '').toLowerCase()
+    const group = items.filter((it) => String(it?.endUserOrMR || '').trim() === endUser)
+    const statuses = []
+
+    for (const it of group) {
+      // Use the new priority system
+      const displayStatus = ACN_STATUS_PRIORITY.getDisplayStatus(it, statusAssignments.value)
+      statuses.push(displayStatus)
+
+      // Debug logging for troubleshooting
+      const sourceInfo = ACN_STATUS_PRIORITY.getStatusSource(it, statusAssignments.value)
+      if (it?.acn === 'PRI-005-25-0275') {
+        console.log(`🔍 ACN Status Debug for ${it.acn}:`, sourceInfo)
+      }
     }
-    const primary =
-      exemplars.find((it) => {
-        const cname = byCat(it.product)
-        return cname.includes('desktop') || cname.includes('laptop') || cname.includes('computer')
-      }) || exemplars[0] || null
 
-    const acn = String(primary?.acn || '').trim().toUpperCase()
-    const sn = String(primary?.serialNumber || '').trim()
-    const info = acn
-      ? statusAssignments.value?.acn?.[acn]
-      : sn
-      ? statusAssignments.value?.serial?.[sn]
-      : null
-
+    const uniq = Array.from(new Set(statuses.filter(Boolean)))
     let status = '—'
-    if (info) {
-      status = String(info?.repairStatus || '')
-        ? 'under_repair'
-        : String(info?.status || (info?.assigned ? 'deployed' : 'unassigned'))
-    } else {
-      status = String(primary?.status || '').trim() || '—'
-    }
 
-    return { status, label: status ? status.replace(/_/g, ' ') : '—' }
+    if (uniq.length === 0) status = '—'
+    else if (uniq.length === 1) status = uniq[0]
+    else status = 'mixed'
+
+    return {
+      status,
+      label: STATUS_CONFIG.getLabel(status)
+    }
   } catch (_) {
     return { status: '—', label: '—' }
   }
 }
 
+// Legacy function - use STATUS_CONFIG.getBadgeClass instead
 function lifecycleBadgeClass(status) {
-  const base = 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium '
-  const map = {
-    deployed: 'bg-green-100 text-green-700',
-    returned: 'bg-yellow-100 text-yellow-800',
-    repair: 'bg-orange-100 text-orange-800',
-    under_repair: 'bg-orange-100 text-orange-800',
-    replaced: 'bg-blue-100 text-blue-700',
-    retired: 'bg-gray-200 text-gray-700',
-    for_disposal: 'bg-gray-300 text-gray-800',
-    unassigned: 'bg-gray-100 text-gray-600'
+  return STATUS_CONFIG.getBadgeClass(status)
+}
+
+function getAcnStatus(code) {
+  try {
+    const normalized = String(code || '')
+      .trim()
+      .toUpperCase()
+
+    // Find the item with this ACN in the current record
+    const items = Array.isArray(selectedRecord.value?.items) ? selectedRecord.value.items : []
+    const item = items.find(
+      (it) =>
+        String(it?.acn || '')
+          .trim()
+          .toUpperCase() === normalized
+    )
+
+    if (item) {
+      // Use the priority system for this specific item
+      return ACN_STATUS_PRIORITY.getDisplayStatus(item, statusAssignments.value)
+    }
+
+    // Fallback to global deployment status
+    return isGloballyDeployed(normalized) ? 'deployed' : 'unassigned'
+  } catch (_) {
+    return 'unassigned'
   }
-  return base + (map[status] || 'bg-gray-100 text-gray-700')
+}
+
+function badgeStatusForCode(code) {
+  return getAcnStatus(code)
+}
+
+function badgeClassForCode(code) {
+  return lifecycleBadgeClass(badgeStatusForCode(code))
+}
+
+function isGloballyDeployed(code) {
+  const c = String(code || '')
+    .trim()
+    .toUpperCase()
+  try {
+    const set = new Set((deployedAcnCodes?.value || []).map((x) => String(x || '').toUpperCase()))
+    return set.has(c)
+  } catch (_) {
+    return false
+  }
+}
+
+function acnTypeClass(code) {
+  const c = String(code || '')
+    .trim()
+    .toUpperCase()
+  const prefix = c.slice(0, 3)
+  const map = {
+    DES: 'border border-blue-300',
+    MON: 'border border-green-300',
+    PRI: 'border border-purple-300',
+    SCA: 'border border-teal-300',
+    LAP: 'border border-indigo-300'
+  }
+  return map[prefix] || 'border border-gray-300'
 }
 
 // (Removed refreshSelectedStatus; statuses now shown inline per row)
@@ -230,26 +1015,42 @@ function getSecondaryStatusesForRow(row) {
       return String(p?.category?.name || '').toLowerCase()
     }
     const pushStatus = (sec, bucket) => {
-      const acn = String(sec?.acn || '').trim().toUpperCase()
+      const acnPattern = /^[A-Z]{3}-\d{3}-\d{2}-\d{4}$/
+      const acnRaw = String(sec?.acn || '')
+        .trim()
+        .toUpperCase()
+      const propRaw = String(sec?.propertyNumber || '')
+        .trim()
+        .toUpperCase()
+      const acn = acnRaw || (acnPattern.test(propRaw) ? propRaw : '').trim().toUpperCase()
       const sn = String(sec?.serialNumber || '').trim()
       const info = acn
         ? statusAssignments.value?.acn?.[acn]
         : sn
-        ? statusAssignments.value?.serial?.[sn]
-        : null
+          ? statusAssignments.value?.serial?.[sn]
+          : null
       let status = '—'
       if (info) {
-        status = String(info?.repairStatus || '') ? 'under_repair' : String(info?.status || (info?.assigned ? 'deployed' : 'unassigned'))
+        status = String(info?.repairStatus || '')
+          ? 'under_repair'
+          : String(info?.status || (info?.assigned ? 'deployed' : 'unassigned'))
       }
       const label = acn ? `ACN ${acn}` : sn ? `SN ${sn}` : '—'
-      bucket.push({ key: `${acn || sn || Math.random()}`, status, label })
+      bucket.push({
+        key: `${acn || sn || Math.random()}`,
+        status,
+        label,
+        acn,
+        type: sec?.type || ''
+      })
     }
 
     // 1) Secondary items array on primary items
     for (const it of group) {
       for (const sec of it?.secondaryItems || []) {
         if (sec?.type === 'monitor') pushStatus(sec, result.monitors)
-        else if (sec?.type === 'printer' || sec?.type === 'scanner') pushStatus(sec, result.printersScanners)
+        else if (sec?.type === 'printer' || sec?.type === 'scanner')
+          pushStatus(sec, result.printersScanners)
       }
     }
     // 2) Separate items typed as monitors/printers/scanners
@@ -262,15 +1063,168 @@ function getSecondaryStatusesForRow(row) {
         const sec = {
           type: isMonitor ? 'monitor' : isPrinter ? 'printer' : 'scanner',
           acn: it.acn,
-          serialNumber: it.serialNumber
+          serialNumber: it.serialNumber,
+          propertyNumber: it.propertyNumber
         }
         if (sec.type === 'monitor') pushStatus(sec, result.monitors)
         else pushStatus(sec, result.printersScanners)
       }
     }
+
+    // 3) ACNs embedded in inline display strings (legacy)
+    const acnPattern = /[A-Z]{3}-\d{3}-\d{2}-\d{4}/g
+    for (const it of group) {
+      const monStr = String(it?.monitorAndSerial || '')
+      const monCodes = monStr.match(acnPattern) || []
+      for (const code of monCodes) {
+        const acn = String(code || '')
+          .trim()
+          .toUpperCase()
+        if (acn) pushStatus({ acn }, result.monitors)
+      }
+      const psStr = String(it?.printerOrScanner || '')
+      const psCodes = psStr.match(acnPattern) || []
+      for (const code of psCodes) {
+        const acn = String(code || '')
+          .trim()
+          .toUpperCase()
+        if (acn) pushStatus({ acn }, result.printersScanners)
+      }
+    }
     return result
   } catch (_) {
     return result
+  }
+}
+
+// Item History (per row)
+const historyRowIndex = ref(null)
+const historyEntries = ref([])
+const historyLoading = ref(false)
+const historyError = ref('')
+const closeHistory = () => {
+  historyRowIndex.value = null
+  historyEntries.value = []
+  historyError.value = ''
+}
+const getPrimaryIdentifiersForRow = (row) => {
+  try {
+    const endUser = String(row?.endUserOrMR || '').trim()
+    const items = Array.isArray(selectedRecord.value?.items) ? selectedRecord.value.items : []
+    const exemplars = items.filter((it) => String(it?.endUserOrMR || '').trim() === endUser)
+    const byCat = (pid) => {
+      const p = products.value.find((x) => String(x._id) === String(pid))
+      return String(p?.category?.name || '').toLowerCase()
+    }
+    const primary =
+      exemplars.find((it) => {
+        const cname = byCat(it.product)
+        return cname.includes('desktop') || cname.includes('laptop') || cname.includes('computer')
+      }) ||
+      exemplars[0] ||
+      null
+    const acn = String(primary?.acn || '').trim()
+    const serial = String(primary?.serialNumber || '').trim()
+    return { acn, serial }
+  } catch (_) {
+    return { acn: '', serial: '' }
+  }
+}
+function primaryStatusForRow(row) {
+  try {
+    const { acn, serial } = getPrimaryIdentifiersForRow(row)
+    const info = acn
+      ? statusAssignments.value?.acn?.[String(acn).toUpperCase()]
+      : serial
+        ? statusAssignments.value?.serial?.[serial]
+        : null
+
+    console.log(info)
+    if (info) {
+      return String(info?.repairStatus || '')
+        ? 'under_repair'
+        : String(info?.status || (info?.assigned ? 'deployed' : 'unassigned'))
+    }
+    return statusForRow(row)?.status || '—'
+  } catch (_) {
+    return '—'
+  }
+}
+
+const openRowHistory = async (row, idx) => {
+  historyRowIndex.value = idx
+  historyEntries.value = []
+  historyError.value = ''
+  historyLoading.value = true
+  try {
+    const { acn, serial } = getPrimaryIdentifiersForRow(row)
+    const events = []
+    if (acn) {
+      const r = await axios.get(`/maintenance/logs`, { params: { acn } })
+      const logs = Array.isArray(r?.data?.logs) ? r.data.logs : []
+      for (const lg of logs) {
+        events.push({
+          type: 'repair',
+          date: new Date(lg.date || lg.createdAt || Date.now()),
+          title: lg.logNumber || 'Repair Log',
+          status: lg.status || '',
+          link: `/maintenance/logs/${lg._id}`
+        })
+      }
+      const d = await axios.get(`/disposal`, { params: { acn } })
+      const disposals = Array.isArray(d?.data?.disposals) ? d.data.disposals : []
+      for (const ds of disposals) {
+        events.push({
+          type: 'disposal',
+          date: new Date(ds.createdAt || ds.disposalDate || Date.now()),
+          title: ds.disposalNumber || 'Disposal',
+          status: ds.approvedBy ? 'approved' : 'created',
+          link: `/disposal/${ds._id}`
+        })
+      }
+    }
+    if (!acn && serial) {
+      const r = await axios
+        .get(`/maintenance/logs`, { params: { serialNumber: serial } })
+        .catch(() => ({ data: {} }))
+      const logs = Array.isArray(r?.data?.logs) ? r.data.logs : []
+      for (const lg of logs) {
+        events.push({
+          type: 'repair',
+          date: new Date(lg.date || lg.createdAt || Date.now()),
+          title: lg.logNumber || 'Repair Log',
+          status: lg.status || '',
+          link: `/maintenance/logs/${lg._id}`
+        })
+      }
+      const d = await axios.get(`/disposal`, { params: { serialNumber: serial } })
+      const disposals = Array.isArray(d?.data?.disposals) ? d.data.disposals : []
+      for (const ds of disposals) {
+        events.push({
+          type: 'disposal',
+          date: new Date(ds.createdAt || ds.disposalDate || Date.now()),
+          title: ds.disposalNumber || 'Disposal',
+          status: ds.approvedBy ? 'approved' : 'created',
+          link: `/disposal/${ds._id}`
+        })
+      }
+    }
+    const st = statusForRow(row)
+    if (st?.status) {
+      events.push({
+        type: 'status',
+        date: new Date(selectedRecord.value?.date || Date.now()),
+        title: 'Record Created',
+        status: st.status,
+        link: ''
+      })
+    }
+    events.sort((a, b) => a.date - b.date)
+    historyEntries.value = events
+  } catch (e) {
+    historyError.value = e?.response?.data?.message || e.message || String(e)
+  } finally {
+    historyLoading.value = false
   }
 }
 
@@ -294,7 +1248,6 @@ const newRecord = ref({
       printerOrScanner: '',
       endUserOrMR: '',
       remarksYears: '',
-      // identifiers & lifecycle
       serialNumber: '',
       status: 'deployed',
       statusNotes: ''
@@ -339,16 +1292,11 @@ async function fetchACNsForProduct(productId) {
       ? product.assetControlNumbers.filter(Boolean)
       : []
     const serials = Array.isArray(product.serialNumbers) ? product.serialNumbers : []
-    console.log('📦 Product legacy ACNs:', legacyCodes)
 
     // 2) Fetch ACN records that may include serial numbers
     const { data: acnResp } = await axios.get(`/acns/product/${productId}`)
     const records = Array.isArray(acnResp?.acns) ? acnResp.acns : []
     const active = records.filter((r) => r?.isActive !== false)
-    console.log(
-      '📋 Active ACN records:',
-      active.map((r) => r.acnCode)
-    )
 
     // Build union of ACN codes from product and records
     const codeSet = new Set([
@@ -356,18 +1304,13 @@ async function fetchACNsForProduct(productId) {
       ...active.map((r) => String(r?.acnCode || '').trim()).filter(Boolean)
     ])
     const allCodes = Array.from(codeSet)
-    console.log('🔗 All available ACNs before filtering:', allCodes)
 
     // 3) Use global deployed ACNs cache
     await fetchDeployedAcnCodes()
-    const deployedAcns = new Set(deployedAcnCodes.value.map(c => c.toUpperCase()))
-    
-    console.log('🚫 Deployed ACNs to exclude:', Array.from(deployedAcns))
+    const deployedAcns = new Set(deployedAcnCodes.value.map((c) => c.toUpperCase()))
 
     // Filter out deployed ACNs
     const codes = allCodes.filter((code) => !deployedAcns.has(code.toUpperCase()))
-    console.log('✅ Final available ACNs after filtering:', codes)
-
     // Build ACN → serial map from records
     const map = {}
     for (const r of active) {
@@ -375,7 +1318,6 @@ async function fetchACNsForProduct(productId) {
       const sn = String(r?.serialNumber || '').trim()
       if (code) map[code] = sn
     }
-
     // Fallback: derive mapping by index if product tracks both arrays but no record serials
     if (serials.length && legacyCodes.length && Object.values(map).every((s) => !s)) {
       const max = Math.min(serials.length, legacyCodes.length)
@@ -388,9 +1330,7 @@ async function fetchACNsForProduct(productId) {
 
     acnOptionsByProduct.value[productId] = codes
     serialByAcnByProduct.value[productId] = map
-    console.log('💾 Stored ACN options for product:', productId, codes)
   } catch (err) {
-    console.error('❌ Error fetching ACNs:', err)
     // Preserve any existing options to avoid clearing UI unexpectedly
     acnOptionsByProduct.value[productId] = acnOptionsByProduct.value[productId] || []
     serialByAcnByProduct.value[productId] = serialByAcnByProduct.value[productId] || {}
@@ -1262,17 +2202,6 @@ function getProductName(id) {
 // View mode for selected record table
 const recordViewMode = ref('compact')
 
-function statusClass(status) {
-  const base = 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium '
-  const map = {
-    deployed: 'bg-green-100 text-green-700',
-    returned: 'bg-yellow-100 text-yellow-800',
-    repair: 'bg-orange-100 text-orange-800',
-    retired: 'bg-gray-200 text-gray-700'
-  }
-  return base + (map[status] || 'bg-gray-100 text-gray-700')
-}
-
 // Helpers for table listing
 function formatRecordNumber(rec) {
   const id = String(rec?._id || '')
@@ -1285,11 +2214,18 @@ function countEndUsers(rec) {
 }
 function recordStatus(rec) {
   const statuses = (rec?.items || [])
-    .map((i) => String(i.status || '').toLowerCase())
+    .map((i) => STATUS_CONFIG.normalizeStatus(i?.status))
     .filter(Boolean)
+
   if (!statuses.length) return ''
+
   const unique = Array.from(new Set(statuses))
-  return unique.length === 1 ? unique[0] : 'deployed'
+
+  if (unique.length === 1) {
+    return STATUS_CONFIG.getLabel(unique[0])
+  }
+
+  return STATUS_CONFIG.getLabel('mixed')
 }
 
 async function copyToClipboard(text) {
@@ -1505,11 +2441,11 @@ async function fetchDepartments() {
   }
 }
 
-function openDetails(rec) {
+async function openDetails(rec) {
   selectedRecord.value = rec
   isDetailsOpen.value = true
-  // Fetch per-ACN/Serial status when opening details
-  fetchAssignmentStatusForSelectedRecord()
+  await fetchDeployedAcnCodes()
+  await fetchAssignmentStatusForSelectedRecord()
 }
 
 function closeDetails() {
@@ -1554,6 +2490,7 @@ function buildMergedRows(items) {
     String(s || '')
       .trim()
       .toLowerCase()
+  const isAcnText = (s) => /^\s*ACN\b[\s:-]?/i.test(String(s || ''))
   for (const it of list) {
     const endUser = String(it.endUserOrMR || '').trim() || '—'
     if (!groups[endUser]) {
@@ -1594,7 +2531,8 @@ function buildMergedRows(items) {
 
     // Always capture inline monitor/printer fields stored on primary items
     if (String(it.monitorAndSerial || '').trim()) {
-      row.monitors.push(String(it.monitorAndSerial).trim())
+      const t = stripInlineAcn(String(it.monitorAndSerial).trim())
+      if (t) row.monitors.push(t)
     }
     if (String(it.printerOrScanner || '').trim()) {
       row.printerOrScannerList.push(String(it.printerOrScanner).trim())
@@ -1608,8 +2546,12 @@ function buildMergedRows(items) {
       row.videoCard = specFrom(it, 'videoCard') || specVal('Video Card') || ''
       if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
       if (!row.warranty && it.warranty) row.warranty = it.warranty
+      if (!row.acn && it.acn) row.acn = it.acn
     } else if (isMonitor) {
-      if (monitorStr) row.monitors.push(monitorStr)
+      if (monitorStr) {
+        const t = stripInlineAcn(monitorStr)
+        if (t) row.monitors.push(t)
+      }
       if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
       if (!row.warranty && it.warranty) row.warranty = it.warranty
     } else if (isPrinter || isScanner) {
@@ -1617,12 +2559,18 @@ function buildMergedRows(items) {
       const name = product?.name || it.description || it.productName || ''
       const serialPS = it.serialNumber || ''
       const psStr = [t, name, serialPS].filter(Boolean).join(' - ')
-      row.printerOrScannerList.push(psStr)
+      {
+        const p = stripInlineAcn(psStr)
+        if (p) row.printerOrScannerList.push(p)
+      }
       if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
       if (!row.warranty && it.warranty) row.warranty = it.warranty
     } else if (String(it.printerOrScanner || '').trim()) {
       // If printer/scanner info is embedded on a non-printer item, take it literally
-      row.printerOrScannerList.push(String(it.printerOrScanner).trim())
+      {
+        const p = stripInlineAcn(String(it.printerOrScanner).trim())
+        if (p) row.printerOrScannerList.push(p)
+      }
       if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
       if (!row.warranty && it.warranty) row.warranty = it.warranty
     } else {
@@ -1645,13 +2593,14 @@ function buildMergedRows(items) {
         row.videoCard = specFrom(it, 'videoCard') || specVal('Video Card') || ''
         if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
         if (!row.warranty && it.warranty) row.warranty = it.warranty
+        if (!row.acn && it.acn) row.acn = it.acn
       }
     }
 
-    if (String(it.remarksYears || '').trim()) {
+    if (String(it.remarksYears || '').trim() && !isAcnText(it.remarksYears)) {
       row.remarksYearsList.push(String(it.remarksYears).trim())
     }
-    if (String(it.remarks || '').trim()) {
+    if (String(it.remarks || '').trim() && !isAcnText(it.remarks)) {
       row.remarksYearsList.push(String(it.remarks).trim())
     }
   }
@@ -1667,13 +2616,16 @@ function buildMergedRows(items) {
     printerOrScanner: row.printerOrScannerList.length ? row.printerOrScannerList.join('\n') : '—',
     endUserOrMR: row.endUserOrMR || '—',
     remarksYears: row.remarksYearsList.length ? row.remarksYearsList.join('\n') : '—',
-    warranty: row.warranty || null
+    warranty: row.warranty || null,
+    acn: row.acn || ''
   }))
   // Final fallback: if description is still "—" but there is any item with description/productName, use the first one per group
   for (const key of Object.keys(groups)) {
     const row = groups[key]
     if (!row.description) {
-      const candidate = (list || []).find((it) => String(it.endUserOrMR || '').trim() === key && (it.description || it.productName))
+      const candidate = (list || []).find(
+        (it) => String(it.endUserOrMR || '').trim() === key && (it.description || it.productName)
+      )
       if (candidate) row.description = candidate.productName || candidate.description || ''
     }
   }
@@ -1691,7 +2643,7 @@ function buildMergedRows(items) {
     )
   })
 }
-const selectedMergedRows = computed(() => buildMergedRows(selectedRecord?.value.items))
+const selectedMergedRows = computed(() => buildMergedRows(selectedRecord?.value?.items || []))
 
 async function saveRecord() {
   try {
@@ -1977,10 +2929,8 @@ onMounted(async () => {
     try {
       const { data } = await axios.get('/products')
       products.value = data?.products || data?.data?.products || []
-      console.log('🔍 Products loaded:', products.value.length, products.value)
       // Initialize primary product to first matching type
       const list = primaryProducts.value
-      console.log('🔍 Primary products:', list.length, list)
       if (!primaryProductId.value && list.length) primaryProductId.value = list[0]._id
     } catch (err) {
       products.value = []
@@ -2113,7 +3063,6 @@ const groupedByDepartment = computed(() => {
 const mergedPreviewRows = computed(() => {
   const groups = {}
   const items = Array.isArray(newRecord.value.items) ? newRecord.value.items : []
-  console.log(items)
   const byName = (s) =>
     String(s || '')
       .trim()
@@ -2162,14 +3111,20 @@ const mergedPreviewRows = computed(() => {
       row.videoCard = it.videoCard || specVal('Video Card') || ''
       if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
     } else if (isMonitor) {
-      if (monitorStr) row.monitors.push(monitorStr)
+      if (monitorStr) {
+        const t = stripInlineAcn(monitorStr)
+        if (t) row.monitors.push(t)
+      }
       if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
     } else if (isPrinter || isScanner || String(it.printerOrScanner || '').trim()) {
       const t = isPrinter ? 'Printer' : isScanner ? 'Scanner' : String(it.printerOrScanner).trim()
       const name = product?.name || it.description || ''
       const serialPS = it.serialNumber || ''
       const psStr = [t, name, serialPS].filter(Boolean).join(' - ')
-      row.printerOrScannerList.push(psStr)
+      {
+        const p = stripInlineAcn(psStr)
+        if (p) row.printerOrScannerList.push(p)
+      }
       if (it.propertyNumber && !row.propertyNumber) row.propertyNumber = it.propertyNumber
     } else {
       // Fallback: if this item carries specs (or product specs), use as primary if none yet
@@ -2392,7 +3347,7 @@ const mergedPreviewRows = computed(() => {
                   <td class="p-3">{{ (rec.items || []).length }}</td>
                   <td class="p-3">{{ countEndUsers(rec) }}</td>
                   <td class="p-3">
-                    <span :class="statusClass(recordStatus(rec))">{{
+                    <span :class="lifecycleBadgeClass(recordStatus(rec))">{{
                       recordStatus(rec) || '—'
                     }}</span>
                   </td>
@@ -2534,7 +3489,12 @@ const mergedPreviewRows = computed(() => {
                       </thead>
                       <tbody>
                         <tr v-for="(item, idx) in rec?.items || []" :key="idx" class="border-t">
-                          <td class="px-4 py-2">{{ item.description }}</td>
+                          <td class="px-4 py-2">
+                            <div>{{ item.description }}</div>
+                            <div v-if="item.acn" class="mt-1 text-xs text-bodydark2">
+                              ACN: {{ item.acn }}
+                            </div>
+                          </td>
                           <td class="px-4 py-2">{{ item.serialNumber || '—' }}</td>
                           <td class="px-4 py-2">{{ item.processor }}</td>
                           <td class="px-4 py-2">{{ item.storage }}</td>
@@ -2545,7 +3505,11 @@ const mergedPreviewRows = computed(() => {
                           <td class="px-4 py-2">{{ item.printerOrScanner }}</td>
                           <td class="px-4 py-2">{{ item.endUserOrMR }}</td>
                           <td class="px-4 py-2">{{ item.remarksYears }}</td>
-                          <td class="px-4 py-2">{{ item.status || '—' }}</td>
+                          <td class="px-4 py-2">
+                            <span :class="STATUS_CONFIG.getBadgeClass(item.status)">
+                              {{ STATUS_CONFIG.getLabel(item.status) || '—' }}
+                            </span>
+                          </td>
                           <td class="px-4 py-2">
                             <div class="flex gap-2 items-center">
                               <BaseCombobox
@@ -2590,363 +3554,432 @@ const mergedPreviewRows = computed(() => {
             id="printArea"
             class="bg-white dark:bg-boxdark rounded-md shadow-lg w-full max-w-[95%] md:max-w-[85%] max-h-[85vh] overflow-auto p-6"
           >
-          <div class="flex justify-between items-start mb-4">
-            <div>
-              <h2 class="text-lg font-semibold flex items-center gap-2">
-                Inventory Record Details
-                <!-- <span
-                  v-if="hasValidationIssues(selectedRecord)"
-                  class="inline-flex items-center rounded bg-yellow-100 text-yellow-700 px-2 py-0.5 text-xs"
+            <div class="flex justify-between items-start mb-4">
+              <div>
+                <h2 class="text-lg font-semibold flex items-center gap-2">
+                  Inventory Record Details
+                </h2>
+                <div class="text-xs text-gray-600 mt-1">
+                  ID: #{{ formatRecordNumber(selectedRecord) }} • Dept:
+                  {{ selectedRecord?.department || '—' }} • Date:
+                  {{ selectedRecord ? new Date(selectedRecord.date).toLocaleDateString() : '' }}
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  class="no-print text-sm px-3 py-1 border border-stroke rounded hover:bg-gray-50"
+                  @click="printSelectedRecord"
+                  title="Print / Export PDF"
                 >
-                  ⚠ Validation Issues
-                </span> -->
-              </h2>
-              <div class="text-xs text-gray-600 mt-1">
-                ID: #{{ formatRecordNumber(selectedRecord) }} • Dept:
-                {{ selectedRecord?.department || '—' }} • Date:
-                {{ selectedRecord ? new Date(selectedRecord.date).toLocaleDateString() : '' }}
+                  Print
+                </button>
+                <button
+                  class="no-print text-xl leading-none px-2 py-1"
+                  @click="closeDetails"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
               </div>
             </div>
-            <div class="flex items-center gap-2">
-              <button
-                class="no-print text-sm px-3 py-1 border border-stroke rounded hover:bg-gray-50"
-                @click="printSelectedRecord"
-                title="Print / Export PDF"
-              >
-                Print
-              </button>
-              <button
-                class="no-print text-xl leading-none px-2 py-1"
-                @click="closeDetails"
-                aria-label="Close"
-              >
-                ×
-              </button>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-sm">
+              <div>
+                <span class="font-semibold">Department:</span> {{ selectedRecord?.department }}
+              </div>
+              <div>
+                <span class="font-semibold">Date:</span>
+                {{ selectedRecord ? new Date(selectedRecord.date).toLocaleDateString() : '' }}
+              </div>
+              <div class="md:col-span-2">
+                <span class="font-semibold">Notes:</span> {{ selectedRecord?.notes }}
+              </div>
             </div>
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-sm">
-            <div>
-              <span class="font-semibold">Department:</span> {{ selectedRecord?.department }}
-            </div>
-            <div>
-              <span class="font-semibold">Date:</span>
-              {{ selectedRecord ? new Date(selectedRecord.date).toLocaleDateString() : '' }}
-            </div>
-            <div class="md:col-span-2">
-              <span class="font-semibold">Notes:</span> {{ selectedRecord?.notes }}
-            </div>
-          </div>
 
-          
-
-          <!-- Items Table (Preview Format) -->
-          <div class="overflow-x-auto mt-2 border border-stroke rounded">
-            <table class="min-w-full text-sm border border-stroke">
-              <thead class="bg-gray-100">
-                <tr>
-                  <th class="px-3 py-2 text-left border border-stroke">Description</th>
-                  <th class="px-3 py-2 text-left border border-stroke">Processor</th>
-                  <th class="px-3 py-2 text-left border border-stroke">Storage</th>
-                  <th class="px-3 py-2 text-left border border-stroke">RAM</th>
-                  <th class="px-3 py-2 text-left border border-stroke">Video Card</th>
-                  <th class="px-3 py-2 text-left border border-stroke">
-                    Brand of Monitor & Serial Number
-                  </th>
-                  <th class="px-3 py-2 text-left border border-stroke">Property Number</th>
-                  <th class="px-3 py-2 text-left border border-stroke">Printer or Scanner</th>
-                  <th class="px-3 py-2 text-left border border-stroke">End User or MR</th>
-                  <th class="px-3 py-2 text-left border border-stroke">Remarks / Years</th>
-                  <th class="px-3 py-2 text-left border border-stroke">Status</th>
-                  <th class="px-3 py-2 text-left border border-stroke">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(row, idx) in selectedMergedRows" :key="idx" class="odd:bg-gray-50">
-                  <td
-                    class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
-                    :title="row.description"
-                  >
-                    {{ row.description || '—' }}
-                  </td>
-                  <td
-                    class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
-                    :title="row.processor"
-                  >
-                    {{ row.processor || '—' }}
-                  </td>
-                  <td
-                    class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
-                    :title="row.storage"
-                  >
-                    {{ row.storage || '—' }}
-                  </td>
-                  <td
-                    class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
-                    :title="row.ram"
-                  >
-                    {{ row.ram || '—' }}
-                  </td>
-                  <td
-                    class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
-                    :title="row.videoCard"
-                  >
-                    {{ row.videoCard || '—' }}
-                  </td>
-                  <td
-                    class="px-3 py-2 border border-stroke whitespace-pre-line break-words align-top"
-                    :title="row.monitorAndSerial"
-                  >
-                    {{ row.monitorAndSerial || '—' }}
-                    <div class="mt-1 flex flex-wrap gap-1">
-                      <span
-                        v-for="m in getSecondaryStatusesForRow(row).monitors"
-                        :key="`mon-${m.key}-${idx}`"
-                        :class="lifecycleBadgeClass(m.status)"
-                      >
-                        {{ m.label }}
-                      </span>
-                    </div>
-                  </td>
-                  <td
-                    class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
-                    :title="row.propertyNumber"
-                  >
-                    {{ row.propertyNumber || '—' }}
-                  </td>
-                  <td
-                    class="px-3 py-2 border border-stroke whitespace-pre-line break-words align-top"
-                    :title="row.printerOrScanner"
-                  >
-                    {{ row.printerOrScanner || '—' }}
-                    <div class="mt-1 flex flex-wrap gap-1">
-                      <span
-                        v-for="p in getSecondaryStatusesForRow(row).printersScanners"
-                        :key="`ps-${p.key}-${idx}`"
-                        :class="lifecycleBadgeClass(p.status)"
-                      >
-                        {{ p.label }}
-                      </span>
-                    </div>
-                  </td>
-                  <td
-                    class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
-                    :title="row.endUserOrMR"
-                  >
-                    {{ row.endUserOrMR || '—' }}
-                  </td>
-                  <td
-                    class="px-3 py-2 border border-stroke whitespace-pre-line break-words align-top"
-                    :title="row.remarksYears"
-                  >
-                    {{ row.remarksYears || '—' }}
-                  </td>
-                  <td class="px-3 py-2 border border-stroke whitespace-normal break-words align-top">
-                    <span :class="lifecycleBadgeClass(statusForRow(row).status)">{{ statusForRow(row).label }}</span>
-                  </td>
-                  <td class="px-3 py-2 border border-stroke">
-                    <div class="text-xs text-gray-500">
-                      Edit items individually in source record
-                    </div>
-                  </td>
-                </tr>
-                <tr v-if="selectedMergedRows.length === 0">
-                  <td colspan="12" class="px-3 py-4 text-center text-gray-500">
-                    No items in this record.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div v-if="false" class="flex items-center justify-between mb-2">
-            <div class="flex items-center gap-2">
-              <label class="text-xs text-gray-600">View:</label>
-              <button
-                class="text-xs px-2 py-1 border border-stroke rounded"
-                :class="recordViewMode === 'compact' ? 'bg-gray-100' : ''"
-                @click="recordViewMode = 'compact'"
-                title="Compact view"
-              >
-                Compact
-              </button>
-              <button
-                class="text-xs px-2 py-1 border border-stroke rounded"
-                :class="recordViewMode === 'expanded' ? 'bg-gray-100' : ''"
-                @click="recordViewMode = 'expanded'"
-                title="Expanded view"
-              >
-                Expanded
-              </button>
-            </div>
-          </div>
-
-          <div v-if="false" class="overflow-x-auto max-h-[60vh]">
-            <table class="min-w-full text-sm">
-              <thead class="bg-gray-100 sticky top-0 z-10">
-                <tr v-if="recordViewMode === 'compact'">
-                  <th class="px-4 py-2 text-left">Description</th>
-                  <th class="px-4 py-2 text-left">Product</th>
-                  <th class="px-4 py-2 text-left">Serial No.</th>
-                  <th class="px-4 py-2 text-left">ACN</th>
-                  <th class="px-4 py-2 text-left">Specs</th>
-                  <th class="px-4 py-2 text-left">Brand of Monitor & Serial Number</th>
-                  <th class="px-4 py-2 text-left">Property Number</th>
-                  <th class="px-4 py-2 text-left">Printer or Scanner</th>
-                  <th class="px-4 py-2 text-left">End User or MR</th>
-                  <th class="px-4 py-2 text-left">Remarks</th>
-                  <th class="px-4 py-2 text-left">Status</th>
-                  <th class="px-4 py-2 text-left">Actions</th>
-                </tr>
-                <tr v-else>
-                  <th class="px-4 py-2 text-left">Description</th>
-                  <th class="px-4 py-2 text-left">Serial No.</th>
-                  <th class="px-4 py-2 text-left">Processor</th>
-                  <th class="px-4 py-2 text-left">Storage</th>
-                  <th class="px-4 py-2 text-left">RAM</th>
-                  <th class="px-4 py-2 text-left">Video Card</th>
-                  <th class="px-4 py-2 text-left">Brand of Monitor & Serial Number</th>
-                  <th class="px-4 py-2 text-left">Property Number</th>
-                  <th class="px-4 py-2 text-left">Printer or Scanner</th>
-                  <th class="px-4 py-2 text-left">End User or MR</th>
-                  <th class="px-4 py-2 text-left">Remarks / Years</th>
-                  <th class="px-4 py-2 text-left">Status</th>
-                  <th class="px-4 py-2 text-left">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <template v-if="recordViewMode === 'compact'">
-                  <tr
-                    v-for="(item, idx) in selectedRecord?.items || []"
-                    :key="idx"
-                    class="border-t"
-                  >
-                    <td class="px-4 py-2">{{ item.description }}</td>
-                    <td class="px-4 py-2">{{ getProductName(item.product) || '—' }}</td>
-                    <td class="px-4 py-2">
-                      <div class="flex items-center gap-2">
-                        <span>{{ item.serialNumber || '—' }}</span>
-                        <button
-                          v-if="item.serialNumber"
-                          class="text-[11px] px-1.5 py-0.5 border border-stroke rounded hover:bg-gray-50"
-                          @click="copyToClipboard(item.serialNumber)"
-                          title="Copy Serial"
-                        >
-                          Copy
-                        </button>
-                      </div>
-                    </td>
-                    <td class="px-4 py-2">
-                      <div class="flex items-center gap-2">
-                        <span>{{ item.acn || '—' }}</span>
-                        <button
-                          v-if="item.acn"
-                          class="text-[11px] px-1.5 py-0.5 border border-stroke rounded hover:bg-gray-50"
-                          @click="copyToClipboard(item.acn)"
-                          title="Copy ACN"
-                        >
-                          Copy
-                        </button>
-                      </div>
-                    </td>
-                    <td class="px-4 py-2 whitespace-pre-line">
-                      Processor: {{ specFrom(item, 'processor') }} \nStorage:
-                      {{ specFrom(item, 'storage') }} \nRAM: {{ specFrom(item, 'ram') }} \nVideo
-                      Card: {{ specFrom(item, 'videoCard') }}
-                    </td>
-                    <td class="px-4 py-2 whitespace-pre-line">
-                      {{ item.monitorAndSerial || '—' }}
-                    </td>
-                    <td class="px-4 py-2">
-                      <div class="flex items-center gap-2">
-                        <span>{{ item.propertyNumber || '—' }}</span>
-                        <button
-                          v-if="item.propertyNumber"
-                          class="text-[11px] px-1.5 py-0.5 border border-stroke rounded hover:bg-gray-50"
-                          @click="copyToClipboard(item.propertyNumber)"
-                          title="Copy Property Number"
-                        >
-                          Copy
-                        </button>
-                      </div>
-                    </td>
-                    <td class="px-4 py-2">{{ item.printerOrScanner || '—' }}</td>
-                    <td class="px-4 py-2">{{ item.endUserOrMR || '—' }}</td>
-                    <td class="px-4 py-2">{{ item.remarks || item.remarksYears || '—' }}</td>
-                    <td class="px-4 py-2">
-                      <span :class="statusClass(item.status)">{{ item.status || '—' }}</span>
-                    </td>
-                    <td class="px-4 py-2">
-                      <div class="flex gap-2 items-center">
-                        <BaseCombobox
-                          v-model="item._nextStatus"
-                          :options="statusOptions"
-                          placeholder="Change..."
-                        />
-                        <button
-                          class="text-xs px-2 py-1 border border-stroke rounded hover:bg-gray-50 disabled:opacity-50"
-                          :disabled="
-                            !item._nextStatus || !(item.serialNumber || item.propertyNumber)
-                          "
-                          @click="updateItemStatus(selectedRecord?._id, item)"
-                        >
-                          Apply
-                        </button>
-                      </div>
-                    </td>
+            <!-- Items Table (Preview Format) -->
+            <div class="overflow-x-auto mt-2 border border-stroke rounded">
+              <table class="min-w-full text-sm border border-stroke">
+                <thead class="bg-gray-100">
+                  <tr>
+                    <th class="px-3 py-2 text-left border border-stroke">Description</th>
+                    <th class="px-3 py-2 text-left border border-stroke">Processor</th>
+                    <th class="px-3 py-2 text-left border border-stroke">Storage</th>
+                    <th class="px-3 py-2 text-left border border-stroke">RAM</th>
+                    <th class="px-3 py-2 text-left border border-stroke">Video Card</th>
+                    <th class="px-3 py-2 text-left border border-stroke">
+                      Brand of Monitor & Serial Number
+                    </th>
+                    <th class="px-3 py-2 text-left border border-stroke">Property Number</th>
+                    <th class="px-3 py-2 text-left border border-stroke">Printer or Scanner</th>
+                    <th class="px-3 py-2 text-left border border-stroke">End User or MR</th>
+                    <th class="px-3 py-2 text-left border border-stroke">Remarks / Years</th>
+                    <th class="px-3 py-2 text-left border border-stroke">Status</th>
+                    <th class="px-3 py-2 text-left border border-stroke">Actions</th>
                   </tr>
-                  <tr v-if="!selectedRecord || (selectedRecord.items || []).length === 0">
-                    <td colspan="12" class="px-4 py-6 text-center text-gray-500">
+                </thead>
+                <tbody>
+                  <template v-for="(row, idx) in selectedMergedRows" :key="idx">
+                    <tr class="odd:bg-gray-50">
+                      <td
+                        class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                        :title="row.description"
+                      >
+                        <div>{{ row.description || '—' }}</div>
+                        <div v-if="row.acn && !statusLoading" class="mt-1">
+                          <span
+                            :class="[
+                              lifecycleBadgeClass(getAcnStatus(row.acn)),
+                              acnTypeClass(row.acn)
+                            ]"
+                          >
+                            ACN {{ row.acn }}
+                          </span>
+                        </div>
+                      </td>
+                      <td
+                        class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                        :title="row.processor"
+                      >
+                        {{ row.processor || '—' }}
+                      </td>
+                      <td
+                        class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                        :title="row.storage"
+                      >
+                        {{ row.storage || '—' }}
+                      </td>
+                      <td
+                        class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                        :title="row.ram"
+                      >
+                        {{ row.ram || '—' }}
+                      </td>
+                      <td
+                        class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                        :title="row.videoCard"
+                      >
+                        {{ row.videoCard || '—' }}
+                      </td>
+                      <td
+                        class="px-3 py-2 border border-stroke whitespace-pre-line break-words align-top"
+                        :title="row.monitorAndSerial"
+                      >
+                        {{ row.monitorAndSerial || '—' }}
+                        <div class="mt-1 flex flex-wrap gap-1">
+                          <span
+                            v-for="m in getSecondaryStatusesForRow(row).monitors"
+                            :key="`mon-${m.key}-${idx}`"
+                            :class="[lifecycleBadgeClass(getAcnStatus(m.acn)), acnTypeClass(m.acn)]"
+                          >
+                            {{ m.label }}
+                          </span>
+                        </div>
+                      </td>
+                      <td
+                        class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                        :title="row.propertyNumber"
+                      >
+                        {{ row.propertyNumber || '—' }}
+                      </td>
+                      <td
+                        class="px-3 py-2 border border-stroke whitespace-pre-line break-words align-top"
+                        :title="row.printerOrScanner"
+                      >
+                        {{ row.printerOrScanner || '—' }}
+                        <div class="mt-1 flex flex-wrap gap-1">
+                          <span
+                            v-for="p in getSecondaryStatusesForRow(row).printersScanners"
+                            :key="`ps-${p.key}-${idx}`"
+                            :class="[lifecycleBadgeClass(getAcnStatus(p.acn)), acnTypeClass(p.acn)]"
+                          >
+                            {{ p.label }}
+                          </span>
+                        </div>
+                      </td>
+                      <td
+                        class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                        :title="row.endUserOrMR"
+                      >
+                        {{ row.endUserOrMR || '—' }}
+                      </td>
+                      <td
+                        class="px-3 py-2 border border-stroke whitespace-pre-line break-words align-top"
+                        :title="row.remarksYears"
+                      >
+                        {{ row.remarksYears || '—' }}
+                      </td>
+                      <td
+                        class="px-3 py-2 border border-stroke whitespace-normal break-words align-top"
+                      >
+                        <span :class="lifecycleBadgeClass(statusForRow(row).status)">{{
+                          statusForRow(row).label
+                        }}</span>
+                      </td>
+                      <td class="px-3 py-2 border border-stroke">
+                        <div class="text-xs text-gray-500">
+                          Edit items individually in source record
+                          <div class="mt-2">
+                            <button
+                              class="text-xs px-2 py-1 border border-stroke rounded hover:bg-gray-50"
+                              @click="openRowHistory(row, idx)"
+                            >
+                              History
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr v-if="historyRowIndex === idx" class="bg-gray-50">
+                      <td colspan="12" class="px-3 py-2 border border-stroke">
+                        <div class="flex items-start justify-between">
+                          <div>
+                            <div class="text-sm font-medium">Item History</div>
+                            <div v-if="historyLoading" class="text-xs text-gray-500 mt-1">
+                              Loading history…
+                            </div>
+                            <div v-else-if="historyError" class="text-xs text-danger mt-1">
+                              {{ historyError }}
+                            </div>
+                            <ul v-else class="mt-2 space-y-1">
+                              <li v-for="(ev, eidx) in historyEntries" :key="eidx" class="text-xs">
+                                <span class="text-gray-500">{{
+                                  new Date(ev.date).toLocaleDateString()
+                                }}</span>
+                                •
+                                <span class="font-medium">{{
+                                  ev.type === 'repair'
+                                    ? 'Repair Log'
+                                    : ev.type === 'disposal'
+                                      ? 'Disposal'
+                                      : 'Status'
+                                }}</span>
+                                • <span>{{ ev.title }}</span>
+                                <span
+                                  v-if="ev.status"
+                                  class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-700"
+                                  >{{ STATUS_CONFIG.getLabel(ev.status) }}</span
+                                >
+                                <router-link
+                                  v-if="ev.link"
+                                  :to="ev.link"
+                                  class="ml-2 text-primary hover:underline"
+                                  >View</router-link
+                                >
+                              </li>
+                              <li v-if="historyEntries.length === 0" class="text-xs text-gray-500">
+                                No history found.
+                              </li>
+                            </ul>
+                          </div>
+                          <button
+                            class="text-xs px-2 py-1 border border-stroke rounded hover:bg-gray-50"
+                            @click="closeHistory"
+                          >
+                            Close
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr v-if="selectedMergedRows && selectedMergedRows.length === 0">
+                    <td colspan="12" class="px-3 py-4 text-center text-gray-500">
                       No items in this record.
                     </td>
                   </tr>
-                </template>
+                </tbody>
+              </table>
+            </div>
 
-                <template v-else>
-                  <tr
-                    v-for="(item, idx) in selectedRecord?.items || []"
-                    :key="idx"
-                    class="border-t"
-                  >
-                    <td class="px-4 py-2">{{ item.description }}</td>
-                    <td class="px-4 py-2">{{ item.serialNumber || '—' }}</td>
-                    <td class="px-4 py-2">{{ specFrom(item, 'processor') }}</td>
-                    <td class="px-4 py-2">{{ specFrom(item, 'storage') }}</td>
-                    <td class="px-4 py-2">{{ specFrom(item, 'ram') }}</td>
-                    <td class="px-4 py-2">{{ specFrom(item, 'videoCard') }}</td>
-                    <td class="px-4 py-2">{{ item.monitorAndSerial }}</td>
-                    <td class="px-4 py-2">{{ item.propertyNumber }}</td>
-                    <td class="px-4 py-2">{{ item.printerOrScanner }}</td>
-                    <td class="px-4 py-2">{{ item.endUserOrMR }}</td>
-                    <td class="px-4 py-2">{{ item.remarksYears }}</td>
-                    <td class="px-4 py-2">{{ item.status || '—' }}</td>
-                    <td class="px-4 py-2">
-                      <div class="flex gap-2 items-center">
-                        <BaseCombobox
-                          v-model="item._nextStatus"
-                          :options="statusOptions"
-                          placeholder="Change..."
-                        />
-                        <button
-                          class="text-xs px-2 py-1 border border-stroke rounded hover:bg-gray-50 disabled:opacity-50"
-                          :disabled="
-                            !item._nextStatus || !(item.serialNumber || item.propertyNumber)
-                          "
-                          @click="updateItemStatus(selectedRecord?._id, item)"
-                        >
-                          Apply
-                        </button>
-                      </div>
-                    </td>
+            <div v-if="false" class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-gray-600">View:</label>
+                <button
+                  class="text-xs px-2 py-1 border border-stroke rounded"
+                  :class="recordViewMode === 'compact' ? 'bg-gray-100' : ''"
+                  @click="recordViewMode = 'compact'"
+                  title="Compact view"
+                >
+                  Compact
+                </button>
+                <button
+                  class="text-xs px-2 py-1 border border-stroke rounded"
+                  :class="recordViewMode === 'expanded' ? 'bg-gray-100' : ''"
+                  @click="recordViewMode = 'expanded'"
+                  title="Expanded view"
+                >
+                  Expanded
+                </button>
+              </div>
+            </div>
+
+            <div v-if="false" class="overflow-x-auto max-h-[60vh]">
+              <table class="min-w-full text-sm">
+                <thead class="bg-gray-100 sticky top-0 z-10">
+                  <tr v-if="recordViewMode === 'compact'">
+                    <th class="px-4 py-2 text-left">Description</th>
+                    <th class="px-4 py-2 text-left">Product</th>
+                    <th class="px-4 py-2 text-left">Serial No.</th>
+                    <th class="px-4 py-2 text-left">ACN</th>
+                    <th class="px-4 py-2 text-left">Specs</th>
+                    <th class="px-4 py-2 text-left">Brand of Monitor & Serial Number</th>
+                    <th class="px-4 py-2 text-left">Property Number</th>
+                    <th class="px-4 py-2 text-left">Printer or Scanner</th>
+                    <th class="px-4 py-2 text-left">End User or MR</th>
+                    <th class="px-4 py-2 text-left">Remarks</th>
+                    <th class="px-4 py-2 text-left">Status</th>
+                    <th class="px-4 py-2 text-left">Actions</th>
                   </tr>
-                  <tr v-if="!selectedRecord || (selectedRecord.items || []).length === 0">
-                    <td colspan="10" class="px-4 py-6 text-center text-gray-500">
-                      No items in this record.
-                    </td>
+                  <tr v-else>
+                    <th class="px-4 py-2 text-left">Description</th>
+                    <th class="px-4 py-2 text-left">Serial No.</th>
+                    <th class="px-4 py-2 text-left">Processor</th>
+                    <th class="px-4 py-2 text-left">Storage</th>
+                    <th class="px-4 py-2 text-left">RAM</th>
+                    <th class="px-4 py-2 text-left">Video Card</th>
+                    <th class="px-4 py-2 text-left">Brand of Monitor & Serial Number</th>
+                    <th class="px-4 py-2 text-left">Property Number</th>
+                    <th class="px-4 py-2 text-left">Printer or Scanner</th>
+                    <th class="px-4 py-2 text-left">End User or MR</th>
+                    <th class="px-4 py-2 text-left">Remarks / Years</th>
+                    <th class="px-4 py-2 text-left">Status</th>
+                    <th class="px-4 py-2 text-left">Actions</th>
                   </tr>
-                </template>
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  <template v-if="recordViewMode === 'compact'">
+                    <tr
+                      v-for="(item, idx) in selectedRecord?.items || []"
+                      :key="idx"
+                      class="border-t"
+                    >
+                      <td class="px-4 py-2">{{ item.description }}</td>
+                      <td class="px-4 py-2">{{ getProductName(item.product) || '—' }}</td>
+                      <td class="px-4 py-2">
+                        <div class="flex items-center gap-2">
+                          <span>{{ item.serialNumber || '—' }}</span>
+                          <button
+                            v-if="item.serialNumber"
+                            class="text-[11px] px-1.5 py-0.5 border border-stroke rounded hover:bg-gray-50"
+                            @click="copyToClipboard(item.serialNumber)"
+                            title="Copy Serial"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </td>
+                      <td class="px-4 py-2">
+                        <div class="flex items-center gap-2">
+                          <span>{{ item.acn || '—' }}</span>
+                          <button
+                            v-if="item.acn"
+                            class="text-[11px] px-1.5 py-0.5 border border-stroke rounded hover:bg-gray-50"
+                            @click="copyToClipboard(item.acn)"
+                            title="Copy ACN"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </td>
+                      <td class="px-4 py-2 whitespace-pre-line">
+                        Processor: {{ specFrom(item, 'processor') }} \nStorage:
+                        {{ specFrom(item, 'storage') }} \nRAM: {{ specFrom(item, 'ram') }} \nVideo
+                        Card: {{ specFrom(item, 'videoCard') }}
+                      </td>
+                      <td class="px-4 py-2 whitespace-pre-line">
+                        {{ item.monitorAndSerial || '—' }}
+                      </td>
+                      <td class="px-4 py-2">
+                        <div class="flex items-center gap-2">
+                          <span>{{ item.propertyNumber || '—' }}</span>
+                          <button
+                            v-if="item.propertyNumber"
+                            class="text-[11px] px-1.5 py-0.5 border border-stroke rounded hover:bg-gray-50"
+                            @click="copyToClipboard(item.propertyNumber)"
+                            title="Copy Property Number"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </td>
+                      <td class="px-4 py-2">{{ item.printerOrScanner || '—' }}</td>
+                      <td class="px-4 py-2">{{ item.endUserOrMR || '—' }}</td>
+                      <td class="px-4 py-2">{{ item.remarks || item.remarksYears || '—' }}</td>
+                      <td class="px-4 py-2">
+                        <span :class="STATUS_CONFIG.getBadgeClass(item.status)">{{
+                          STATUS_CONFIG.getLabel(item.status) || '—'
+                        }}</span>
+                      </td>
+                      <td class="px-4 py-2">
+                        <div class="flex gap-2 items-center">
+                          <BaseCombobox
+                            v-model="item._nextStatus"
+                            :options="statusOptions"
+                            placeholder="Change..."
+                          />
+                          <button
+                            class="text-xs px-2 py-1 border border-stroke rounded hover:bg-gray-50 disabled:opacity-50"
+                            :disabled="
+                              !item._nextStatus || !(item.serialNumber || item.propertyNumber)
+                            "
+                            @click="updateItemStatus(selectedRecord?._id, item)"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr v-if="!selectedRecord || (selectedRecord.items || []).length === 0">
+                      <td colspan="12" class="px-4 py-6 text-center text-gray-500">
+                        No items in this record.
+                      </td>
+                    </tr>
+                  </template>
+
+                  <template v-else>
+                    <tr
+                      v-for="(item, idx) in selectedRecord?.items || []"
+                      :key="idx"
+                      class="border-t"
+                    >
+                      <td class="px-4 py-2">{{ item.description }}</td>
+                      <td class="px-4 py-2">{{ item.serialNumber || '—' }}</td>
+                      <td class="px-4 py-2">{{ specFrom(item, 'processor') }}</td>
+                      <td class="px-4 py-2">{{ specFrom(item, 'storage') }}</td>
+                      <td class="px-4 py-2">{{ specFrom(item, 'ram') }}</td>
+                      <td class="px-4 py-2">{{ specFrom(item, 'videoCard') }}</td>
+                      <td class="px-4 py-2">{{ item.monitorAndSerial }}</td>
+                      <td class="px-4 py-2">{{ item.propertyNumber }}</td>
+                      <td class="px-4 py-2">{{ item.printerOrScanner }}</td>
+                      <td class="px-4 py-2">{{ item.endUserOrMR }}</td>
+                      <td class="px-4 py-2">{{ item.remarksYears }}</td>
+                      <td class="px-4 py-2">{{ item.status || '—' }}</td>
+                      <td class="px-4 py-2">
+                        <div class="flex gap-2 items-center">
+                          <BaseCombobox
+                            v-model="item._nextStatus"
+                            :options="statusOptions"
+                            placeholder="Change..."
+                          />
+                          <button
+                            class="text-xs px-2 py-1 border border-stroke rounded hover:bg-gray-50 disabled:opacity-50"
+                            :disabled="
+                              !item._nextStatus || !(item.serialNumber || item.propertyNumber)
+                            "
+                            @click="updateItemStatus(selectedRecord?._id, item)"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr v-if="!selectedRecord || (selectedRecord.items || []).length === 0">
+                      <td colspan="10" class="px-4 py-6 text-center text-gray-500">
+                        No items in this record.
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </teleport>

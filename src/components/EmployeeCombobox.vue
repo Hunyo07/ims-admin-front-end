@@ -7,7 +7,8 @@ const props = defineProps({
   department: { type: String, default: '' },
   placeholder: { type: String, default: 'Search employee' },
   disabled: { type: Boolean, default: false },
-  limit: { type: Number, default: 100 }
+  limit: { type: Number, default: 100 },
+  strictDepartment: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['update:modelValue', 'select'])
@@ -18,8 +19,35 @@ const loading = ref(false)
 const options = ref([])
 const error = ref('')
 let debounceTimer = null
+const departments = ref([])
+const deptMap = ref(new Map())
 
 const fullName = (emp) => `${emp.firstName || ''} ${emp.lastName || ''}`.trim()
+
+const loadDepartments = async () => {
+  try {
+    const { data } = await axios.get('/departments')
+    const list = Array.isArray(data?.departments) ? data.departments : Array.isArray(data) ? data : []
+    departments.value = list
+    const m = new Map()
+    for (const d of list) {
+      const name = String(d?.name || '').trim().toLowerCase()
+      const code = String(d?.code || '').trim().toLowerCase()
+      if (name) m.set(name, code || name)
+      if (code) m.set(code, code)
+    }
+    deptMap.value = m
+  } catch (_) {
+    departments.value = []
+    deptMap.value = new Map()
+  }
+}
+
+const resolveDeptQuery = () => {
+  const d = String(props.department || '').trim().toLowerCase()
+  if (!d) return ''
+  return deptMap.value.get(d) || d
+}
 
 const fetchEmployees = async () => {
   loading.value = true
@@ -27,10 +55,36 @@ const fetchEmployees = async () => {
   try {
     const params = {}
     if (search.value) params.search = search.value
-    if (props.department) params.department = props.department
+    if (props.department) params.department = resolveDeptQuery()
     params.limit = props.limit
     const { data } = await axios.get('/employees', { params })
-    options.value = Array.isArray(data?.employees) ? data.employees : []
+    let list = Array.isArray(data?.employees) ? data.employees : []
+    if (!list || list.length === 0) {
+      const p2 = {}
+      if (search.value) p2.search = search.value
+      p2.limit = params.limit
+      const { data: d2 } = await axios.get('/employees', { params: p2 })
+      list = Array.isArray(d2?.employees) ? d2.employees : []
+    }
+    if (props.strictDepartment && props.department) {
+      const norm = (s) => String(s || '').trim().toLowerCase()
+      const target = norm(props.department)
+      const targetCode = resolveDeptQuery()
+      list = (list || []).filter((e) => {
+        const candidates = [
+          e?.department,
+          e?.departmentName,
+          e?.departmentCode,
+          e?.department?.name,
+          e?.department?.code
+        ]
+          .map((v) => norm(v))
+          .filter(Boolean)
+        const match = candidates.some((ed) => ed === target || ed === targetCode || ed.includes(target) || target.includes(ed) || ed.includes(targetCode) || targetCode.includes(ed))
+        return match
+      })
+    }
+    options.value = list || []
   } catch (e) {
     options.value = []
     error.value = e?.response?.data?.message || e.message
@@ -83,7 +137,8 @@ watch(
 watch(
   () => props.department,
   () => {
-    if (isOpen.value) fetchEmployees()
+    fetchEmployees()
+    if (props.strictDepartment) search.value = ''
   }
 )
 
@@ -98,6 +153,8 @@ const onDocClick = (e) => {
 
 onMounted(() => {
   document.addEventListener('click', onDocClick)
+  loadDepartments()
+  fetchEmployees()
 })
 </script>
 
@@ -139,7 +196,7 @@ onMounted(() => {
           >
             <div class="font-medium">{{ fullName(emp) }}</div>
             <div class="text-xs text-bodydark2">
-              {{ emp.email || '—' }} • {{ emp.department || '—' }}
+              {{ emp.phoneNumber || emp.email || '—' }} • {{ emp.department || '—' }}
             </div>
           </li>
         </ul>

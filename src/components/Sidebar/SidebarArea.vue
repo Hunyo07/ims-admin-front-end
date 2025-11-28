@@ -43,8 +43,7 @@ const allMenuGroups = ref([
                   />
                 </svg>`,
         label: 'Dashboard',
-        route: '#',
-        children: [{ label: 'eCommerce', route: '/' }],
+        route: '/eCommerce',
         roles: ['superadmin', 'admin', 'staff']
       },
       // Sales removed

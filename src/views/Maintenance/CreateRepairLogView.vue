@@ -1,10 +1,10 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '@/utils/axios'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import EmployeeCombobox from '@/components/EmployeeCombobox.vue'
-import AcnCombobox from '@/components/AcnCombobox.vue'
+import AcnRepairCombobox from '@/components/AcnRepairCombobox.vue'
 
 const router = useRouter()
 
@@ -15,13 +15,30 @@ const form = ref({
   broughtByName: '',
   broughtByEmployeeId: '',
   technicianName: '',
-  status: 'for_inspection'
+  status: 'for_inspection',
+  outsideDescription: '',
+  outsideSerialNumber: '',
+  outsideAcn: ''
 })
+const outsideRepair = ref(false)
 const loading = ref(false)
 const error = ref('')
 const success = ref('')
 const createdLog = ref(null)
 const downloading = ref(false)
+const statsLoading = ref(false)
+const statsError = ref('')
+const stats = ref({
+  total: 0,
+  outside: 0,
+  repaired: 0,
+  under_repair: 0,
+  byStatus: {},
+  avgRepairDays: 0,
+  byTechnician: []
+})
+const fromDate = ref(new Date().toISOString().slice(0, 10))
+const toDate = ref(new Date().toISOString().slice(0, 10))
 
 // Modal state
 const isOpen = ref(false)
@@ -32,6 +49,7 @@ const close = () => {
 }
 onMounted(() => {
   isOpen.value = true
+  fetchStats()
 })
 // Selected ACN item details (for display-only)
 const selectedItem = ref(null)
@@ -93,12 +111,22 @@ const submit = async () => {
     error.value = 'Remarks is required.'
     return
   }
+  if (outsideRepair.value && !form.value.outsideDescription?.trim()) {
+    error.value = 'Description is required for Outside Repair.'
+    return
+  }
   loading.value = true
   try {
+    const desc = outsideRepair.value ? (form.value.outsideDescription || '').trim() : ''
+    const combinedRemarks = desc
+      ? `${desc}${form.value.remarks ? ' — ' + form.value.remarks : ''}`
+      : form.value.remarks || undefined
     const payload = {
-      acn: form.value.acn || undefined,
-      purpose: form.value.purpose || 'Repair & Maintenance',
-      remarks: form.value.remarks || undefined,
+      acn: outsideRepair.value ? form.value.outsideAcn || undefined : form.value.acn || undefined,
+      purpose: outsideRepair.value
+        ? 'Outside Repair'
+        : form.value.purpose || 'Repair & Maintenance',
+      remarks: combinedRemarks,
       status: form.value.status || 'under_repair',
       broughtBy: {
         name: form.value.broughtByName || '',
@@ -106,12 +134,15 @@ const submit = async () => {
       },
       technician: { name: form.value.technicianName || '' }
     }
-    payload.serialNumber =
-      (isSecondary.value
-        ? selectedItem.value?._selectedSecondary?.serialNumber
-        : selectedItem.value?.serialNumber) || undefined
-    payload.inventoryRecordId = selectedRecord.value?._id || undefined
-    payload.itemId = selectedItem.value?._id || undefined
+    payload.serialNumber = outsideRepair.value
+      ? form.value.outsideSerialNumber || undefined
+      : (isSecondary.value
+          ? selectedItem.value?._selectedSecondary?.serialNumber
+          : selectedItem.value?.serialNumber) || undefined
+    payload.inventoryRecordId = outsideRepair.value
+      ? undefined
+      : selectedRecord.value?._id || undefined
+    payload.itemId = outsideRepair.value ? undefined : selectedItem.value?._id || undefined
     const { data } = await axios.post('/maintenance/logs', payload)
     if (!data?.success) throw new Error(data?.message || 'Failed to create repair log')
     success.value = `Created Repair Log ${data.log?.logNumber}`
@@ -123,6 +154,63 @@ const submit = async () => {
     loading.value = false
   }
 }
+
+const fetchStats = async () => {
+  statsLoading.value = true
+  statsError.value = ''
+  try {
+    const { data } = await axios.get('/maintenance/logs', {
+      params: { dateFrom: fromDate.value, dateTo: toDate.value }
+    })
+    const logs = Array.isArray(data?.logs) ? data.logs : []
+    const map = {}
+    const tech = {}
+    let sumDays = 0
+    let cntDays = 0
+    let outside = 0
+    let repaired = 0
+    let under = 0
+    for (const l of logs) {
+      const st = String(l?.status || '')
+      map[st] = (map[st] || 0) + 1
+      if (st === 'repaired') repaired++
+      if (st === 'under_repair') under++
+      const purpose = String(l?.purpose || '').toLowerCase()
+      if (purpose === 'outside repair') outside++
+      const tname = l?.technician?.name || ''
+      if (tname) tech[tname] = (tech[tname] || 0) + 1
+      if (st === 'repaired' && l?.repairDetails?.dateRepaired && l?.date) {
+        const days = Math.max(
+          0,
+          Math.round(
+            (new Date(l.repairDetails.dateRepaired).getTime() - new Date(l.date).getTime()) /
+              86400000
+          )
+        )
+        sumDays += days
+        cntDays++
+      }
+    }
+    const byTechnician = Object.entries(tech)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+    stats.value = {
+      total: logs.length,
+      outside,
+      repaired,
+      under_repair: under,
+      byStatus: map,
+      avgRepairDays: cntDays ? Number((sumDays / cntDays).toFixed(1)) : 0,
+      byTechnician
+    }
+  } catch (e) {
+    statsError.value = e?.response?.data?.message || e.message || 'Failed to load stats'
+  } finally {
+    statsLoading.value = false
+  }
+}
+
+watch([fromDate, toDate], () => fetchStats())
 
 const downloadLabel = async () => {
   if (!createdLog.value) return
@@ -202,11 +290,63 @@ const downloadLabel = async () => {
         >
           <!-- Modal Body -->
           <div class="p-4 overflow-y-auto">
+            <div class="mb-4 rounded border border-stroke bg-gray-50 p-3">
+              <div class="flex items-center gap-2">
+                <input type="date" v-model="fromDate" class="rounded border px-3 py-2" />
+                <input type="date" v-model="toDate" class="rounded border px-3 py-2" />
+                <button class="rounded border px-3 py-1" @click="fetchStats">Refresh</button>
+                <span v-if="statsLoading" class="text-xs">Loading...</span>
+                <span v-if="statsError" class="text-danger text-xs">{{ statsError }}</span>
+              </div>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
+                <div class="bg-white rounded p-3">
+                  <div class="text-xs text-bodydark2">Total Repairs</div>
+                  <div class="text-lg font-semibold">{{ stats.total }}</div>
+                </div>
+                <div class="bg-white rounded p-3">
+                  <div class="text-xs text-bodydark2">Outside Repairs</div>
+                  <div class="text-lg font-semibold">{{ stats.outside }}</div>
+                </div>
+                <div class="bg-white rounded p-3">
+                  <div class="text-xs text-bodydark2">Repaired</div>
+                  <div class="text-lg font-semibold">{{ stats.repaired }}</div>
+                </div>
+                <div class="bg-white rounded p-3">
+                  <div class="text-xs text-bodydark2">Under Repair</div>
+                  <div class="text-lg font-semibold">{{ stats.under_repair }}</div>
+                </div>
+              </div>
+              <div class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div class="bg-white rounded p-3">
+                  <div class="text-xs text-bodydark2">Avg Repair Time</div>
+                  <div class="text-lg font-semibold">{{ stats.avgRepairDays }} days</div>
+                </div>
+                <div class="bg-white rounded p-3">
+                  <div class="text-xs text-bodydark2">Statuses</div>
+                  <div class="flex flex-wrap gap-2 text-xs mt-1">
+                    <span
+                      v-for="(count, st) in stats.byStatus"
+                      :key="st"
+                      class="px-2 py-1 rounded bg-gray-100"
+                      >{{ st }}: {{ count }}</span
+                    >
+                  </div>
+                </div>
+                <div class="bg-white rounded p-3">
+                  <div class="text-xs text-bodydark2">Top Technicians</div>
+                  <div class="text-xs mt-1">
+                    <div v-for="t in stats.byTechnician.slice(0, 3)" :key="t.name">
+                      {{ t.name || '—' }}: {{ t.count }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <div
               class="bg-white dark:bg-boxdark z-10 flex items-center justify-between border-b border-stroke dark:border-strokedark"
             >
               <div>
-                <h2 class="text-xl font-semibold text-black dark:text-white">Create Respair Log</h2>
+                <h2 class="text-xl font-semibold text-black dark:text-white">Create Repair Log</h2>
                 <p class="text-xs text-bodydark2">Record a new maintenance or repair activity</p>
               </div>
               <div class="flex items-center gap-2">
@@ -252,9 +392,13 @@ const downloadLabel = async () => {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <!-- Left: Selection and form -->
               <div class="space-y-4">
-                <div>
+                <div class="flex items-center gap-2">
+                  <input type="checkbox" v-model="outsideRepair" id="outsideRepair" />
+                  <label for="outsideRepair" class="text-sm">Outside Repair (manual)</label>
+                </div>
+                <div v-if="!outsideRepair">
                   <label class="block text-sm font-medium mb-2">ACN</label>
-                  <AcnCombobox
+                  <AcnRepairCombobox
                     v-model="form.acn"
                     placeholder="Search deployed ACN"
                     @select="onAcnSelect"
@@ -262,6 +406,32 @@ const downloadLabel = async () => {
                   <p class="text-xs text-bodydark2 mt-1">
                     Choose a deployed ACN to auto-populate item details
                   </p>
+                </div>
+                <div v-else class="space-y-3">
+                  <div>
+                    <label class="block text-sm font-medium mb-2">Description</label>
+                    <input
+                      v-model="form.outsideDescription"
+                      class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
+                      placeholder="Item description"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-2">Serial Number</label>
+                    <input
+                      v-model="form.outsideSerialNumber"
+                      class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
+                      placeholder="Serial number (optional)"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-2">ACN</label>
+                    <input
+                      v-model="form.outsideAcn"
+                      class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
+                      placeholder="ACN (optional)"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -319,7 +489,6 @@ const downloadLabel = async () => {
                     <option value="for_inspection">For inspection</option>
                     <option value="under_repair">Under repair</option>
                     <option value="pending_replacement">Pending replacement</option>
-                    <option value="repaired">Repaired</option>
                     <option value="for_disposal">For disposal</option>
                   </select>
                 </div>
@@ -350,7 +519,7 @@ const downloadLabel = async () => {
               </div>
 
               <!-- Right: Item details preview -->
-              <div class="rounded-sm border border-stroke bg-gray-50 p-4">
+              <div v-if="!outsideRepair" class="rounded-sm border border-stroke bg-gray-50 p-4">
                 <div class="mb-3">
                   <div class="text-sm text-bodydark2">Selected ACN</div>
                   <div class="text-lg font-semibold">{{ form.acn || '—' }}</div>

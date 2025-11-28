@@ -4,10 +4,8 @@ import axios from '@/utils/axios'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
-  placeholder: { type: String, default: 'Search ACN' },
-  disabled: { type: Boolean, default: false },
-  productId: { type: [String, Number], default: '' },
-  mode: { type: String, default: 'default' }
+  placeholder: { type: String, default: 'Search deployed ACN' },
+  disabled: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['update:modelValue', 'select'])
@@ -18,8 +16,22 @@ const loading = ref(false)
 const options = ref([])
 const error = ref('')
 let debounceTimer = null
-const borrowedAcnSet = ref(new Set())
-const borrowedSerialSet = ref(new Set())
+const debugOpen = ref(false)
+const debugInfo = ref({
+  params: null,
+  primaryRecords: 0,
+  fallbackRecords: 0,
+  options: 0,
+  error: ''
+})
+const dbgTag = '[ACN-REPAIR-DEBUG]'
+const dbg = (...args) => {
+  try {
+    console.log(dbgTag, ...args)
+  } catch (_) {
+    void 0
+  }
+}
 
 const openIfNot = () => {
   if (!isOpen.value) isOpen.value = true
@@ -29,6 +41,13 @@ const onInput = (e) => {
   search.value = e.target.value
   openIfNot()
   emit('update:modelValue', search.value)
+}
+
+const onKeydown = (e) => {
+  if (e.key === 'Enter') {
+    const code = String(search.value || '').trim()
+    if (code) selectAcn({ acnCode: code })
+  }
 }
 
 const onFocus = () => {
@@ -51,19 +70,18 @@ const fetchProductName = async (pid) => {
 }
 
 const selectAcn = async (opt) => {
+  dbg('selectAcn called with opt:', { acnCode: opt?.acnCode, isSecondary: !!opt?.isSecondary })
   emit('update:modelValue', opt.acnCode)
   try {
-    // First try: query by ACN only
     let { data } = await axios.get('/inventory-records', {
       params: { acn: opt.acnCode, limit: 1 }
     })
     let rec = (data?.records || [])[0]
-    // Fallback: broaden search to deployed and find ACN in secondary/propertyNumber
     if (!rec) {
-      const fb = await axios.get('/inventory-records', {
-        params: { limit: 50, page: 1 }
-      })
+      dbg('primary lookup by ACN returned 0 records; trying fallback scan')
+      const fb = await axios.get('/inventory-records', { params: { limit: 200 } })
       const list = fb?.data?.records || []
+      dbg('fallback records count:', list.length)
       rec =
         list.find((r) =>
           (r.items || []).some((it) => {
@@ -106,21 +124,14 @@ const selectAcn = async (opt) => {
               String(s.acn || '').toUpperCase() === code ||
               String(s.propertyNumber || '').toUpperCase() === code
           )
-          item = {
-            ...parent,
-            _selectedSecondary: sec
-          }
+          item = { ...parent, _selectedSecondary: sec }
         }
       }
     }
     if (!item && opt.isSecondary) {
       isSecondary = true
-      item = {
-        endUserOrMR: opt.endUserOrMR || '',
-        _selectedSecondary: opt.secondary || {}
-      }
+      item = { endUserOrMR: opt.endUserOrMR || '', _selectedSecondary: opt.secondary || {} }
     }
-    // Attach product names when possible
     try {
       if (isSecondary) {
         const sec = item?._selectedSecondary || {}
@@ -133,21 +144,36 @@ const selectAcn = async (opt) => {
         if (pname) item.productName = pname
       }
     } catch (_) {
-      console.log(_)
+      void 0
     }
+    dbg('selection resolved:', {
+      recordFound: !!rec,
+      itemFound: !!item,
+      isSecondary,
+      serialResolved: isSecondary
+        ? item?._selectedSecondary?.serialNumber || ''
+        : item?.serialNumber || ''
+    })
     emit('select', {
       acn: opt.acnCode,
       product: opt.product,
       serialNumber:
         String(opt.serialNumber || '') ||
-        (isSecondary ? String(item?._selectedSecondary?.serialNumber || '') : String(item?.serialNumber || '')),
+        (isSecondary
+          ? String(item?._selectedSecondary?.serialNumber || '')
+          : String(item?.serialNumber || '')),
       record: rec || (opt?.department ? { _id: opt.recordId, department: opt.department } : null),
       item: item || null,
       isSecondary
     })
   } catch (_) {
+    dbg('selection error:', String(_?.message || _))
     const fallbackItem = opt?.isSecondary
-      ? { endUserOrMR: opt.endUserOrMR || '', _selectedSecondary: opt.secondary || {}, serialNumber: opt.serialNumber || '' }
+      ? {
+          endUserOrMR: opt.endUserOrMR || '',
+          _selectedSecondary: opt.secondary || {},
+          serialNumber: opt.serialNumber || ''
+        }
       : { endUserOrMR: opt.endUserOrMR || '', serialNumber: opt.serialNumber || '' }
     const fallbackRecord = opt?.department
       ? { _id: opt.recordId, department: opt.department }
@@ -176,68 +202,77 @@ const fetchOptions = async () => {
   try {
     const q = String(search.value || '').trim()
     const qUpper = q.toUpperCase()
-    const paramsPrimary = (() => {
-      if (props.mode === 'repair') {
-        return q ? { acn: qUpper, limit: 50, page: 1 } : { status: 'deployed', limit: 100, page: 1 }
-      }
-      return q ? { acn: qUpper, limit: 20, page: 1 } : { limit: 20, page: 1 }
-    })()
+    const paramsPrimary = q
+      ? { acn: qUpper, status: 'deployed', limit: 150, page: 1 }
+      : { status: 'deployed', limit: 300, page: 1 }
+    dbg('fetchOptions params:', paramsPrimary)
+    debugInfo.value.params = paramsPrimary
     let { data } = await axios.get('/inventory-records', { params: paramsPrimary })
     let records = Array.isArray(data?.records) ? data.records : []
-    // Fallback: if searching by ACN yields no records, broaden to deployed and filter client-side
+    dbg('primary fetch records:', records.length)
+    debugInfo.value.primaryRecords = records.length
     if (!records || records.length === 0) {
       const fb = await axios.get('/inventory-records', {
-        params: props.mode === 'repair' ? { status: 'deployed', limit: 200, page: 1 } : { limit: 100, page: 1 }
+        params: { status: 'deployed', limit: 500, page: 1 }
       })
       records = Array.isArray(fb?.data?.records) ? fb.data.records : []
+      dbg('fallback fetch records:', records.length)
+      debugInfo.value.fallbackRecords = records.length
+      // Do not include stock ACNs; only deployed items should be shown
+      if (!records.length) {
+        options.value = []
+        debugInfo.value.options = 0
+        return
+      }
     }
     const opts = []
+    let primCount = 0
+    let secCount = 0
     for (const rec of records) {
       for (const it of rec.items || []) {
         const st = String(it?.status || '').toLowerCase()
-        if (st === 'deployed' && props.mode !== 'repair') continue
-        const parent = it
-        const isAssignedParent = Boolean(parent?.endUserOrMR) || Boolean(parent?.employeeId)
-        if (isAssignedParent && props.mode !== 'repair') continue
+        const allowed = ['deployed']
+        if (!allowed.includes(st)) continue
         const acnPattern = /^[A-Z]{3}-\d{3}-\d{2}-\d{4}$/
         const parentCode =
-          parent?.acn || (acnPattern.test(String(parent?.propertyNumber || '').toUpperCase())
-            ? String(parent?.propertyNumber || '').toUpperCase()
+          it?.acn ||
+          (acnPattern.test(String(it?.propertyNumber || '').toUpperCase())
+            ? String(it?.propertyNumber || '').toUpperCase()
             : '')
         if (parentCode) {
           opts.push({
-            _id: parent._id,
+            _id: it._id,
             acnCode: parentCode,
-            product: parent.product || null,
-            description: parent.description || '',
-            endUserOrMR: parent.endUserOrMR || '',
+            product: it.product || null,
+            description: it.description || '',
+            endUserOrMR: it.endUserOrMR || '',
             isSecondary: false,
             recordId: rec._id,
             department: (rec?.department && rec?.department?.name) || rec?.department || '',
-            itemId: parent._id,
-            serialNumber: parent.serialNumber || ''
+            itemId: it._id,
+            serialNumber: it.serialNumber || ''
           })
+          primCount++
         }
-        for (const sec of parent.secondaryItems || []) {
-          if (st === 'deployed' && props.mode !== 'repair') continue
-          if (isAssignedParent && props.mode !== 'repair') continue
+        for (const sec of it.secondaryItems || []) {
           const secCode =
-            sec?.acn || (acnPattern.test(String(sec?.propertyNumber || '').toUpperCase())
+            sec?.acn ||
+            (acnPattern.test(String(sec?.propertyNumber || '').toUpperCase())
               ? String(sec?.propertyNumber || '').toUpperCase()
               : '')
           if (!secCode) continue
           opts.push({
-            _id: `${parent._id}-sec-${sec.acn}`,
+            _id: `${it._id}-sec-${sec.acn || sec.propertyNumber || ''}`,
             acnCode: secCode,
             product: sec.productId || null,
             description: `${(sec.type || '').toUpperCase()} ${
               sec.propertyNumber ? '• ' + sec.propertyNumber : ''
             }`.trim(),
-            endUserOrMR: parent.endUserOrMR || '',
+            endUserOrMR: it.endUserOrMR || '',
             isSecondary: true,
             recordId: rec._id,
             department: (rec?.department && rec?.department?.name) || rec?.department || '',
-            itemId: parent._id,
+            itemId: it._id,
             secondary: {
               propertyNumber: sec.propertyNumber || '',
               serialNumber: sec.serialNumber || '',
@@ -245,96 +280,37 @@ const fetchOptions = async () => {
             },
             serialNumber: sec.serialNumber || ''
           })
+          secCount++
         }
       }
     }
-    // Also include ACNs from product stock (unassigned ACNs on product)
-    const pid = String(props.productId || '').trim()
-    if (pid) {
-      try {
-        const { data: acnResp } = await axios.get('/acns', { params: { productId: pid, isActive: true, limit: 200 } })
-        const acnList = Array.isArray(acnResp?.acns) ? acnResp.acns : []
-        const acnCodes = acnList.map((a) => String(a.acnCode || '').trim().toUpperCase()).filter(Boolean)
-        let assignedMap = {}
-        if (acnCodes.length) {
-          try {
-            const { data: assignResp } = await axios.post('/acns/assignment-status', { acnCodes })
-            assignedMap = assignResp?.assignments?.acn || {}
-          } catch (_) {
-            assignedMap = {}
-          }
-        }
-        for (const rec of acnList) {
-          const code = String(rec?.acnCode || '').trim().toUpperCase()
-          if (!code) continue
-          const isAssigned = assignedMap[code]?.assigned === true
-          const isBorrowed = borrowedAcnSet.value.has(code)
-          if (isAssigned || isBorrowed) continue
-          opts.push({
-            _id: rec._id,
-            acnCode: code,
-            product: pid,
-            description: rec.serialNumber ? `Stock • SN: ${rec.serialNumber}` : 'Stock',
-            endUserOrMR: '',
-            isSecondary: false,
-            recordId: null,
-            department: '',
-            itemId: null,
-            serialNumber: rec.serialNumber || ''
-          })
-        }
-      } catch (_) {
-        // ignore
-      }
-    }
-    // Exclude ACNs currently borrowed and ACNs/Serials with active repair or assigned
-    const acnUsed = borrowedAcnSet.value
-    const snUsed = borrowedSerialSet.value
-    const acnCodesAll = Array.from(new Set((opts || []).map((o) => String(o.acnCode || '').toUpperCase()).filter(Boolean)))
-    const serialsAll = Array.from(new Set((opts || []).map((o) => String(o.serialNumber || '').trim()).filter(Boolean)))
-    let assignAll = { acn: {}, serial: {} }
-    try {
-      if (acnCodesAll.length || serialsAll.length) {
-        const { data: assignResp2 } = await axios.post('/acns/assignment-status', {
-          acnCodes: acnCodesAll,
-          serialNumbers: serialsAll
-        })
-        assignAll = assignResp2?.assignments || { acn: {}, serial: {} }
-      }
-    } catch (_) {
-      assignAll = { acn: {}, serial: {} }
-    }
-    const filtered = opts.filter((o) => {
-      const a = String(o.acnCode || '').toUpperCase()
-      const s = String(o.serialNumber || '').trim()
-      const aAssign = assignAll.acn?.[a] || null
-      const sAssign = s ? assignAll.serial?.[s] || null : null
-      const hasRepair = Boolean(aAssign?.repairTicket) || Boolean(sAssign?.repairTicket)
-      const assigned = (aAssign?.assigned === true) || (sAssign?.assigned === true)
-      const allowAssigned = props.mode === 'repair'
-      const allowRepairActive = props.mode === 'repair'
-      const allowBorrowed = props.mode === 'repair'
-      const borrowedBlocked = acnUsed.has(a) || (s && snUsed.has(s))
-      return (
-        (allowAssigned || !assigned) &&
-        (allowRepairActive || !hasRepair) &&
-        (allowBorrowed ? true : !borrowedBlocked)
-      )
-    })
-    if (!q) options.value = filtered
+    dbg('built options:', { primCount, secCount, total: opts.length })
+    debugInfo.value.options = opts.length
+    if (!q) options.value = opts
     else {
       const s = qUpper
-      options.value = filtered.filter((o) => String(o.acnCode || '').toUpperCase().includes(s))
+      options.value = opts.filter((o) =>
+        String(o.acnCode || '')
+          .toUpperCase()
+          .includes(s)
+      )
       if (!options.value.length) {
-        const slow = filtered.filter((o) =>
+        const slow = opts.filter((o) =>
           [o.description, o.endUserOrMR]
             .map((v) => String(v || '').toLowerCase())
             .some((v) => v.includes(q.toLowerCase()))
         )
         options.value = slow
       }
+      dbg('filtered options by search:', { q, count: options.value.length })
+      if (!options.value.length) {
+        options.value = []
+        debugInfo.value.options = 0
+      }
     }
   } catch (e) {
+    dbg('fetchOptions error:', String(e?.message || e))
+    debugInfo.value.error = e?.response?.data?.message || e.message || String(e)
     options.value = []
     error.value = e?.response?.data?.message || e.message
   } finally {
@@ -342,13 +318,8 @@ const fetchOptions = async () => {
   }
 }
 
-const filteredOptions = computed(() => {
-  const pid = String(props.productId || '').trim()
-  if (!pid) return options.value
-  return (options.value || []).filter((opt) => String(opt.product || '') === pid)
-})
+const filteredOptions = computed(() => options.value)
 
-// Debounce search
 watch(
   () => search.value,
   () => {
@@ -357,7 +328,6 @@ watch(
   }
 )
 
-// Close on outside click
 const root = ref(null)
 const onDocClick = (e) => {
   if (!root.value) return
@@ -368,27 +338,6 @@ const onDocClick = (e) => {
 
 onMounted(() => {
   document.addEventListener('click', onDocClick)
-  ;(async () => {
-    try {
-      const { data } = await axios.get('/borrow', { params: { status: 'active' } })
-      const borrows = Array.isArray(data?.borrows) ? data.borrows : []
-      const acns = new Set()
-      const sns = new Set()
-      for (const b of borrows) {
-        for (const it of b.items || []) {
-          const acn = String(it?.acn || '').trim().toUpperCase()
-          const sn = String(it?.serialNumber || '').trim()
-          if (acn) acns.add(acn)
-          if (sn) sns.add(sn)
-        }
-      }
-      borrowedAcnSet.value = acns
-      borrowedSerialSet.value = sns
-    } catch (_) {
-      borrowedAcnSet.value = new Set()
-      borrowedSerialSet.value = new Set()
-    }
-  })()
 })
 </script>
 
@@ -398,6 +347,7 @@ onMounted(() => {
       <input
         :value="props.modelValue || search"
         @input="onInput"
+        @keydown="onKeydown"
         @focus="onFocus"
         :placeholder="placeholder"
         :disabled="disabled"
@@ -411,6 +361,13 @@ onMounted(() => {
       >
         Clear
       </button>
+      <button
+        type="button"
+        @click="debugOpen = !debugOpen"
+        class="text-xs text-bodydark2 hover:text-primary"
+      >
+        Debug
+      </button>
     </div>
 
     <div
@@ -420,7 +377,9 @@ onMounted(() => {
       <div v-if="loading" class="px-3 py-2 text-sm text-bodydark2">Loading...</div>
       <div v-else-if="error" class="px-3 py-2 text-sm text-danger">{{ error }}</div>
       <template v-else>
-        <div v-if="!filteredOptions.length" class="px-3 py-2 text-sm text-bodydark2">No matches</div>
+        <div v-if="!filteredOptions.length" class="px-3 py-2 text-sm text-bodydark2">
+          No matches
+        </div>
         <ul v-else>
           <li
             v-for="opt in filteredOptions"
@@ -436,13 +395,18 @@ onMounted(() => {
                 >secondary</span
               >
             </div>
-            <div class="text-xs text-bodydark2">
-              {{ opt.description || '—' }}
-            </div>
+            <div class="text-xs text-bodydark2">{{ opt.description || '—' }}</div>
             <div class="text-[11px] text-bodydark2">User: {{ opt.endUserOrMR || '—' }}</div>
           </li>
         </ul>
       </template>
+    </div>
+    <div v-if="debugOpen" class="mt-2 border border-stroke rounded p-2 text-xs text-bodydark2">
+      <div>Params: {{ JSON.stringify(debugInfo.params) }}</div>
+      <div>Primary records: {{ debugInfo.primaryRecords }}</div>
+      <div>Fallback records: {{ debugInfo.fallbackRecords }}</div>
+      <div>Options: {{ debugInfo.options }}</div>
+      <div v-if="debugInfo.error">Error: {{ debugInfo.error }}</div>
     </div>
   </div>
 </template>

@@ -5,7 +5,9 @@ import { useAuthStore } from '@/stores'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import axios from '@/utils/axios'
 import EmployeeCombobox from '@/components/EmployeeCombobox.vue'
-import AcnCombobox from '@/components/AcnCombobox.vue'
+import AcnRepairCombobox from '@/components/AcnRepairCombobox.vue'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -15,6 +17,18 @@ const error = ref('')
 const logs = ref([])
 const search = ref('')
 const statusFilter = ref('')
+const fromDate = ref(null)
+const toDate = ref(null)
+const toastMessage = ref('')
+const toastType = ref('info')
+const copyingId = ref('')
+const page = ref(1)
+const activeTab = ref('inside')
+const pageInside = ref(1)
+const pageOutside = ref(1)
+const pageSize = ref(10)
+const sortKey = ref('date')
+const sortDir = ref('desc')
 
 // Consult Modal State
 const showConsultModal = ref(false)
@@ -29,7 +43,6 @@ const consultForm = ref({
   claimDetails: { dateClaimed: '', claimedBy: '', remarks: '' },
   replacementParts: [] // [{ part, quantity, remarks }]
 })
-
 // Claim Modal State
 const claimForm = ref({
   dateClaimed: new Date().toISOString().slice(0, 10),
@@ -40,9 +53,22 @@ const claimForm = ref({
   remarks: ''
 })
 const savingClaim = ref(false)
-
 // UI helper: map backend status to display label
-const statusLabel = (s) => (s === 'repaired' || s === 'claimed' ? 'Claimed' : s)
+const latestActionIsRetrieve = (l) => {
+  const acts = Array.isArray(l?.actions) ? l.actions : []
+  if (!acts.length) return false
+  const last = acts[acts.length - 1] || {}
+  const res = String(last.result || '')
+  const at = String(last.actionTaken || '').toLowerCase()
+  const cf = String(last.consultFindings || '').toLowerCase()
+  return res === 'beyond_repair' && (at.includes('retrieve') || cf.includes('retrieve'))
+}
+const statusLabel = (s, l) => {
+  if (latestActionIsRetrieve(l)) return 'Retrieved'
+  if (s === 'repaired' || s === 'claimed') return 'Claimed'
+  if (s === 'disposed') return 'Disposed'
+  return s
+}
 
 const savingConsult = ref(false)
 const replacementOptions = ref([
@@ -79,6 +105,8 @@ const openConsult = async (log) => {
     /* ignore for modal */
   }
 }
+
+// removed: navigation to Replacement RIS from Repair module per user request
 
 const openClaim = async (log) => {
   selectedLog.value = log
@@ -153,6 +181,37 @@ const submitClaim = async () => {
     })
     const actData = await actRes.json()
     if (!actData.success) throw new Error(actData.message || 'Failed to record claim action')
+
+    // Update inventory item to mark repair as completed
+    try {
+      if (selectedLog.value?.itemId && selectedLog.value?.inventoryRecordId) {
+        const inventoryPayload = {
+          // Keep deployment status as deployed
+          status: 'deployed',
+          // Mark repair status as completed
+          repairStatus: 'completed',
+          // Update status notes
+          statusNotes: `Repair completed - Claimed ${dateTimeStr}`,
+          statusDate: new Date().toISOString()
+        }
+
+        // Update inventory item
+        await axios.patch(
+          `/inventory-records/${selectedLog.value.inventoryRecordId}/items/${selectedLog.value.itemId}`,
+          inventoryPayload
+        )
+
+        console.log('✅ Updated inventory item - repair completed:', {
+          deploymentStatus: inventoryPayload.status,
+          repairStatus: inventoryPayload.repairStatus,
+          statusNotes: inventoryPayload.statusNotes
+        })
+      }
+    } catch (inventoryUpdateError) {
+      console.warn('⚠️ Could not update inventory item status on claim:', inventoryUpdateError)
+      // Don't fail the whole operation if inventory update fails
+    }
+
     await fetchLogs()
     closeClaim()
   } catch (e) {
@@ -178,6 +237,16 @@ const submitConsult = async () => {
   if (!consultForm.value.result) {
     error.value = 'Please select a status in the modal.'
     return
+  }
+  if (consultForm.value.result === 'retrieve') {
+    consultForm.value.result = 'beyond_repair'
+    if (
+      !String(consultForm.value.actionTaken || '')
+        .toLowerCase()
+        .includes('retrieve')
+    ) {
+      consultForm.value.actionTaken = 'Retrieve'
+    }
   }
   if (consultForm.value.result === 'repaired' && consultForm.value.repairedStatus === 'claim_now') {
     consultForm.value.claimDetails = {
@@ -206,6 +275,57 @@ const submitConsult = async () => {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
         body: JSON.stringify({ replacementParts: consultForm.value.replacementParts })
       })
+    }
+
+    // 3) Update inventory item with proper status separation
+    try {
+      if (selectedLog.value?.itemId && selectedLog.value?.inventoryRecordId) {
+        let inventoryPayload
+
+        if (consultForm.value.result === 'repaired') {
+          // Item is repaired
+          inventoryPayload = {
+            status: 'deployed', // Keep deployed
+            repairStatus:
+              consultForm.value.repairedStatus === 'claim_now' ? 'completed' : 'ready_to_claim',
+            statusNotes: `Repair completed - ${consultForm.value.repairedStatus}`,
+            statusDate: new Date().toISOString()
+          }
+        } else if (consultForm.value.result === 'beyond_repair') {
+          // Item is beyond repair
+          inventoryPayload = {
+            status: 'for_disposal', // Change deployment status
+            repairStatus: 'beyond_repair',
+            statusNotes: 'Beyond repair - for disposal',
+            statusDate: new Date().toISOString()
+          }
+        } else if (consultForm.value.result === 'for_replacement') {
+          // Item needs replacement
+          inventoryPayload = {
+            status: 'deployed', // Keep deployed while waiting for replacement
+            repairStatus: 'for_replacement',
+            statusNotes: 'Replacement parts ordered',
+            statusDate: new Date().toISOString()
+          }
+        }
+
+        if (inventoryPayload) {
+          await axios.patch(
+            `/inventory-records/${selectedLog.value.inventoryRecordId}/items/${selectedLog.value.itemId}`,
+            inventoryPayload
+          )
+
+          console.log('✅ Updated inventory item - consult result:', {
+            result: consultForm.value.result,
+            deploymentStatus: inventoryPayload.status,
+            repairStatus: inventoryPayload.repairStatus,
+            statusNotes: inventoryPayload.statusNotes
+          })
+        }
+      }
+    } catch (inventoryUpdateError) {
+      console.warn('⚠️ Could not update inventory item status on consult:', inventoryUpdateError)
+      // Don't fail the whole operation if inventory update fails
     }
 
     // Optional: On beyond_repair, keep a hint to go to Disposal
@@ -252,7 +372,10 @@ const fetchLogs = async () => {
   error.value = ''
   try {
     const url = new URL(`${apiBase}/maintenance/logs`)
-    if (statusFilter.value) url.searchParams.set('status', statusFilter.value)
+    if (statusFilter.value && statusFilter.value !== 'disposed')
+      url.searchParams.set('status', statusFilter.value)
+    if (fromDate.value) url.searchParams.set('dateFrom', fromDate.value)
+    if (toDate.value) url.searchParams.set('dateTo', toDate.value)
     const res = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${auth.token}` }
     })
@@ -266,21 +389,289 @@ const fetchLogs = async () => {
   }
 }
 
+const effectiveStatus = (l) => (isDisposed(l) ? 'disposed' : String(l.status || ''))
+
 const filteredLogs = computed(() => {
   const q = search.value.trim().toLowerCase()
+  const sf = String(statusFilter.value || '')
   return logs.value.filter((l) => {
-    const s = `${l.logNumber || ''} ${l.acn || ''} ${l.serialNumber || ''} ${
-      l.status || ''
-    }`.toLowerCase()
-    return !q || s.includes(q)
+    const eff = effectiveStatus(l)
+    const s = `${l.logNumber || ''} ${l.acn || ''} ${l.serialNumber || ''} ${eff}`.toLowerCase()
+    const matchesStatus = !sf || eff === sf
+    return matchesStatus && (!q || s.includes(q))
   })
 })
+
+const isOutsideRepair = (l) =>
+  String(l?.purpose || '')
+    .trim()
+    .toLowerCase() === 'outside repair'
+const filteredInsideLogs = computed(() => filteredLogs.value.filter((l) => !isOutsideRepair(l)))
+const filteredOutsideLogs = computed(() => filteredLogs.value.filter((l) => isOutsideRepair(l)))
+
+const sortedLogs = computed(() => {
+  const list = filteredLogs.value.slice()
+  const key = String(sortKey.value || 'date')
+  const dir = String(sortDir.value || 'desc')
+  const mult = dir === 'asc' ? 1 : -1
+  list.sort((a, b) => {
+    let va = ''
+    let vb = ''
+    if (key === 'date') {
+      va = new Date(a.date || a.createdAt || 0).getTime()
+      vb = new Date(b.date || b.createdAt || 0).getTime()
+    } else if (key === 'status') {
+      va = effectiveStatus(a)
+      vb = effectiveStatus(b)
+    } else if (key === 'logNumber') {
+      va = String(a.logNumber || '')
+      vb = String(b.logNumber || '')
+    }
+    if (va < vb) return -1 * mult
+    if (va > vb) return 1 * mult
+    return 0
+  })
+  return list
+})
+
+const sortedInsideLogs = computed(() => {
+  const list = filteredInsideLogs.value.slice()
+  const key = String(sortKey.value || 'date')
+  const dir = String(sortDir.value || 'desc')
+  const mult = dir === 'asc' ? 1 : -1
+  list.sort((a, b) => {
+    let va = ''
+    let vb = ''
+    if (key === 'date') {
+      va = new Date(a.date || a.createdAt || 0).getTime()
+      vb = new Date(b.date || b.createdAt || 0).getTime()
+    } else if (key === 'status') {
+      va = effectiveStatus(a)
+      vb = effectiveStatus(b)
+    } else if (key === 'logNumber') {
+      va = String(a.logNumber || '')
+      vb = String(b.logNumber || '')
+    }
+    if (va < vb) return -1 * mult
+    if (va > vb) return 1 * mult
+    return 0
+  })
+  return list
+})
+
+const sortedOutsideLogs = computed(() => {
+  const list = filteredOutsideLogs.value.slice()
+  const key = String(sortKey.value || 'date')
+  const dir = String(sortDir.value || 'desc')
+  const mult = dir === 'asc' ? 1 : -1
+  list.sort((a, b) => {
+    let va = ''
+    let vb = ''
+    if (key === 'date') {
+      va = new Date(a.date || a.createdAt || 0).getTime()
+      vb = new Date(b.date || b.createdAt || 0).getTime()
+    } else if (key === 'status') {
+      va = effectiveStatus(a)
+      vb = effectiveStatus(b)
+    } else if (key === 'logNumber') {
+      va = String(a.logNumber || '')
+      vb = String(b.logNumber || '')
+    }
+    if (va < vb) return -1 * mult
+    if (va > vb) return 1 * mult
+    return 0
+  })
+  return list
+})
+
+const totalPages = computed(() => {
+  const size = Math.max(1, Number(pageSize.value) || 10)
+  return Math.max(1, Math.ceil(sortedLogs.value.length / size))
+})
+const totalInsidePages = computed(() => {
+  const size = Math.max(1, Number(pageSize.value) || 10)
+  return Math.max(1, Math.ceil(sortedInsideLogs.value.length / size))
+})
+const totalOutsidePages = computed(() => {
+  const size = Math.max(1, Number(pageSize.value) || 10)
+  return Math.max(1, Math.ceil(sortedOutsideLogs.value.length / size))
+})
+
+const pagedLogs = computed(() => {
+  const size = Math.max(1, Number(pageSize.value) || 10)
+  const p = Math.max(1, Number(page.value) || 1)
+  const start = (p - 1) * size
+  return sortedLogs.value.slice(start, start + size)
+})
+const pagedInsideLogs = computed(() => {
+  const size = Math.max(1, Number(pageSize.value) || 10)
+  const p = Math.max(1, Number(pageInside.value) || 1)
+  const start = (p - 1) * size
+  return sortedInsideLogs.value.slice(start, start + size)
+})
+const pagedOutsideLogs = computed(() => {
+  const size = Math.max(1, Number(pageSize.value) || 10)
+  const p = Math.max(1, Number(pageOutside.value) || 1)
+  const start = (p - 1) * size
+  return sortedOutsideLogs.value.slice(start, start + size)
+})
+
+const insideCount = computed(() => filteredInsideLogs.value.length)
+const outsideCount = computed(() => filteredOutsideLogs.value.length)
+
+const currentPage = computed({
+  get() {
+    return activeTab.value === 'inside' ? pageInside.value : pageOutside.value
+  },
+  set(v) {
+    if (activeTab.value === 'inside') pageInside.value = v
+    else pageOutside.value = v
+  }
+})
+const totalPagesActive = computed(() =>
+  activeTab.value === 'inside' ? totalInsidePages.value : totalOutsidePages.value
+)
+
+const printReport = () => {
+  const doc = new jsPDF('landscape', 'pt', 'a4')
+  const title = 'Repair Logs Report'
+  const range =
+    fromDate.value || toDate.value
+      ? `${fromDate.value || '—'} to ${toDate.value || '—'}`
+      : 'All Dates'
+  const tab = activeTab.value === 'inside' ? 'Inside' : 'Outside'
+  doc.setFontSize(16)
+  doc.text(title, 40, 40)
+  doc.setFontSize(11)
+  doc.text(`Tab: ${tab}`, 40, 60)
+  doc.text(`Range: ${range}`, 40, 76)
+  doc.text(`Status: ${statusFilter.value || 'All'}`, 40, 92)
+  doc.text(`Search: ${search.value || '—'}`, 40, 108)
+  const list = activeTab.value === 'inside' ? sortedInsideLogs.value : sortedOutsideLogs.value
+  const head = [['Log #', 'Date', 'Status', 'ACN', 'Brought By', 'Purpose', 'Remarks']]
+  const body = list.map((l) => [
+    String(l.logNumber || ''),
+    new Date(l.date || l.createdAt || Date.now()).toLocaleDateString(),
+    statusLabel(effectiveStatus(l), l),
+    String(l.acn || ''),
+    String(l?.broughtBy?.name || ''),
+    String(l?.purpose || ''),
+    String(l?.remarks || '').slice(0, 200)
+  ])
+  autoTable(doc, { head, body, startY: 130, styles: { fontSize: 9 } })
+  const fname = `repair-logs-report-${tab.toLowerCase()}-${fromDate.value || 'all'}-${
+    toDate.value || 'all'
+  }.pdf`
+  doc.save(fname)
+}
+
+const stats = computed(() => {
+  const list = Array.isArray(logs.value) ? logs.value : []
+  const byStatus = {}
+  const tech = {}
+  let outside = 0
+  let repaired = 0
+  let under = 0
+  let sumDays = 0
+  let cntDays = 0
+  for (const l of list) {
+    const st = effectiveStatus(l)
+    byStatus[st] = (byStatus[st] || 0) + 1
+    if (st === 'repaired') repaired++
+    if (st === 'under_repair') under++
+    const purpose = String(l?.purpose || '').toLowerCase()
+    if (purpose === 'outside repair') outside++
+    const tname = l?.technician?.name || ''
+    if (tname) tech[tname] = (tech[tname] || 0) + 1
+    if (st === 'repaired' && l?.repairDetails?.dateRepaired && l?.date) {
+      const days = Math.max(
+        0,
+        Math.round(
+          (new Date(l.repairDetails.dateRepaired).getTime() - new Date(l.date).getTime()) / 86400000
+        )
+      )
+      sumDays += days
+      cntDays++
+    }
+  }
+  const byTechnician = Object.entries(tech)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+  return {
+    total: list.length,
+    outside,
+    repaired,
+    under_repair: under,
+    byStatus,
+    avgRepairDays: cntDays ? Number((sumDays / cntDays).toFixed(1)) : 0,
+    byTechnician
+  }
+})
+const setSort = (key) => {
+  const k = String(key || '')
+  if (!k) return
+  if (sortKey.value === k) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  else {
+    sortKey.value = k
+    sortDir.value = 'desc'
+  }
+}
+const showToast = (msg, type = 'info') => {
+  toastMessage.value = String(msg || '')
+  toastType.value = String(type || 'info')
+  if (!toastMessage.value) return
+  setTimeout(() => {
+    toastMessage.value = ''
+  }, 2000)
+}
+
+const copyLogNumber = async (l) => {
+  try {
+    await navigator.clipboard.writeText(String(l?.logNumber || ''))
+    copyingId.value = l?._id
+    showToast('Copied', 'success')
+    setTimeout(() => {
+      copyingId.value = ''
+    }, 800)
+  } catch (_) {
+    showToast('Failed to copy', 'error')
+  }
+}
+
+const disposedMap = ref({})
+const fetchDisposedMap = async () => {
+  try {
+    const { data } = await axios.get('/disposal')
+    const disposals = Array.isArray(data?.disposals) ? data.disposals : []
+    const map = {}
+    for (const d of disposals) {
+      // consider approved disposals as disposed
+      const approved = !!d?.approvedBy
+      const items = Array.isArray(d.items) && d.items.length ? d.items : [d]
+      for (const it of items) {
+        const id = String(it?.itemId || '')
+        const acn = String(it?.acn || '').toUpperCase()
+        const sn = String(it?.serialNumber || '')
+        if (approved) {
+          if (id) map[`item:${id}`] = true
+          if (acn) map[`acn:${acn}`] = true
+          if (sn) map[`serial:${sn}`] = true
+        }
+      }
+    }
+    disposedMap.value = map
+  } catch (_) {
+    disposedMap.value = {}
+  }
+}
 
 const isDisposed = (l) => {
   const rec = l?.inventoryRecordId || null
   const items = Array.isArray(rec?.items) ? rec.items : []
   const id = l?.itemId?._id || l?.itemId || ''
-  const acn = String(l?.acn || '').trim().toUpperCase()
+  const acn = String(l?.acn || '')
+    .trim()
+    .toUpperCase()
   const serial = String(l?.serialNumber || '').trim()
   let it = null
   if (id) it = items.find((i) => String(i._id) === String(id)) || null
@@ -289,27 +680,42 @@ const isDisposed = (l) => {
   if (!it && acn)
     it =
       items.find(
-        (i) => Array.isArray(i.secondaryItems) && i.secondaryItems.some((s) => String(s?.acn || '').toUpperCase() === acn)
+        (i) =>
+          Array.isArray(i.secondaryItems) &&
+          i.secondaryItems.some((s) => String(s?.acn || '').toUpperCase() === acn)
       ) || null
   if (!it && serial)
     it =
       items.find(
-        (i) => Array.isArray(i.secondaryItems) && i.secondaryItems.some((s) => String(s?.serialNumber || '') === serial)
+        (i) =>
+          Array.isArray(i.secondaryItems) &&
+          i.secondaryItems.some((s) => String(s?.serialNumber || '') === serial)
       ) || null
-  return String(it?.status || '') === 'disposed'
+  const disposedItem = String(it?.status || '') === 'disposed'
+  const keyHit =
+    disposedMap.value[`item:${String(id)}`] ||
+    disposedMap.value[`acn:${acn}`] ||
+    disposedMap.value[`serial:${serial}`]
+  return disposedItem || !!keyHit
 }
 
-onMounted(fetchLogs)
+onMounted(async () => {
+  await Promise.all([fetchLogs(), fetchDisposedMap()])
+})
 
 // Create Repair Log Modal State
 const showCreateModal = ref(false)
+const outsideRepair = ref(false)
 const createForm = ref({
   acn: '',
   purpose: '',
   remarks: '',
   broughtByName: '',
   broughtByEmployeeId: '',
-  status: 'for_inspection'
+  status: 'for_inspection',
+  outsideDescription: '',
+  outsideSerialNumber: '',
+  outsideAcn: ''
 })
 const createLoading = ref(false)
 const createError = ref('')
@@ -326,8 +732,12 @@ const openCreateModal = () => {
     remarks: '',
     broughtByName: '',
     broughtByEmployeeId: '',
-    status: 'for_inspection'
+    status: 'for_inspection',
+    outsideDescription: '',
+    outsideSerialNumber: '',
+    outsideAcn: ''
   }
+  outsideRepair.value = false
   showCreateModal.value = true
   // ACN combobox now lists all deployed (including secondary); no extra picker
 }
@@ -388,26 +798,72 @@ const submitCreateLog = async () => {
     createError.value = 'Remarks is required.'
     return
   }
+  if (outsideRepair.value && !createForm.value.outsideDescription?.trim()) {
+    createError.value = 'Description is required for Outside Repair.'
+    return
+  }
   createLoading.value = true
   try {
+    const desc = outsideRepair.value ? (createForm.value.outsideDescription || '').trim() : ''
+    const combinedRemarks = desc
+      ? `${desc}${createForm.value.remarks ? ' — ' + createForm.value.remarks : ''}`
+      : createForm.value.remarks || undefined
     const payload = {
-      acn: createForm.value.acn || undefined,
-      purpose: createForm.value.purpose || 'Repair & Maintenance',
-      remarks: createForm.value.remarks || undefined,
+      acn: outsideRepair.value
+        ? createForm.value.outsideAcn || undefined
+        : createForm.value.acn || undefined,
+      purpose: outsideRepair.value
+        ? 'Outside Repair'
+        : createForm.value.purpose || 'Repair & Maintenance',
+      remarks: combinedRemarks,
       status: createForm.value.status || 'under_repair',
       broughtBy: {
         name: createForm.value.broughtByName || '',
         employee: createForm.value.broughtByEmployeeId || undefined
       }
     }
-    payload.serialNumber =
-      (selectedIsSecondary.value
-        ? selectedItem.value?._selectedSecondary?.serialNumber
-        : selectedItem.value?.serialNumber) || undefined
-    payload.inventoryRecordId = selectedRecord.value?._id || undefined
-    payload.itemId = selectedItem.value?._id || undefined
+    payload.serialNumber = outsideRepair.value
+      ? createForm.value.outsideSerialNumber || undefined
+      : (selectedIsSecondary.value
+          ? selectedItem.value?._selectedSecondary?.serialNumber
+          : selectedItem.value?.serialNumber) || undefined
+    payload.inventoryRecordId = outsideRepair.value
+      ? undefined
+      : selectedRecord.value?._id || undefined
+    payload.itemId = outsideRepair.value ? undefined : selectedItem.value?._id || undefined
     const { data } = await axios.post('/maintenance/logs', payload)
     if (!data?.success) throw new Error(data?.message || 'Failed to create repair log')
+
+    // Update inventory item with proper status separation
+    try {
+      if (!outsideRepair.value && selectedItem.value && selectedRecord.value?._id) {
+        // Update the inventory item to maintain deployment status but add repair status
+        const inventoryPayload = {
+          // Keep deployment status as deployed (or whatever it was)
+          status: selectedItem.value.status || 'deployed',
+          // Set repair status separately
+          repairStatus: createForm.value.status || 'under_repair',
+          // Add repair log reference
+          statusNotes: `Repair log ${data.log?.logNumber || data.log?._id}`,
+          statusDate: new Date().toISOString()
+        }
+
+        // Update inventory item
+        await axios.patch(
+          `/inventory-records/${selectedRecord.value._id}/items/${selectedItem.value._id}`,
+          inventoryPayload
+        )
+
+        console.log('✅ Updated inventory item with proper status separation:', {
+          deploymentStatus: inventoryPayload.status,
+          repairStatus: inventoryPayload.repairStatus,
+          statusNotes: inventoryPayload.statusNotes
+        })
+      }
+    } catch (inventoryUpdateError) {
+      console.warn('⚠️ Could not update inventory item status:', inventoryUpdateError)
+      // Don't fail the whole operation if inventory update fails
+    }
     try {
       const name = createForm.value.broughtByName || ''
       const dept = selectedRecord.value?.department || ''
@@ -454,7 +910,7 @@ const submitCreateLog = async () => {
       ctx.moveTo(30, lineY)
       ctx.lineTo(canvas.width - 30, lineY)
       ctx.stroke()
-      const drawCheckbox = (x, y, label, checked, size = 18, fontSize = 18) => {
+      const drawCheckbox = (x, y, label, checked, size = 28, fontSize = 26) => {
         ctx.strokeStyle = '#000000'
         ctx.lineWidth = 2
         ctx.strokeRect(x, y, size, size)
@@ -473,25 +929,15 @@ const submitCreateLog = async () => {
       }
 
       const st = createForm.value.status || 'ready_to_claim'
-      const yBox = Math.min(canvas.height - 30, lineY + 20)
-
-      // Only ONE checkbox, made BIGGER
-      drawCheckbox(
-        40,
-        yBox,
-        'Repaired and Ready to claim',
-        st === 'ready_to_claim',
-        28, // BIGGER checkbox
-        26 // BIGGER text
-      ),
-        drawCheckbox(
-          550,
-          yBox,
-          'For disposal',
-          st === 'for_disposal',
-          28, // BIGGER checkbox
-          26 // BIGGER text
-        )
+      // First row Y position
+      const y1 = Math.min(canvas.height - 30, lineY + 20)
+      // Second row Y position (move down 50–60px)
+      const y2 = y1 + 60
+      // Row 1 — Two checkboxes
+      drawCheckbox(40, y1, 'Repaired and ready to claim', st === 'ready_to_claim')
+      drawCheckbox(450, y1, 'Under repair / Awaiting Parts', st === 'under_repair')
+      // Row 2 — For Disposal (below)
+      drawCheckbox(40, y2, 'For disposal', st === 'for_disposal')
       const blob = await new Promise((resolve) => {
         canvas.toBlob((b) => resolve(b || new Blob()), 'image/png')
       })
@@ -577,10 +1023,12 @@ const downloadLabelForLog = async (log) => {
     ctx.moveTo(30, lineY)
     ctx.lineTo(canvas.width - 30, lineY)
     ctx.stroke()
-    const drawCheckbox = (x, y, label, checked, size = 18, fontSize = 18) => {
+
+    const drawCheckbox = (x, y, label, checked, size = 28, fontSize = 26) => {
       ctx.strokeStyle = '#000000'
       ctx.lineWidth = 2
       ctx.strokeRect(x, y, size, size)
+
       if (checked) {
         ctx.beginPath()
         ctx.moveTo(x + 3, y + size / 2)
@@ -588,28 +1036,28 @@ const downloadLabelForLog = async (log) => {
         ctx.lineTo(x + size - 3, y + 3)
         ctx.stroke()
       }
+
       ctx.font = `${fontSize}px Arial`
       ctx.fillStyle = '#000000'
       ctx.fillText(label, x + size + 10, y + size - 4)
     }
+
     const st = createForm.value.status || 'ready_to_claim'
-    const yBox = Math.min(canvas.height - 30, lineY + 20)
-    drawCheckbox(
-      45,
-      yBox,
-      'Repaired and ready to claim',
-      st === 'ready_to_claim',
-      28, // BIGGER checkbox
-      26 // BIGGER text
-    ),
-      drawCheckbox(
-        550,
-        yBox,
-        'For disposal',
-        st === 'for_disposal',
-        28, // BIGGER checkbox
-        26 // BIGGER text
-      )
+
+    // First row Y position
+    const y1 = Math.min(canvas.height - 30, lineY + 20)
+
+    // Second row Y position (move down 50–60px)
+    const y2 = y1 + 60
+
+    // Row 1 — Two checkboxes
+    drawCheckbox(40, y1, 'Repaired and ready to claim', st === 'ready_to_claim')
+
+    drawCheckbox(420, y1, 'Under repair / Awaiting Parts', st === 'under_repair')
+
+    // Row 2 — For Disposal (below)
+    drawCheckbox(40, y2, 'For disposal', st === 'for_disposal')
+
     const blob = await new Promise((resolve) => {
       canvas.toBlob((b) => resolve(b || new Blob()), 'image/png')
     })
@@ -638,13 +1086,22 @@ const downloadLabelForLog = async (log) => {
           <h1 class="text-2xl font-bold text-black dark:text-white">Repair Logs</h1>
           <p class="text-sm text-bodydark2 mt-1">Track and manage repair and maintenance logs</p>
         </div>
-        <button
-          type="button"
-          class="rounded bg-primary text-white px-4 py-2 text-sm font-medium hover:bg-opacity-90 transition"
-          @click="openCreateModal"
-        >
-          + New Repair Log
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="rounded border border-stroke bg-white text-black px-4 py-2 text-sm font-medium hover:bg-gray-50 transition"
+            @click="printReport"
+          >
+            Print Report
+          </button>
+          <button
+            type="button"
+            class="rounded bg-primary text-white px-4 py-2 text-sm font-medium hover:bg-opacity-90 transition"
+            @click="openCreateModal"
+          >
+            + New Repair Log
+          </button>
+        </div>
       </div>
 
       <!-- Main Card -->
@@ -669,7 +1126,18 @@ const downloadLabelForLog = async (log) => {
               <option value="pending_replacement">Pending replacement</option>
               <option value="repaired">Repaired</option>
               <option value="for_disposal">For disposal</option>
+              <option value="disposed">Disposed</option>
             </select>
+            <input
+              type="date"
+              v-model="fromDate"
+              class="w-full border border-stroke rounded px-3 py-2 bg-white"
+            />
+            <input
+              type="date"
+              v-model="toDate"
+              class="w-full border border-stroke rounded px-3 py-2 bg-white"
+            />
             <div class="flex gap-2">
               <button
                 @click="fetchLogs"
@@ -682,6 +1150,8 @@ const downloadLabelForLog = async (log) => {
                   () => {
                     search = ''
                     statusFilter = ''
+                    fromDate = null
+                    toDate = null
                     fetchLogs()
                   }
                 "
@@ -692,16 +1162,76 @@ const downloadLabelForLog = async (log) => {
             </div>
           </div>
           <div v-if="error" class="text-red-600 mt-3 text-sm">{{ error }}</div>
-        </div>
 
+          <div class="mt-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div class="bg-gray-50 rounded p-3">
+                <div class="text-xs text-bodydark2">Total Repairs</div>
+                <div class="text-lg font-semibold">{{ stats.total }}</div>
+              </div>
+              <div class="bg-gray-50 rounded p-3">
+                <div class="text-xs text-bodydark2">Outside Repairs</div>
+                <div class="text-lg font-semibold">{{ stats.outside }}</div>
+              </div>
+              <div class="bg-gray-50 rounded p-3">
+                <div class="text-xs text-bodydark2">Repaired</div>
+                <div class="text-lg font-semibold">{{ stats.repaired }}</div>
+              </div>
+              <div class="bg-gray-50 rounded p-3">
+                <div class="text-xs text-bodydark2">Under Repair</div>
+                <div class="text-lg font-semibold">{{ stats.under_repair }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3 p-2">
+          <div class="inline-flex gap-2">
+            <button
+              type="button"
+              @click="activeTab = 'inside'"
+              :class="[
+                'px-3 py-1 rounded border text-sm',
+                activeTab === 'inside'
+                  ? 'bg-primary/10 text-primary border-primary'
+                  : 'bg-white text-black border-stroke'
+              ]"
+            >
+              Inside ({{ insideCount }})
+            </button>
+            <button
+              type="button"
+              @click="activeTab = 'outside'"
+              :class="[
+                'px-3 py-1 rounded border text-sm',
+                activeTab === 'outside'
+                  ? 'bg-primary/10 text-primary border-primary'
+                  : 'bg-white text-black border-stroke'
+              ]"
+            >
+              Outside ({{ outsideCount }})
+            </button>
+          </div>
+        </div>
         <!-- Table -->
         <div class="overflow-x-auto">
           <table class="w-full table-auto">
-            <thead>
+            <thead class="sticky top-0 z-10">
               <tr class="bg-gray-2 text-left dark:bg-meta-4">
-                <th class="py-3 px-4 font-semibold text-sm">Log #</th>
-                <th class="py-3 px-4 font-semibold text-sm">Date</th>
-                <th class="py-3 px-4 font-semibold text-sm">Status</th>
+                <th
+                  class="py-3 px-4 font-semibold text-sm cursor-pointer"
+                  @click="setSort('logNumber')"
+                >
+                  Log #
+                </th>
+                <th class="py-3 px-4 font-semibold text-sm cursor-pointer" @click="setSort('date')">
+                  Date
+                </th>
+                <th
+                  class="py-3 px-4 font-semibold text-sm cursor-pointer"
+                  @click="setSort('status')"
+                >
+                  Status
+                </th>
                 <th class="py-3 px-4 font-semibold text-sm">ACN</th>
                 <!-- <th class="py-3 px-4 font-semibold text-sm">Serial</th> -->
                 <th class="py-3 px-4 font-semibold text-sm">Brought By</th>
@@ -723,7 +1253,13 @@ const downloadLabelForLog = async (log) => {
               </tr>
 
               <!-- Empty State -->
-              <tr v-else-if="filteredLogs.length === 0">
+              <tr
+                v-else-if="
+                  (activeTab === 'inside'
+                    ? filteredInsideLogs.length
+                    : filteredOutsideLogs.length) === 0
+                "
+              >
                 <td colspan="9" class="text-center py-8">
                   <div class="flex flex-col items-center gap-2">
                     <svg
@@ -746,12 +1282,19 @@ const downloadLabelForLog = async (log) => {
 
               <!-- Data Rows -->
               <tr
-                v-for="l in filteredLogs"
+                v-for="l in activeTab === 'inside' ? pagedInsideLogs : pagedOutsideLogs"
                 :key="l._id"
-                class="border-b border-stroke dark:border-strokedark hover:bg-gray-50 dark:hover:bg-meta-4 transition"
+                class="border-b border-stroke dark:border-strokedark hover:bg-gray-50 dark:hover:bg-meta-4 transition odd:bg-gray-50"
               >
                 <td class="py-3 px-4">
                   <span class="font-medium text-sm">{{ l.logNumber }}</span>
+                  <button
+                    type="button"
+                    class="ml-2 text-xs text-primary"
+                    @click.stop="copyLogNumber(l)"
+                  >
+                    {{ copyingId === l._id ? 'Copied' : 'Copy' }}
+                  </button>
                 </td>
                 <td class="py-3 px-4">
                   <span class="text-sm">{{
@@ -760,9 +1303,18 @@ const downloadLabelForLog = async (log) => {
                 </td>
                 <td class="py-3 px-4">
                   <span
-                    class="inline-block px-2 py-1 rounded text-xs font-medium bg-bodydark/10 text-black"
+                    class="inline-block px-2 py-1 rounded text-xs font-medium"
+                    :class="{
+                      'bg-blue-100 text-blue-800': effectiveStatus(l) === 'for_inspection',
+                      'bg-yellow-100 text-yellow-800': effectiveStatus(l) === 'under_repair',
+                      'bg-orange-100 text-orange-800': effectiveStatus(l) === 'pending_replacement',
+                      'bg-green-100 text-green-800':
+                        effectiveStatus(l) === 'repaired' || effectiveStatus(l) === 'claimed',
+                      'bg-gray-100 text-gray-800': effectiveStatus(l) === 'for_disposal',
+                      'bg-red-100 text-red-800': effectiveStatus(l) === 'disposed'
+                    }"
                   >
-                    {{ statusLabel(l.status) }}
+                    {{ statusLabel(effectiveStatus(l), l) }}
                   </span>
                 </td>
                 <td class="py-3 px-4">
@@ -783,21 +1335,30 @@ const downloadLabelForLog = async (log) => {
                 <td class="py-3 px-4">
                   <div class="flex gap-3 items-center">
                     <button
-                      v-if="l.status === 'ready_to_claim' && !isDisposed(l)"
+                      v-if="
+                        l.status === 'ready_to_claim' &&
+                        !isDisposed(l) &&
+                        !latestActionIsRetrieve(l)
+                      "
                       @click="openClaim(l)"
                       class="inline-flex items-center gap-1 rounded border border-primary bg-primary/10 text-primary px-3 py-1 text-xs font-medium hover:bg-primary/20 transition"
                     >
                       Claim
                     </button>
                     <button
-                      v-else-if="l.status !== 'repaired' && l.status !== 'claimed' && !isDisposed(l)"
+                      v-else-if="
+                        l.status !== 'repaired' &&
+                        l.status !== 'claimed' &&
+                        !isDisposed(l) &&
+                        !latestActionIsRetrieve(l)
+                      "
                       @click="openConsult(l)"
                       class="inline-flex items-center gap-1 rounded border border-primary bg-primary/10 text-primary px-3 py-1 text-xs font-medium hover:bg-primary/20 transition"
                     >
                       Action
                     </button>
                     <button
-                      v-if="!isDisposed(l)"
+                      v-if="!isDisposed(l) && !latestActionIsRetrieve(l)"
                       @click="downloadLabelForLog(l)"
                       :disabled="downloadingLabelId === l._id"
                       class="inline-flex items-center gap-1 rounded border border-stroke bg-white text-black px-3 py-1 text-xs font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
@@ -819,7 +1380,9 @@ const downloadLabelForLog = async (log) => {
                       </svg>
                     </router-link>
                     <button
-                      v-if="l.status === 'for_disposal' && !isDisposed(l)"
+                      v-if="
+                        l.status === 'for_disposal' && !isDisposed(l) && !latestActionIsRetrieve(l)
+                      "
                       @click="goToDisposalForLog(l)"
                       class="inline-flex items-center gap-1 rounded border border-danger bg-danger/10 text-danger px-3 py-1 text-xs font-medium hover:bg-danger/20 transition"
                     >
@@ -830,16 +1393,44 @@ const downloadLabelForLog = async (log) => {
               </tr>
             </tbody>
           </table>
+          <div class="flex items-center justify-end gap-2 p-3">
+            <button
+              type="button"
+              class="rounded border border-stroke px-3 py-1 text-xs"
+              :disabled="currentPage <= 1"
+              @click="currentPage = Math.max(1, currentPage - 1)"
+            >
+              Prev
+            </button>
+            <span class="text-xs">Page {{ currentPage }} of {{ totalPagesActive }}</span>
+            <button
+              type="button"
+              class="rounded border border-stroke px-3 py-1 text-xs"
+              :disabled="currentPage >= totalPagesActive"
+              @click="currentPage = Math.min(totalPagesActive, currentPage + 1)"
+            >
+              Next
+            </button>
+          </div>
         </div>
 
         <!-- Footer Summary -->
         <div
-          v-if="filteredLogs.length > 0"
+          v-if="
+            (activeTab === 'inside' ? filteredInsideLogs.length : filteredOutsideLogs.length) > 0
+          "
           class="border-t border-stroke dark:border-strokedark p-4 bg-gray-50 dark:bg-meta-4"
         >
           <p class="text-xs text-bodydark2">
-            Showing <span class="font-semibold">{{ filteredLogs.length }}</span> repair log{{
-              filteredLogs.length !== 1 ? 's' : ''
+            Showing
+            <span class="font-semibold">{{
+              activeTab === 'inside' ? filteredInsideLogs.length : filteredOutsideLogs.length
+            }}</span>
+            repair log{{
+              (activeTab === 'inside' ? filteredInsideLogs.length : filteredOutsideLogs.length) !==
+              1
+                ? 's'
+                : ''
             }}
           </p>
         </div>
@@ -878,6 +1469,7 @@ const downloadLabelForLog = async (log) => {
               <option value="">Select outcome</option>
               <option value="for_repair">For repair</option>
               <option value="for_replacement">For replacement</option>
+              <option value="retrieve">Retrieve</option>
               <option value="beyond_repair">Beyond repair</option>
               <option value="repaired">Repaired</option>
             </select>
@@ -1113,9 +1705,13 @@ const downloadLabelForLog = async (log) => {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <!-- Left: Selection and form -->
               <div class="space-y-4">
-                <div>
+                <div class="flex items-center gap-2">
+                  <input type="checkbox" v-model="outsideRepair" id="outsideRepair" />
+                  <label for="outsideRepair" class="text-sm">Outside Repair (manual)</label>
+                </div>
+                <div v-if="!outsideRepair">
                   <label class="block text-sm font-medium mb-2">ACN</label>
-                  <AcnCombobox
+                  <AcnRepairCombobox
                     v-model="createForm.acn"
                     placeholder="Search deployed ACN"
                     @select="onAcnSelect"
@@ -1123,6 +1719,32 @@ const downloadLabelForLog = async (log) => {
                   <p class="text-xs text-bodydark2 mt-1">
                     Choose a deployed ACN to auto-populate item details
                   </p>
+                </div>
+                <div v-else class="space-y-3">
+                  <div>
+                    <label class="block text-sm font-medium mb-2">Description</label>
+                    <input
+                      v-model="createForm.outsideDescription"
+                      class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
+                      placeholder="Item description"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-2">Serial Number</label>
+                    <input
+                      v-model="createForm.outsideSerialNumber"
+                      class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
+                      placeholder="Serial number (optional)"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-2">ACN</label>
+                    <input
+                      v-model="createForm.outsideAcn"
+                      class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
+                      placeholder="ACN (optional)"
+                    />
+                  </div>
                 </div>
 
                 <!-- Deployed items picker removed; ACN combobox includes all deployed ACNs -->
@@ -1184,7 +1806,7 @@ const downloadLabelForLog = async (log) => {
                     :disabled="createLoading"
                     class="px-4 py-2 rounded-sm border border-stroke bg-primary text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {{ createLoading ? 'Creating...' : 't' }}
+                    {{ createLoading ? 'Creating...' : 'Create Log' }}
                   </button>
                   <button
                     type="button"
@@ -1197,7 +1819,7 @@ const downloadLabelForLog = async (log) => {
               </div>
 
               <!-- Right: Item details preview -->
-              <div class="rounded-sm border border-stroke bg-gray-50 p-4">
+              <div v-if="!outsideRepair" class="rounded-sm border border-stroke bg-gray-50 p-4">
                 <div class="mb-3">
                   <div class="text-sm text-bodydark2">Selected ACN</div>
                   <div class="text-lg font-semibold">{{ createForm.acn || '—' }}</div>
