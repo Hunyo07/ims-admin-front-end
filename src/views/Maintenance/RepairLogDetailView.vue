@@ -24,8 +24,12 @@ const linkedCategoryName = ref('')
 const formatStatus = (s) => (s || '').replace(/_/g, ' ')
 const getStatusBadge = (s) => {
   const map = {
+    pending: 'bg-yellow-100 text-yellow-700',
     for_inspection: 'bg-yellow-100 text-yellow-700',
     under_repair: 'bg-blue-100 text-blue-700',
+    on_the_way: 'bg-indigo-100 text-indigo-700',
+    on_site_repair: 'bg-blue-200 text-blue-800',
+    for_pull_out: 'bg-orange-100 text-orange-700',
     pending_replacement: 'bg-orange-100 text-orange-700',
     repaired: 'bg-green-100 text-green-700',
     for_disposal: 'bg-gray-200 text-gray-700'
@@ -70,6 +74,64 @@ const filteredAcnHistory = computed(() => {
   })
   return f
 })
+
+const technicianName = ref('')
+const dispatching = ref(false)
+const onsiteUpdating = ref(false)
+const pullOutReason = ref('')
+const pullOutUpdating = ref(false)
+
+const updateStatus = async (newStatus, extra = {}) => {
+  if (!log.value) return
+  try {
+    const payload = { status: newStatus, ...extra }
+    await axios.patch(`/maintenance/logs/${log.value._id}`, payload)
+    await fetchLog()
+  } catch (_) {
+    void 0
+  }
+}
+
+const dispatchTechnician = async () => {
+  if (!log.value) return
+  dispatching.value = true
+  try {
+    const tech = technicianName.value?.trim()
+    const extra = tech ? { technician: { name: tech } } : {}
+    await updateStatus('on_the_way', extra)
+  } catch (_) {
+    void 0
+  } finally {
+    dispatching.value = false
+  }
+}
+
+const markArrivedOnSite = async () => {
+  if (!log.value) return
+  onsiteUpdating.value = true
+  try {
+    await updateStatus('on_site_repair')
+  } catch (_) {
+    void 0
+  } finally {
+    onsiteUpdating.value = false
+  }
+}
+
+const tagForPullOut = async () => {
+  if (!log.value) return
+  if (!pullOutReason.value || !pullOutReason.value.trim()) return
+  pullOutUpdating.value = true
+  try {
+    const extra = { pullOut: { reason: pullOutReason.value, dateTagged: new Date().toISOString() } }
+    await updateStatus('for_pull_out', extra)
+    pullOutReason.value = ''
+  } catch (_) {
+    void 0
+  } finally {
+    pullOutUpdating.value = false
+  }
+}
 
 const fetchProductName = async (pid) => {
   try {
@@ -574,6 +636,86 @@ const fetchAcnHistory = async () => {
                 <span class="font-medium">Brought by:</span> {{ log.broughtBy?.name || '—' }}
               </div>
               <div><span class="font-medium">Specs:</span> {{ hasAnySpecs ? 'Yes' : '—' }}</div>
+            </div>
+          </div>
+
+          <div
+            class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark p-4"
+          >
+            <h3 class="font-semibold mb-2">On-site Request</h3>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <span class="font-medium">Contact Person:</span>
+                {{ log.contactPerson || '—' }}
+              </div>
+              <div>
+                <span class="font-medium">Priority:</span>
+                {{ log.priority || '—' }}
+              </div>
+              <div class="col-span-2">
+                <span class="font-medium">Reported Issue:</span>
+                {{ log.reportedIssue || '—' }}
+              </div>
+              <div>
+                <span class="font-medium">Requested At:</span>
+                {{ log.requestedAt ? new Date(log.requestedAt).toLocaleString() : '—' }}
+              </div>
+              <div>
+                <span class="font-medium">Technician:</span>
+                {{ log.technician?.name || '—' }}
+              </div>
+              <div v-if="log.pullOut?.reason" class="col-span-2">
+                <span class="font-medium">Pull-out Reason:</span>
+                {{ log.pullOut.reason }}
+              </div>
+            </div>
+          </div>
+
+          <div
+            class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark p-4"
+          >
+            <h2 class="font-semibold mb-3">On-site Controls</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div class="md:col-span-1">
+                <label class="block text-sm font-medium mb-2">Technician</label>
+                <input
+                  v-model="technicianName"
+                  class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
+                  placeholder="Technician name"
+                />
+                <button
+                  @click="dispatchTechnician"
+                  :disabled="dispatching"
+                  class="mt-2 px-3 py-2 rounded bg-primary text-white text-sm disabled:opacity-50"
+                >
+                  {{ dispatching ? 'Dispatching...' : 'Dispatch (On the way)' }}
+                </button>
+              </div>
+              <div class="md:col-span-1">
+                <label class="block text-sm font-medium mb-2">Arrived On-site</label>
+                <button
+                  @click="markArrivedOnSite"
+                  :disabled="onsiteUpdating"
+                  class="px-3 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-50"
+                >
+                  {{ onsiteUpdating ? 'Updating...' : 'Mark Arrived' }}
+                </button>
+              </div>
+              <div class="md:col-span-1">
+                <label class="block text-sm font-medium mb-2">Pull-out Reason</label>
+                <input
+                  v-model="pullOutReason"
+                  class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
+                  placeholder="Reason"
+                />
+                <button
+                  @click="tagForPullOut"
+                  :disabled="pullOutUpdating || !pullOutReason"
+                  class="mt-2 px-3 py-2 rounded bg-orange-600 text-white text-sm disabled:opacity-50"
+                >
+                  {{ pullOutUpdating ? 'Tagging...' : 'Tag For Pull-out' }}
+                </button>
+              </div>
             </div>
           </div>
 

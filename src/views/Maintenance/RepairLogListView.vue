@@ -26,6 +26,7 @@ const page = ref(1)
 const activeTab = ref('inside')
 const pageInside = ref(1)
 const pageOutside = ref(1)
+const pageOnsite = ref(1)
 const pageSize = ref(10)
 const sortKey = ref('date')
 const sortDir = ref('desc')
@@ -406,8 +407,24 @@ const isOutsideRepair = (l) =>
   String(l?.purpose || '')
     .trim()
     .toLowerCase() === 'outside repair'
+const isOnsiteRepair = (l) => {
+  const p = String(l?.purpose || '')
+    .trim()
+    .toLowerCase()
+  const s = String(l?.status || '')
+    .trim()
+    .toLowerCase()
+  return (
+    p === 'on-site repair' ||
+    s === 'pending' ||
+    s === 'on_the_way' ||
+    s === 'on_site_repair' ||
+    s === 'for_pull_out'
+  )
+}
 const filteredInsideLogs = computed(() => filteredLogs.value.filter((l) => !isOutsideRepair(l)))
 const filteredOutsideLogs = computed(() => filteredLogs.value.filter((l) => isOutsideRepair(l)))
+const filteredOnsiteLogs = computed(() => filteredLogs.value.filter((l) => isOnsiteRepair(l)))
 
 const sortedLogs = computed(() => {
   const list = filteredLogs.value.slice()
@@ -483,6 +500,30 @@ const sortedOutsideLogs = computed(() => {
   })
   return list
 })
+const sortedOnsiteLogs = computed(() => {
+  const list = filteredOnsiteLogs.value.slice()
+  const key = String(sortKey.value || 'date')
+  const dir = String(sortDir.value || 'desc')
+  const mult = dir === 'asc' ? 1 : -1
+  list.sort((a, b) => {
+    let va = ''
+    let vb = ''
+    if (key === 'date') {
+      va = new Date(a.date || a.createdAt || 0).getTime()
+      vb = new Date(b.date || b.createdAt || 0).getTime()
+    } else if (key === 'status') {
+      va = effectiveStatus(a)
+      vb = effectiveStatus(b)
+    } else if (key === 'logNumber') {
+      va = String(a.logNumber || '')
+      vb = String(b.logNumber || '')
+    }
+    if (va < vb) return -1 * mult
+    if (va > vb) return 1 * mult
+    return 0
+  })
+  return list
+})
 
 const totalPages = computed(() => {
   const size = Math.max(1, Number(pageSize.value) || 10)
@@ -495,6 +536,10 @@ const totalInsidePages = computed(() => {
 const totalOutsidePages = computed(() => {
   const size = Math.max(1, Number(pageSize.value) || 10)
   return Math.max(1, Math.ceil(sortedOutsideLogs.value.length / size))
+})
+const totalOnsitePages = computed(() => {
+  const size = Math.max(1, Number(pageSize.value) || 10)
+  return Math.max(1, Math.ceil(sortedOnsiteLogs.value.length / size))
 })
 
 const pagedLogs = computed(() => {
@@ -515,21 +560,42 @@ const pagedOutsideLogs = computed(() => {
   const start = (p - 1) * size
   return sortedOutsideLogs.value.slice(start, start + size)
 })
+const pagedOnsiteLogs = computed(() => {
+  const size = Math.max(1, Number(pageSize.value) || 10)
+  const p = Math.max(1, Number(pageOnsite.value) || 1)
+  const start = (p - 1) * size
+  return sortedOnsiteLogs.value.slice(start, start + size)
+})
+const currentPagedLogs = computed(() => {
+  if (activeTab.value === 'inside') return pagedInsideLogs.value
+  if (activeTab.value === 'outside') return pagedOutsideLogs.value
+  return pagedOnsiteLogs.value
+})
 
 const insideCount = computed(() => filteredInsideLogs.value.length)
 const outsideCount = computed(() => filteredOutsideLogs.value.length)
+const onsiteCount = computed(() => filteredOnsiteLogs.value.length)
 
 const currentPage = computed({
   get() {
-    return activeTab.value === 'inside' ? pageInside.value : pageOutside.value
+    return activeTab.value === 'inside'
+      ? pageInside.value
+      : activeTab.value === 'outside'
+        ? pageOutside.value
+        : pageOnsite.value
   },
   set(v) {
     if (activeTab.value === 'inside') pageInside.value = v
-    else pageOutside.value = v
+    else if (activeTab.value === 'outside') pageOutside.value = v
+    else pageOnsite.value = v
   }
 })
 const totalPagesActive = computed(() =>
-  activeTab.value === 'inside' ? totalInsidePages.value : totalOutsidePages.value
+  activeTab.value === 'inside'
+    ? totalInsidePages.value
+    : activeTab.value === 'outside'
+      ? totalOutsidePages.value
+      : totalOnsitePages.value
 )
 
 const printReport = () => {
@@ -539,7 +605,8 @@ const printReport = () => {
     fromDate.value || toDate.value
       ? `${fromDate.value || '—'} to ${toDate.value || '—'}`
       : 'All Dates'
-  const tab = activeTab.value === 'inside' ? 'Inside' : 'Outside'
+  const tab =
+    activeTab.value === 'inside' ? 'Inside' : activeTab.value === 'outside' ? 'Outside' : 'On-site'
   doc.setFontSize(16)
   doc.text(title, 40, 40)
   doc.setFontSize(11)
@@ -547,7 +614,12 @@ const printReport = () => {
   doc.text(`Range: ${range}`, 40, 76)
   doc.text(`Status: ${statusFilter.value || 'All'}`, 40, 92)
   doc.text(`Search: ${search.value || '—'}`, 40, 108)
-  const list = activeTab.value === 'inside' ? sortedInsideLogs.value : sortedOutsideLogs.value
+  const list =
+    activeTab.value === 'inside'
+      ? sortedInsideLogs.value
+      : activeTab.value === 'outside'
+        ? sortedOutsideLogs.value
+        : sortedOnsiteLogs.value
   const head = [['Log #', 'Date', 'Status', 'ACN', 'Brought By', 'Purpose', 'Remarks']]
   const body = list.map((l) => [
     String(l.logNumber || ''),
@@ -706,6 +778,7 @@ onMounted(async () => {
 // Create Repair Log Modal State
 const showCreateModal = ref(false)
 const outsideRepair = ref(false)
+const onSiteRepair = ref(false)
 const createForm = ref({
   acn: '',
   purpose: '',
@@ -715,7 +788,12 @@ const createForm = ref({
   status: 'for_inspection',
   outsideDescription: '',
   outsideSerialNumber: '',
-  outsideAcn: ''
+  outsideAcn: '',
+  contactPerson: '',
+  reportedIssue: '',
+  requestDate: '',
+  requestTime: '',
+  priority: ''
 })
 const createLoading = ref(false)
 const createError = ref('')
@@ -735,9 +813,15 @@ const openCreateModal = () => {
     status: 'for_inspection',
     outsideDescription: '',
     outsideSerialNumber: '',
-    outsideAcn: ''
+    outsideAcn: '',
+    contactPerson: '',
+    reportedIssue: '',
+    requestDate: '',
+    requestTime: '',
+    priority: ''
   }
   outsideRepair.value = false
+  onSiteRepair.value = false
   showCreateModal.value = true
   // ACN combobox now lists all deployed (including secondary); no extra picker
 }
@@ -812,15 +896,31 @@ const submitCreateLog = async () => {
       acn: outsideRepair.value
         ? createForm.value.outsideAcn || undefined
         : createForm.value.acn || undefined,
-      purpose: outsideRepair.value
-        ? 'Outside Repair'
-        : createForm.value.purpose || 'Repair & Maintenance',
+      purpose: onSiteRepair.value
+        ? 'On-site Repair'
+        : outsideRepair.value
+          ? 'Outside Repair'
+          : createForm.value.purpose || 'Repair & Maintenance',
       remarks: combinedRemarks,
-      status: createForm.value.status || 'under_repair',
+      status: onSiteRepair.value
+        ? createForm.value.status || 'pending'
+        : createForm.value.status || 'under_repair',
       broughtBy: {
         name: createForm.value.broughtByName || '',
         employee: createForm.value.broughtByEmployeeId || undefined
       }
+    }
+    if (onSiteRepair.value) {
+      const d = createForm.value.requestDate
+      const t = createForm.value.requestTime
+      let requestedAt = undefined
+      if (d && t) requestedAt = new Date(`${d}T${t}:00`)
+      else if (d) requestedAt = new Date(`${d}T00:00:00`)
+      else requestedAt = new Date()
+      payload.contactPerson = createForm.value.contactPerson || undefined
+      payload.reportedIssue = createForm.value.reportedIssue || undefined
+      payload.requestedAt = requestedAt.toISOString()
+      payload.priority = createForm.value.priority || undefined
     }
     payload.serialNumber = outsideRepair.value
       ? createForm.value.outsideSerialNumber || undefined
@@ -1121,8 +1221,12 @@ const downloadLabelForLog = async (log) => {
               class="w-full border border-stroke rounded px-3 py-2 bg-white"
             >
               <option value="">All statuses</option>
+              <option value="pending">Pending</option>
               <option value="for_inspection">For inspection</option>
               <option value="under_repair">Under repair</option>
+              <option value="on_the_way">On the way</option>
+              <option value="on_site_repair">On-site repair</option>
+              <option value="for_pull_out">For pull-out</option>
               <option value="pending_replacement">Pending replacement</option>
               <option value="repaired">Repaired</option>
               <option value="for_disposal">For disposal</option>
@@ -1210,6 +1314,18 @@ const downloadLabelForLog = async (log) => {
             >
               Outside ({{ outsideCount }})
             </button>
+            <button
+              type="button"
+              @click="activeTab = 'onsite'"
+              :class="[
+                'px-3 py-1 rounded border text-sm',
+                activeTab === 'onsite'
+                  ? 'bg-primary/10 text-primary border-primary'
+                  : 'bg-white text-black border-stroke'
+              ]"
+            >
+              On-site ({{ onsiteCount }})
+            </button>
           </div>
         </div>
         <!-- Table -->
@@ -1257,7 +1373,9 @@ const downloadLabelForLog = async (log) => {
                 v-else-if="
                   (activeTab === 'inside'
                     ? filteredInsideLogs.length
-                    : filteredOutsideLogs.length) === 0
+                    : activeTab === 'outside'
+                      ? filteredOutsideLogs.length
+                      : filteredOnsiteLogs.length) === 0
                 "
               >
                 <td colspan="9" class="text-center py-8">
@@ -1282,7 +1400,7 @@ const downloadLabelForLog = async (log) => {
 
               <!-- Data Rows -->
               <tr
-                v-for="l in activeTab === 'inside' ? pagedInsideLogs : pagedOutsideLogs"
+                v-for="l in currentPagedLogs"
                 :key="l._id"
                 class="border-b border-stroke dark:border-strokedark hover:bg-gray-50 dark:hover:bg-meta-4 transition odd:bg-gray-50"
               >
@@ -1305,9 +1423,14 @@ const downloadLabelForLog = async (log) => {
                   <span
                     class="inline-block px-2 py-1 rounded text-xs font-medium"
                     :class="{
+                      'bg-yellow-100 text-yellow-800': effectiveStatus(l) === 'pending',
                       'bg-blue-100 text-blue-800': effectiveStatus(l) === 'for_inspection',
                       'bg-yellow-100 text-yellow-800': effectiveStatus(l) === 'under_repair',
-                      'bg-orange-100 text-orange-800': effectiveStatus(l) === 'pending_replacement',
+                      'bg-indigo-100 text-indigo-800': effectiveStatus(l) === 'on_the_way',
+                      'bg-blue-200 text-blue-900': effectiveStatus(l) === 'on_site_repair',
+                      'bg-orange-100 text-orange-800':
+                        effectiveStatus(l) === 'for_pull_out' ||
+                        effectiveStatus(l) === 'pending_replacement',
                       'bg-green-100 text-green-800':
                         effectiveStatus(l) === 'repaired' || effectiveStatus(l) === 'claimed',
                       'bg-gray-100 text-gray-800': effectiveStatus(l) === 'for_disposal',
@@ -1417,18 +1540,29 @@ const downloadLabelForLog = async (log) => {
         <!-- Footer Summary -->
         <div
           v-if="
-            (activeTab === 'inside' ? filteredInsideLogs.length : filteredOutsideLogs.length) > 0
+            (activeTab === 'inside'
+              ? filteredInsideLogs.length
+              : activeTab === 'outside'
+                ? filteredOutsideLogs.length
+                : filteredOnsiteLogs.length) > 0
           "
           class="border-t border-stroke dark:border-strokedark p-4 bg-gray-50 dark:bg-meta-4"
         >
           <p class="text-xs text-bodydark2">
             Showing
             <span class="font-semibold">{{
-              activeTab === 'inside' ? filteredInsideLogs.length : filteredOutsideLogs.length
+              activeTab === 'inside'
+                ? filteredInsideLogs.length
+                : activeTab === 'outside'
+                  ? filteredOutsideLogs.length
+                  : filteredOnsiteLogs.length
             }}</span>
             repair log{{
-              (activeTab === 'inside' ? filteredInsideLogs.length : filteredOutsideLogs.length) !==
-              1
+              (activeTab === 'inside'
+                ? filteredInsideLogs.length
+                : activeTab === 'outside'
+                  ? filteredOutsideLogs.length
+                  : filteredOnsiteLogs.length) !== 1
                 ? 's'
                 : ''
             }}
@@ -1705,9 +1839,15 @@ const downloadLabelForLog = async (log) => {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <!-- Left: Selection and form -->
               <div class="space-y-4">
-                <div class="flex items-center gap-2">
-                  <input type="checkbox" v-model="outsideRepair" id="outsideRepair" />
-                  <label for="outsideRepair" class="text-sm">Outside Repair (manual)</label>
+                <div class="flex items-center gap-4">
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox" v-model="outsideRepair" id="outsideRepair" />
+                    <label for="outsideRepair" class="text-sm">Outside Repair (manual)</label>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox" v-model="onSiteRepair" id="onSiteRepair" />
+                    <label for="onSiteRepair" class="text-sm">On-site Repair (dispatch)</label>
+                  </div>
                 </div>
                 <div v-if="!outsideRepair">
                   <label class="block text-sm font-medium mb-2">ACN</label>
@@ -1769,6 +1909,54 @@ const downloadLabelForLog = async (log) => {
                   ></textarea>
                 </div>
 
+                <div v-if="onSiteRepair" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-sm font-medium mb-2">Contact Person</label>
+                    <input
+                      v-model="createForm.contactPerson"
+                      class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
+                      placeholder="Contact person"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-2">Priority</label>
+                    <select
+                      v-model="createForm.priority"
+                      class="w-full border border-stroke rounded px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
+                    >
+                      <option value="">Select priority</option>
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                  <div class="md:col-span-2">
+                    <label class="block text-sm font-medium mb-2">Reported Issue</label>
+                    <input
+                      v-model="createForm.reportedIssue"
+                      class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
+                      placeholder="Describe the issue"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-2">Request Date</label>
+                    <input
+                      type="date"
+                      v-model="createForm.requestDate"
+                      class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-2">Request Time</label>
+                    <input
+                      type="time"
+                      v-model="createForm.requestTime"
+                      class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label class="block text-sm font-medium mb-2">Brought By</label>
                   <EmployeeCombobox
@@ -1792,11 +1980,19 @@ const downloadLabelForLog = async (log) => {
                     v-model="createForm.status"
                     class="w-full border border-stroke rounded px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
                   >
-                    <option value="for_inspection">For inspection</option>
-                    <option value="under_repair">Under repair</option>
-                    <option value="pending_replacement">Pending replacement</option>
-                    <option value="repaired">Repaired</option>
-                    <option value="for_disposal">For disposal</option>
+                    <template v-if="onSiteRepair">
+                      <option value="pending">Pending</option>
+                      <option value="on_the_way">On the way</option>
+                      <option value="on_site_repair">On-site repair</option>
+                      <option value="for_pull_out">For pull-out</option>
+                    </template>
+                    <template v-else>
+                      <option value="for_inspection">For inspection</option>
+                      <option value="under_repair">Under repair</option>
+                      <option value="pending_replacement">Pending replacement</option>
+                      <option value="repaired">Repaired</option>
+                      <option value="for_disposal">For disposal</option>
+                    </template>
                   </select>
                 </div>
 

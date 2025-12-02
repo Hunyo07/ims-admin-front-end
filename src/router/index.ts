@@ -12,6 +12,8 @@ const DepartmentManagementView = () => import('../views/Department/DepartmentMan
 const SupplierReturnListView = () => import('../views/Warranty/SupplierReturnListView.vue')
 const CreateSupplierReturnView = () => import('../views/Warranty/CreateSupplierReturnView.vue')
 const SupplierReturnDetailView = () => import('../views/Warranty/SupplierReturnDetailView.vue')
+const EventsListView = () => import('../views/Events/EventsListView.vue')
+const CreateEventView = () => import('../views/Events/CreateEventView.vue')
 
 const routes = [
   {
@@ -133,6 +135,18 @@ const routes = [
       roles: ['superadmin', 'admin', 'staff'],
       permissions: ['view_customers', 'manage_customers']
     }
+  },
+  {
+    path: '/events',
+    name: 'events-list',
+    component: EventsListView,
+    meta: { title: 'Events', requiresAuth: true }
+  },
+  {
+    path: '/events/create',
+    name: 'events-create',
+    component: CreateEventView,
+    meta: { title: 'Create Event', requiresAuth: true }
   },
   // RIS routes
   {

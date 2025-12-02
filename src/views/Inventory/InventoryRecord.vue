@@ -396,7 +396,7 @@ const STATUS_SYNC = {
 const StatusDisplay = {
   // Render status with source indicator and sync capability
   render(item, options = {}) {
-    const { showSource = false, showSyncButton = false, compact = false } = options
+    const { showSource = true, showSyncButton = true } = options
     const statusInfo = STATUS_SYNC.formatStatusWithSource(item)
     const badgeClass = STATUS_CONFIG.getBadgeClass(statusInfo.displayStatus)
 
@@ -2321,24 +2321,70 @@ function addItemRow() {
     const map = serialByAcnByProduct.value?.[acnProductId] || {}
     acnSerial = map[acnCode] || ''
   }
+
+  // Enhanced data structure with proper status separation
   newRecord.value.items.push({
+    // Basic item information
     description: product ? product.name : '',
     product: acnProductId,
+
+    // Identification
+    acn: acnCode || undefined,
+    serialNumber: acnSerial || '',
+    propertyNumber: acnCode || '',
+
+    // Assignment information
+    endUserOrMR: employeeName,
+    employeeId: employee ? employee._id : undefined,
+
+    // Status separation (NEW)
+    status: 'deployed', // Deployment status: deployed, returned, retired, for_disposal
+    repairStatus: null, // Repair status: under_repair, completed, for_replacement, beyond_repair
+    statusNotes: '', // Human-readable notes
+    statusDate: new Date().toISOString(), // Last status change date
+
+    // Status history (NEW)
+    statusHistory: [
+      {
+        type: 'deployment',
+        status: 'deployed',
+        date: new Date().toISOString(),
+        notes: `Deployed to ${employeeName}`,
+        changedBy: employee?.name || 'System'
+      }
+    ],
+
+    // Technical specifications
+    specs: {
+      processor: '',
+      storage: '',
+      ram: '',
+      videoCard: '',
+      brand: '',
+      monitorAndSerial: '',
+      printerOrScanner: ''
+    },
+
+    // Legacy compatibility (deprecated but kept for backward compatibility)
     processor: '',
     storage: '',
     ram: '',
     videoCard: '',
     monitorAndSerial: '',
-    propertyNumber: acnCode || '',
-    acn: acnCode || undefined,
     printerOrScanner: '',
-    endUserOrMR: employeeName,
-    employeeId: employee ? employee._id : undefined,
+
+    // Additional metadata
     remarksYears: '',
-    serialNumber: acnSerial || '',
-    status: 'deployed',
-    statusNotes: '',
-    secondaryItems: []
+    warranty: {},
+
+    // Secondary items
+    secondaryItems: [],
+
+    // Audit fields (NEW)
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdBy: employee?.name || 'System',
+    lastModifiedBy: employee?.name || 'System'
   })
   // Immediately open editor for the newly added row
   const idx = newRecord.value.items.length - 1
@@ -2680,23 +2726,67 @@ async function saveRecord() {
       const secondaryItems = primaryExemplar?.secondaryItems || []
 
       return {
+        // Basic item information
         description: row.description || primaryExemplar?.description || '',
         product: productId,
+
+        // Identification
+        acn,
+        serialNumber,
+        propertyNumber: row.propertyNumber,
+
+        // Assignment information
+        endUserOrMR: row.endUserOrMR,
+        employeeId,
+
+        // Status separation (NEW)
+        status: 'deployed', // Deployment status
+        repairStatus: null, // Repair status
+        statusNotes: '', // Status notes
+        statusDate: new Date().toISOString(), // Status date
+
+        // Status history (NEW)
+        statusHistory: [
+          {
+            type: 'deployment',
+            status: 'deployed',
+            date: new Date().toISOString(),
+            notes: `Deployed to ${row.endUserOrMR}`,
+            changedBy: 'RIS System'
+          }
+        ],
+
+        // Technical specifications (NEW)
+        specs: {
+          processor: row.processor,
+          storage: row.storage,
+          ram: row.ram,
+          videoCard: row.videoCard,
+          brand: '',
+          monitorAndSerial: row.monitorAndSerial,
+          printerOrScanner: row.printerOrScanner
+        },
+
+        // Legacy compatibility (deprecated but kept for backward compatibility)
         processor: row.processor,
         storage: row.storage,
         ram: row.ram,
         videoCard: row.videoCard,
         monitorAndSerial: row.monitorAndSerial,
-        serialNumber,
-        acn,
-        propertyNumber: row.propertyNumber,
         printerOrScanner: row.printerOrScanner,
-        endUserOrMR: row.endUserOrMR,
-        employeeId,
+
+        // Additional metadata
         remarksYears: row.remarksYears,
-        status: 'deployed',
-        statusNotes: '',
-        secondaryItems
+        warranty: {},
+
+        // Secondary items
+        secondaryItems,
+
+        // Audit fields (NEW)
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: 'RIS System',
+        lastModifiedBy: 'RIS System'
       }
     })
 
@@ -2892,12 +2982,55 @@ async function saveDraft() {
 async function updateItemStatus(recordId, item) {
   try {
     if (!recordId || !item?._nextStatus) return
+
+    // Determine if this is a deployment status change or repair status change
+    const nextStatus = String(item._nextStatus).toLowerCase()
+    const isDeploymentStatus = [
+      'deployed',
+      'returned',
+      'retired',
+      'for_disposal',
+      'unassigned'
+    ].includes(nextStatus)
+    const isRepairStatus = [
+      'under_repair',
+      'completed',
+      'for_replacement',
+      'beyond_repair'
+    ].includes(nextStatus)
+
     const body = {
-      status: item._nextStatus,
       serialNumber: item.serialNumber || undefined,
       acn: item.acn || item.propertyNumber || undefined,
-      notes: 'Updated via Inventory UI'
+      notes: 'Updated via Inventory UI',
+      updatedAt: new Date().toISOString(),
+      lastModifiedBy: 'Inventory UI'
     }
+
+    // Update appropriate status field based on the type
+    if (isDeploymentStatus) {
+      body.status = item._nextStatus
+      body.statusHistory = {
+        type: 'deployment',
+        status: item._nextStatus,
+        date: new Date().toISOString(),
+        notes: `Status changed to ${item._nextStatus} via Inventory UI`,
+        changedBy: 'Inventory UI'
+      }
+    } else if (isRepairStatus) {
+      body.repairStatus = item._nextStatus
+      body.statusHistory = {
+        type: 'repair',
+        status: item._nextStatus,
+        date: new Date().toISOString(),
+        notes: `Repair status changed to ${item._nextStatus} via Inventory UI`,
+        changedBy: 'Inventory UI'
+      }
+    } else {
+      // Fallback to old behavior for unknown statuses
+      body.status = item._nextStatus
+    }
+
     const { data } = await axios.patch(`/inventory-records/${recordId}/items/status`, body)
     const updated = data?.record || data?.updatedRecord || data
     if (updated && updated.items) {

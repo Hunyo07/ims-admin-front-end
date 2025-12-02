@@ -28,7 +28,7 @@ axiosInstance.interceptors.response.use(
       const { useAuthStore } = await import('../stores/auth')
       const authStore = useAuthStore()
       authStore.logout()
-      router.push('/auth/signin')
+      router.push('/')
     }
     return Promise.reject(error)
   }

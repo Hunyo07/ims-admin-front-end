@@ -89,6 +89,14 @@ const allMenuGroups = ref([
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+              </svg>`,
+        label: 'Task Schedule',
+        route: '/events',
+        roles: ['superadmin', 'admin']
+      },
+      {
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
                 <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/>
               </svg>`,
         label: 'Items ',
@@ -194,7 +202,7 @@ const allMenuGroups = ref([
         label: 'Settings',
         route: '#',
         children: [
-          { label: 'Reorder Point', route: '/settings/reorder-point', roles: ['superadmin'] },
+          // { label: 'Reorder Point', route: '/settings/reorder-point', roles: ['superadmin'] },
           {
             label: 'Account Settings',
             route: '/settings/account',

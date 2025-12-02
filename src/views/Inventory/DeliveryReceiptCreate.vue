@@ -604,7 +604,7 @@ onMounted(() => {
                 </div>
                 <label class="flex items-center gap-2 text-sm">
                   <input type="checkbox" v-model="it.warrantyOverrideEnabled" />
-                  <span>Has warranty</span>
+                  <span>With warranty</span>
                 </label>
               </div>
 
