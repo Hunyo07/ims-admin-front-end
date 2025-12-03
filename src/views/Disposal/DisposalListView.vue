@@ -224,13 +224,19 @@ const fetchPendingForDisposal = async () => {
             params: { search: l.broughtBy.name, limit: 50 }
           })
           const list = Array.isArray(srch?.employees) ? srch.employees : []
-          const target = String(l.broughtBy.name || '').trim().toUpperCase()
+          const target = String(l.broughtBy.name || '')
+            .trim()
+            .toUpperCase()
           const emp =
             list.find(
-              (e) => `${String(e.firstName || '')} ${String(e.lastName || '')}`.trim().toUpperCase() === target
+              (e) =>
+                `${String(e.firstName || '')} ${String(e.lastName || '')}`.trim().toUpperCase() ===
+                target
             ) ||
             list.find(
-              (e) => `${String(e.lastName || '')} ${String(e.firstName || '')}`.trim().toUpperCase() === target
+              (e) =>
+                `${String(e.lastName || '')} ${String(e.firstName || '')}`.trim().toUpperCase() ===
+                target
             ) ||
             list[0]
           office = (emp?.department || office || '').trim()
@@ -239,14 +245,24 @@ const fetchPendingForDisposal = async () => {
             const allList = Array.isArray(all?.employees) ? all.employees : []
             const emp2 =
               allList.find(
-                (e) => `${String(e.firstName || '')} ${String(e.lastName || '')}`.trim().toUpperCase() === target
+                (e) =>
+                  `${String(e.firstName || '')} ${String(e.lastName || '')}`
+                    .trim()
+                    .toUpperCase() === target
               ) ||
               allList.find(
-                (e) => `${String(e.lastName || '')} ${String(e.firstName || '')}`.trim().toUpperCase() === target
+                (e) =>
+                  `${String(e.lastName || '')} ${String(e.firstName || '')}`
+                    .trim()
+                    .toUpperCase() === target
               ) ||
-              allList.find(
-                (e) => `${String(e.firstName || '')} ${String(e.lastName || '')}`.trim().toUpperCase().includes(target)
-              ) || null
+              allList.find((e) =>
+                `${String(e.firstName || '')} ${String(e.lastName || '')}`
+                  .trim()
+                  .toUpperCase()
+                  .includes(target)
+              ) ||
+              null
             office = (emp2?.department || office || '').trim()
           }
         } catch (_) {
@@ -261,7 +277,8 @@ const fetchPendingForDisposal = async () => {
             full?.inventoryRecordId?.department ||
             full?.broughtBy?.department ||
             full?.department ||
-            office || ''
+            office ||
+            ''
         } catch (_) {
           void 0
         }
@@ -301,7 +318,10 @@ const filteredPendingLogs = computed(() => {
     ).toUpperCase()
     const office = String(
       officeCache.value[l?._id] ||
-      l?.inventoryRecordId?.department || l?.broughtBy?.department || l?.department || ''
+        l?.inventoryRecordId?.department ||
+        l?.broughtBy?.department ||
+        l?.department ||
+        ''
     ).toUpperCase()
     const matchesQ =
       !q ||
@@ -802,10 +822,6 @@ onMounted(async () => {
               valueKey="name"
               placeholder="Filter by office"
             />
-            <label class="inline-flex items-center gap-2 text-xs">
-              <input type="checkbox" v-model="debugPendingOffice" />
-              <span>Debug Office</span>
-            </label>
             <label class="inline-flex items-center gap-2 text-sm">
               <input type="checkbox" v-model="pendingSelectAll" @change="togglePendingSelectAll" />
               <span>Select All</span>
@@ -886,20 +902,20 @@ onMounted(async () => {
                   </td>
                   <td class="py-2 px-4">
                     <span class="text-sm">{{
-                      (officeCache[l._id] ||
+                      (
+                        officeCache[l._id] ||
                         l.inventoryRecordId?.department ||
                         l.broughtBy?.department ||
                         l.department ||
-                        '—')
+                        '—'
+                      )
                         .toString()
                         .trim()
                     }}</span>
                     <div v-if="debugPendingOffice" class="mt-1 text-[10px] text-bodydark2">
-                      [dbg] src:
-                      invRec: {{ l.inventoryRecordId?.department || '×' }} •
-                      broughtBy: {{ l.broughtBy?.department || '×' }} •
-                      top: {{ l.department || '×' }} •
-                      cache: {{ (officeCache[l._id] || '×').toString().trim() }}
+                      [dbg] src: invRec: {{ l.inventoryRecordId?.department || '×' }} • broughtBy:
+                      {{ l.broughtBy?.department || '×' }} • top: {{ l.department || '×' }} • cache:
+                      {{ (officeCache[l._id] || '×').toString().trim() }}
                     </div>
                   </td>
                   <td class="py-2 px-4">

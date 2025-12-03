@@ -21,14 +21,26 @@ const linkedCategoryName = ref('')
 
 // Removed unused product search helpers
 
-const formatStatus = (s) => (s || '').replace(/_/g, ' ')
+const repairTypeOptions = {
+  'inside': 'Inside (Walk-in)',
+  'outside': 'Outside (Not in System)',
+  'on-site': 'On-site (On-call Service)'
+}
+
+const formatStatus = (s) => {
+  if (!s) return ''
+  if (s === 'under_repair') return 'Under Repair'
+  if (s === 'on_going') return 'On-going'
+  return String(s).replace(/_/g, ' ')
+}
 const getStatusBadge = (s) => {
   const map = {
     pending: 'bg-yellow-100 text-yellow-700',
     for_inspection: 'bg-yellow-100 text-yellow-700',
     under_repair: 'bg-blue-100 text-blue-700',
-    on_the_way: 'bg-indigo-100 text-indigo-700',
-    on_site_repair: 'bg-blue-200 text-blue-800',
+    on_going: 'bg-blue-100 text-blue-700',
+    on_the_way: 'bg-blue-100 text-blue-700',
+    on_site_repair: 'bg-blue-100 text-blue-700',
     for_pull_out: 'bg-orange-100 text-orange-700',
     pending_replacement: 'bg-orange-100 text-orange-700',
     repaired: 'bg-green-100 text-green-700',
@@ -98,23 +110,12 @@ const dispatchTechnician = async () => {
   try {
     const tech = technicianName.value?.trim()
     const extra = tech ? { technician: { name: tech } } : {}
-    await updateStatus('on_the_way', extra)
+    // Simplified flow: directly mark as under_repair (on-going)
+    await updateStatus('under_repair', extra)
   } catch (_) {
     void 0
   } finally {
     dispatching.value = false
-  }
-}
-
-const markArrivedOnSite = async () => {
-  if (!log.value) return
-  onsiteUpdating.value = true
-  try {
-    await updateStatus('on_site_repair')
-  } catch (_) {
-    void 0
-  } finally {
-    onsiteUpdating.value = false
   }
 }
 
@@ -605,6 +606,12 @@ const fetchAcnHistory = async () => {
                   formatStatus(effectiveStatus)
                 }}</span>
               </div>
+              <div>
+                <span class="font-medium">Type:</span>
+                <span class="ml-1 px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                  {{ repairTypeOptions[log.repairType] || log.repairType || '—' }}
+                </span>
+              </div>
               <div><span class="font-medium">ACN:</span> {{ log.acn || '—' }}</div>
               <div><span class="font-medium">Repairs:</span> {{ repairCount }}</div>
               <div v-if="!acnIsSecondary">
@@ -667,54 +674,6 @@ const fetchAcnHistory = async () => {
               <div v-if="log.pullOut?.reason" class="col-span-2">
                 <span class="font-medium">Pull-out Reason:</span>
                 {{ log.pullOut.reason }}
-              </div>
-            </div>
-          </div>
-
-          <div
-            class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark p-4"
-          >
-            <h2 class="font-semibold mb-3">On-site Controls</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div class="md:col-span-1">
-                <label class="block text-sm font-medium mb-2">Technician</label>
-                <input
-                  v-model="technicianName"
-                  class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
-                  placeholder="Technician name"
-                />
-                <button
-                  @click="dispatchTechnician"
-                  :disabled="dispatching"
-                  class="mt-2 px-3 py-2 rounded bg-primary text-white text-sm disabled:opacity-50"
-                >
-                  {{ dispatching ? 'Dispatching...' : 'Dispatch (On the way)' }}
-                </button>
-              </div>
-              <div class="md:col-span-1">
-                <label class="block text-sm font-medium mb-2">Arrived On-site</label>
-                <button
-                  @click="markArrivedOnSite"
-                  :disabled="onsiteUpdating"
-                  class="px-3 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-50"
-                >
-                  {{ onsiteUpdating ? 'Updating...' : 'Mark Arrived' }}
-                </button>
-              </div>
-              <div class="md:col-span-1">
-                <label class="block text-sm font-medium mb-2">Pull-out Reason</label>
-                <input
-                  v-model="pullOutReason"
-                  class="w-full border border-stroke rounded px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300"
-                  placeholder="Reason"
-                />
-                <button
-                  @click="tagForPullOut"
-                  :disabled="pullOutUpdating || !pullOutReason"
-                  class="mt-2 px-3 py-2 rounded bg-orange-600 text-white text-sm disabled:opacity-50"
-                >
-                  {{ pullOutUpdating ? 'Tagging...' : 'Tag For Pull-out' }}
-                </button>
               </div>
             </div>
           </div>

@@ -9,13 +9,15 @@
             Asset Control Numbers (ACN)
           </h4>
           <div class="flex items-center gap-4">
-            <p class="text-sm text-gray-500 dark:text-gray-400">
-              Total:
-              <span class="font-semibold text-black dark:text-white">{{
-                filteredACNs.length
-              }}</span>
-              ACNs
-            </p>
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                Active:
+                <span class="font-semibold text-black dark:text-white">{{
+                    filteredACNs.filter(
+                        (acn) => acn.isActive && (!selectedProduct || acn.product?._id === selectedProduct)
+                    ).length
+                  }}</span>
+                Active ACNs
+              </p>
             <p v-if="selectedACNs.length > 0" class="text-sm text-primary">
               Selected: <span class="font-semibold">{{ selectedACNs.length }}</span>
             </p>

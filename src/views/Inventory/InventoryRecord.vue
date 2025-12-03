@@ -207,80 +207,26 @@ const ITEM_FINDER = {
     return acns
   },
 
-  // Get status for any item (primary or secondary)
+  // Get status for any item (primary or secondary) - uses centralized status function
   getItemStatus(item, itemType = 'primary', container = null) {
-    if (itemType === 'secondary') {
-      // Secondary items inherit repair status from their container
-      // But maintain their own deployment status
-      const containerRepairStatus = container?.repairStatus || container?.status || 'unassigned'
-      const itemStatus = item?.status || 'deployed' // Secondary items default to deployed
+    if (!item) return 'unassigned'
 
-      // Check if container is under repair (either via repairStatus or status field)
-      const containerIsUnderRepair =
-        containerRepairStatus === 'under_repair' ||
-        containerRepairStatus === 'under repair' ||
-        container?.status === 'under_repair' ||
-        container?.status === 'under repair'
-
-      // If container is under repair, secondary items should show as under_repair
-      if (containerIsUnderRepair) {
-        return 'under_repair'
-      }
-
-      return itemStatus
-    }
-
-    // For primary items, check if they're under repair
-    const isUnderRepair =
-      item?.repairStatus === 'under_repair' ||
-      item?.repairStatus === 'under repair' ||
-      item?.status === 'under_repair' ||
-      item?.status === 'under repair'
-
-    // Return the appropriate status based on what's being tracked
-    if (isUnderRepair) {
-      return 'under_repair'
-    }
-
-    return item?.status || 'deployed'
+    // Use centralized status function for consistency
+    return ACN_STATUS_PRIORITY.getDisplayStatus(item, null, {
+      isSecondary: itemType === 'secondary',
+      container: container
+    })
   }
 }
 
-// Enhanced ACN Status Management with Priority System
+// Centralized Status Management - Single source of truth for all status checks
 const ACN_STATUS_PRIORITY = {
-  // Priority order: Global ACN status > Local item status > Default
-  getEffectiveStatus(item, globalAssignments) {
-    const acn = String(item?.acn || '')
-      .trim()
-      .toUpperCase()
-    const serial = String(item?.serialNumber || '').trim()
+  // Get effective status from local item only (removed global priority to avoid conflicts)
+  // For secondary items, use their own status (don't inherit from container for ACN display)
+  getEffectiveStatus(item, globalAssignments = null, options = {}) {
+    const { isSecondary = false, container = null } = options
 
-    // 1. Check global ACN assignment status (highest priority)
-    if (acn && globalAssignments?.acn?.[acn]) {
-      const globalInfo = globalAssignments.acn[acn]
-      return {
-        status: globalInfo.status,
-        repairStatus: globalInfo.repairStatus,
-        assigned: globalInfo.assigned,
-        source: 'global_acn',
-        isUnderRepair: globalInfo.repairStatus && globalInfo.repairStatus !== 'completed',
-        lastUpdated: globalInfo.statusDate
-      }
-    }
-    // 2. Check global serial assignment status
-    if (serial && globalAssignments?.serial?.[serial]) {
-      const globalInfo = globalAssignments.serial[serial]
-      return {
-        status: globalInfo.status,
-        repairStatus: globalInfo.repairStatus,
-        assigned: globalInfo.assigned,
-        source: 'global_serial',
-        isUnderRepair: globalInfo.repairStatus && globalInfo.repairStatus !== 'completed',
-        lastUpdated: globalInfo.statusDate
-      }
-    }
-    // 3. Fall back to local item status (lowest priority)
-    // Check if this item should be under repair based on local data
+    // Use only local item status - no global overrides
     const localStatus = String(item?.status || '')
       .trim()
       .toLowerCase()
@@ -288,26 +234,32 @@ const ACN_STATUS_PRIORITY = {
       .trim()
       .toLowerCase()
 
-    // Check if under repair (either from status field or repairStatus field)
+    // For ACN display: each item shows its OWN status (secondary items don't inherit container status)
+    // Check if THIS item is under repair (not container)
     const isLocallyUnderRepair =
       localStatus === 'under_repair' ||
       localStatus === 'under repair' ||
       (localRepairStatus && localRepairStatus !== 'completed' && localRepairStatus !== 'none')
 
     return {
-      status: isLocallyUnderRepair ? 'under_repair' : item?.status || 'unassigned',
-      repairStatus: item?.repairStatus,
-      assigned: item?.assigned !== false, // Assume assigned unless explicitly false
+      status: isLocallyUnderRepair
+        ? 'under_repair'
+        : item?.status || (isSecondary ? 'deployed' : 'unassigned'),
+      repairStatus: item?.repairStatus || null,
+      assigned: item?.assigned !== false,
       source: 'local_item',
       isUnderRepair: isLocallyUnderRepair,
       lastUpdated: item?.statusDate,
-      note: acn ? 'ACN not found in global system, using local status' : 'No ACN assigned'
+      note: isSecondary ? 'Using secondary item own status' : 'Using local item status'
     }
   },
 
   // Get display status with proper normalization
-  getDisplayStatus(item, globalAssignments) {
-    const effective = this.getEffectiveStatus(item, globalAssignments)
+  // This is the SINGLE SOURCE OF TRUTH for all status displays
+  getDisplayStatus(item, globalAssignments = null, options = {}) {
+    if (!item) return 'unassigned'
+
+    const effective = this.getEffectiveStatus(item, globalAssignments, options)
 
     // If under repair, that takes precedence
     if (effective.isUnderRepair) {
@@ -319,8 +271,8 @@ const ACN_STATUS_PRIORITY = {
   },
 
   // Get status source information for debugging
-  getStatusSource(item, globalAssignments) {
-    const effective = this.getEffectiveStatus(item, globalAssignments)
+  getStatusSource(item, globalAssignments = null, options = {}) {
+    const effective = this.getEffectiveStatus(item, globalAssignments, options)
     return {
       source: effective.source,
       originalStatus: effective.status,
@@ -331,8 +283,9 @@ const ACN_STATUS_PRIORITY = {
     }
   },
 
-  // Check if ACN exists in global system
+  // Check if ACN exists in global system (kept for compatibility but not used for status)
   isAcnInGlobalSystem(acnCode, globalAssignments) {
+    if (!globalAssignments) return false
     const normalized = String(acnCode || '')
       .trim()
       .toUpperCase()
@@ -342,52 +295,29 @@ const ACN_STATUS_PRIORITY = {
 
 // Real-time Status Synchronization
 const STATUS_SYNC = {
-  // Force refresh status for specific ACN
-  async refreshAcnStatus(acnCode) {
-    try {
-      const normalized = String(acnCode).trim().toUpperCase()
-      const { data } = await axios.post('/acns/assignment-status', {
-        acns: [normalized],
-        serials: []
-      })
-
-      if (data?.assignments?.acn?.[normalized]) {
-        statusAssignments.value.acn[normalized] = data.assignments.acn[normalized]
-        console.log(`🔄 Refreshed status for ${acnCode}:`, data.assignments.acn[normalized])
-        return true
-      }
-    } catch (err) {
-      console.error(`❌ Failed to refresh status for ${acnCode}:`, err)
-    }
-    return false
-  },
-
-  // Get status with sync indicator
+  // Get status with sync indicator (simplified - uses only local status)
   getStatusWithSyncInfo(item) {
-    const effective = ACN_STATUS_PRIORITY.getEffectiveStatus(item, statusAssignments.value)
-    const sourceInfo = ACN_STATUS_PRIORITY.getStatusSource(item, statusAssignments.value)
+    const effective = ACN_STATUS_PRIORITY.getEffectiveStatus(item)
+    const sourceInfo = ACN_STATUS_PRIORITY.getStatusSource(item)
 
     return {
       ...sourceInfo,
-      needsSync: effective.source === 'local_item' && item?.acn,
-      canRefresh: !!item?.acn
+      needsSync: false, // No longer syncing with global system
+      canRefresh: false // No longer refreshing from global system
     }
   },
 
-  // Format status display with source info
+  // Format status display with source info (simplified)
   formatStatusWithSource(item) {
     const info = this.getStatusWithSyncInfo(item)
     const label = STATUS_CONFIG.getLabel(info.displayStatus)
-    const sourceIndicator =
-      info.source === 'global_acn' ? '🌐' : info.source === 'global_serial' ? '🔗' : '📋'
+    const sourceIndicator = '📋' // Always local item status
 
     return {
       label,
       indicator: sourceIndicator,
-      tooltip: `Source: ${info.source.replace('_', ' ')}\nStatus: ${
-        info.originalStatus
-      }\nDisplay: ${label}`,
-      needsSync: info.needsSync
+      tooltip: `Status: ${info.originalStatus}\nDisplay: ${label}`,
+      needsSync: false
     }
   }
 }
@@ -410,13 +340,13 @@ const StatusDisplay = {
     }
   },
 
-  // Get all status details for comprehensive display
+  // Get all status details for comprehensive display (simplified - uses only local status)
   getFullStatusDetails(item) {
-    const effective = ACN_STATUS_PRIORITY.getEffectiveStatus(item, statusAssignments.value)
+    const effective = ACN_STATUS_PRIORITY.getEffectiveStatus(item)
     const config = STATUS_CONFIG.getStatusConfig(effective.status)
 
     return {
-      displayStatus: ACN_STATUS_PRIORITY.getDisplayStatus(item, statusAssignments.value),
+      displayStatus: ACN_STATUS_PRIORITY.getDisplayStatus(item),
       displayLabel: STATUS_CONFIG.getLabel(effective.status),
       badgeClass: STATUS_CONFIG.getBadgeClass(effective.status),
       source: effective.source,
@@ -425,7 +355,7 @@ const StatusDisplay = {
       isUnderRepair: effective.isUnderRepair,
       lastUpdated: effective.lastUpdated,
       description: config.description,
-      needsSync: effective.source === 'local_item' && item?.acn,
+      needsSync: false,
       acn: item?.acn,
       serial: item?.serialNumber
     }
@@ -837,15 +767,12 @@ async function fetchAssignmentStatusForSelectedRecord() {
           assigned: container?.assigned !== false
         }
 
-        // Test the new priority system
-        const effectiveStatus = ACN_STATUS_PRIORITY.getEffectiveStatus(
-          mockItem,
-          statusAssignments.value
-        )
+        // Test the simplified status system (local only)
+        const effectiveStatus = ACN_STATUS_PRIORITY.getEffectiveStatus(mockItem)
         console.log(`🔍 DEBUG ${acn} Effective Status:`, effectiveStatus)
         console.log(
           `🎯 DEBUG ${acn} Final Display Status:`,
-          ACN_STATUS_PRIORITY.getDisplayStatus(mockItem, statusAssignments.value)
+          ACN_STATUS_PRIORITY.getDisplayStatus(mockItem)
         )
       } else {
         console.log(`❌ DEBUG ${acn} Item not found in primary or secondary items`)
@@ -907,12 +834,12 @@ function statusForRow(row) {
     const statuses = []
 
     for (const it of group) {
-      // Use the new priority system
-      const displayStatus = ACN_STATUS_PRIORITY.getDisplayStatus(it, statusAssignments.value)
+      // Use simplified status system (local only)
+      const displayStatus = ACN_STATUS_PRIORITY.getDisplayStatus(it)
       statuses.push(displayStatus)
 
       // Debug logging for troubleshooting
-      const sourceInfo = ACN_STATUS_PRIORITY.getStatusSource(it, statusAssignments.value)
+      const sourceInfo = ACN_STATUS_PRIORITY.getStatusSource(it)
       if (it?.acn === 'PRI-005-25-0275') {
         console.log(`🔍 ACN Status Debug for ${it.acn}:`, sourceInfo)
       }
@@ -939,28 +866,50 @@ function lifecycleBadgeClass(status) {
   return STATUS_CONFIG.getBadgeClass(status)
 }
 
+// Get status for an ACN - uses centralized status function (single source of truth)
 function getAcnStatus(code) {
   try {
     const normalized = String(code || '')
       .trim()
       .toUpperCase()
 
-    // Find the item with this ACN in the current record
+    // Find the item with this ACN in the current record (primary or secondary)
     const items = Array.isArray(selectedRecord.value?.items) ? selectedRecord.value.items : []
-    const item = items.find(
+
+    // First check primary items
+    const primaryItem = items.find(
       (it) =>
         String(it?.acn || '')
           .trim()
           .toUpperCase() === normalized
     )
 
-    if (item) {
-      // Use the priority system for this specific item
-      return ACN_STATUS_PRIORITY.getDisplayStatus(item, statusAssignments.value)
+    if (primaryItem) {
+      // Use centralized status system
+      return ACN_STATUS_PRIORITY.getDisplayStatus(primaryItem)
     }
 
-    // Fallback to global deployment status
-    return isGloballyDeployed(normalized) ? 'deployed' : 'unassigned'
+    // Check secondary items - use centralized status function
+    for (const container of items) {
+      if (container?.secondaryItems && Array.isArray(container.secondaryItems)) {
+        const secondaryItem = container.secondaryItems.find(
+          (sec) =>
+            String(sec?.acn || '')
+              .trim()
+              .toUpperCase() === normalized
+        )
+        if (secondaryItem) {
+          // Use centralized status function - each ACN shows its OWN status
+          return ACN_STATUS_PRIORITY.getDisplayStatus(secondaryItem, null, {
+            isSecondary: true,
+            container: container
+          })
+        }
+      }
+    }
+
+    // Fallback: not found in inventory, return unassigned
+    return 'unassigned'
   } catch (_) {
     return 'unassigned'
   }
@@ -1024,17 +973,30 @@ function getSecondaryStatusesForRow(row) {
         .toUpperCase()
       const acn = acnRaw || (acnPattern.test(propRaw) ? propRaw : '').trim().toUpperCase()
       const sn = String(sec?.serialNumber || '').trim()
-      const info = acn
-        ? statusAssignments.value?.acn?.[acn]
-        : sn
-          ? statusAssignments.value?.serial?.[sn]
-          : null
+
+      // Use centralized status function (single source of truth)
       let status = '—'
-      if (info) {
-        status = String(info?.repairStatus || '')
-          ? 'under_repair'
-          : String(info?.status || (info?.assigned ? 'deployed' : 'unassigned'))
+      if (sec) {
+        // Find the container for this secondary item
+        const container = group.find((it) =>
+          it?.secondaryItems?.some(
+            (s) =>
+              (sec.acn &&
+                String(s?.acn || '')
+                  .trim()
+                  .toUpperCase() === String(sec.acn).trim().toUpperCase()) ||
+              (sec.serialNumber &&
+                String(s?.serialNumber || '').trim() === String(sec.serialNumber).trim())
+          )
+        )
+
+        // Use centralized status function
+        status = ACN_STATUS_PRIORITY.getDisplayStatus(sec, null, {
+          isSecondary: true,
+          container: container
+        })
       }
+
       const label = acn ? `ACN ${acn}` : sn ? `SN ${sn}` : '—'
       bucket.push({
         key: `${acn || sn || Math.random()}`,
@@ -1133,21 +1095,34 @@ const getPrimaryIdentifiersForRow = (row) => {
 function primaryStatusForRow(row) {
   try {
     const { acn, serial } = getPrimaryIdentifiersForRow(row)
-    const info = acn
-      ? statusAssignments.value?.acn?.[String(acn).toUpperCase()]
-      : serial
-        ? statusAssignments.value?.serial?.[serial]
-        : null
+    // Find the item in the current record and use its local status
+    const items = Array.isArray(selectedRecord.value?.items) ? selectedRecord.value.items : []
+    const item = items.find((it) => {
+      const itemAcn = String(it?.acn || '')
+        .trim()
+        .toUpperCase()
+      const itemSerial = String(it?.serialNumber || '').trim()
+      return (acn && itemAcn === String(acn).toUpperCase()) || (serial && itemSerial === serial)
+    })
 
-    console.log(info)
-    if (info) {
-      return String(info?.repairStatus || '')
-        ? 'under_repair'
-        : String(info?.status || (info?.assigned ? 'deployed' : 'unassigned'))
+    if (item) {
+      // Use local item status
+      const localRepairStatus = String(item?.repairStatus || '')
+        .trim()
+        .toLowerCase()
+      const localStatus = String(item?.status || '')
+        .trim()
+        .toLowerCase()
+      if (localRepairStatus && localRepairStatus !== 'completed' && localRepairStatus !== 'none') {
+        return 'under_repair'
+      }
+      return localStatus || 'deployed'
     }
-    return statusForRow(row)?.status || '—'
+
+    // Fallback if item not found
+    return 'unassigned'
   } catch (_) {
-    return '—'
+    return 'unassigned'
   }
 }
 
@@ -1447,12 +1422,14 @@ function applySelectedACN() {
   }
 }
 
-// Selected department name for filtering employees
+// Selected department (prefer code) for filtering employees
 const selectedDeptName = computed(() => {
   const depId = newRecord.value.departmentId
   if (!depId) return String(newRecord.value.department || '').trim() || ''
   const dep = departments.value.find((d) => String(d._id) === String(depId))
-  return dep?.name || ''
+  const code = String(dep?.code || '').trim()
+  const name = String(dep?.name || '').trim()
+  return code || name || ''
 })
 
 // Batch builder state
@@ -2487,6 +2464,27 @@ async function fetchDepartments() {
   }
 }
 
+async function fetchEmployees() {
+  employeesLoading.value = true
+  employeesError.value = null
+  try {
+    const params = { limit: 1000 }
+    if (selectedDeptName?.value) params.department = selectedDeptName.value
+    const { data } = await axios.get('/employees', { params })
+    employees.value = data?.employees || []
+    if (selectedDeptName?.value && (!employees.value || employees.value.length === 0)) {
+      const { data: d2 } = await axios.get('/employees', { params: { limit: params.limit } })
+      employees.value = d2?.employees || []
+    }
+  } catch (err) {
+    employees.value = []
+    employeesError.value = err?.response?.data?.message || err.message || 'Failed to load employees'
+    console.error('❌ Employees fetch error:', err)
+  } finally {
+    employeesLoading.value = false
+  }
+}
+
 async function openDetails(rec) {
   selectedRecord.value = rec
   isDetailsOpen.value = true
@@ -3073,24 +3071,6 @@ onMounted(async () => {
       productsLoading.value = false
     }
   }
-  async function fetchEmployees() {
-    employeesLoading.value = true
-    employeesError.value = null
-    try {
-      const params = { limit: 1000 }
-      if (selectedDeptName?.value) params.department = selectedDeptName.value
-      const { data } = await axios.get('/employees', { params })
-      employees.value = data?.employees || []
-      // console.log('🔍 Employees loaded:', emsployees.value.length, employees.value)
-    } catch (err) {
-      employees.value = []
-      employeesError.value =
-        err?.response?.data?.message || err.message || 'Failed to load employees'
-      console.error('❌ Employees fetch error:', err)
-    } finally {
-      employeesLoading.value = false
-    }
-  }
   await Promise.all([
     fetchRecords(),
     fetchDepartments(),
@@ -3102,6 +3082,8 @@ onMounted(async () => {
 
 // Refetch employees when selected department changes to keep combobox scoped
 watch(selectedDeptName, () => {
+  selectedEmployeeId.value = ''
+  employeeQuery.value = ''
   fetchEmployees()
 })
 
@@ -3624,8 +3606,15 @@ const mergedPreviewRows = computed(() => {
                         <tr v-for="(item, idx) in rec?.items || []" :key="idx" class="border-t">
                           <td class="px-4 py-2">
                             <div>{{ item.description }}</div>
-                            <div v-if="item.acn" class="mt-1 text-xs text-bodydark2">
-                              ACN: {{ item.acn }}
+                            <div v-if="item.acn" class="mt-1">
+                              <span
+                                :class="[
+                                  lifecycleBadgeClass(getAcnStatus(item.acn)),
+                                  acnTypeClass(item.acn)
+                                ]"
+                              >
+                                ACN {{ item.acn }}
+                              </span>
                             </div>
                           </td>
                           <td class="px-4 py-2">{{ item.serialNumber || '—' }}</td>
@@ -3639,8 +3628,18 @@ const mergedPreviewRows = computed(() => {
                           <td class="px-4 py-2">{{ item.endUserOrMR }}</td>
                           <td class="px-4 py-2">{{ item.remarksYears }}</td>
                           <td class="px-4 py-2">
-                            <span :class="STATUS_CONFIG.getBadgeClass(item.status)">
-                              {{ STATUS_CONFIG.getLabel(item.status) || '—' }}
+                            <span
+                              :class="
+                                STATUS_CONFIG.getBadgeClass(
+                                  ACN_STATUS_PRIORITY.getDisplayStatus(item)
+                                )
+                              "
+                            >
+                              {{
+                                STATUS_CONFIG.getLabel(
+                                  ACN_STATUS_PRIORITY.getDisplayStatus(item)
+                                ) || '—'
+                              }}
                             </span>
                           </td>
                           <td class="px-4 py-2">

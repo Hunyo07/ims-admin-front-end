@@ -228,11 +228,14 @@ const fetchOptions = async () => {
     const opts = []
     let primCount = 0
     let secCount = 0
+    const activeRepairStatuses = ['under_repair', 'on_going', 'for_replacement', 'beyond_repair', 'ready_to_claim']
     for (const rec of records) {
       for (const it of rec.items || []) {
         const st = String(it?.status || '').toLowerCase()
         const allowed = ['deployed']
         if (!allowed.includes(st)) continue
+        const repairSt = String(it?.repairStatus || '').toLowerCase()
+        if (activeRepairStatuses.includes(repairSt)) continue
         const acnPattern = /^[A-Z]{3}-\d{3}-\d{2}-\d{4}$/
         const parentCode =
           it?.acn ||
@@ -261,6 +264,8 @@ const fetchOptions = async () => {
               ? String(sec?.propertyNumber || '').toUpperCase()
               : '')
           if (!secCode) continue
+          const secRepairSt = String(sec?.repairStatus || '').toLowerCase()
+          if (activeRepairStatuses.includes(secRepairSt)) continue
           opts.push({
             _id: `${it._id}-sec-${sec.acn || sec.propertyNumber || ''}`,
             acnCode: secCode,

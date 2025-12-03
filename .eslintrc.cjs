@@ -11,5 +11,14 @@ module.exports = {
   ],
   parserOptions: {
     ecmaVersion: 'latest'
+  },
+  env: {
+    browser: true
+  },
+  globals: {
+    jsVectorMap: 'readonly'
+  },
+  rules: {
+    'vue/multi-word-component-names': 'off'
   }
 }
