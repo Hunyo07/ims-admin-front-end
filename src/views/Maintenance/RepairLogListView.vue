@@ -31,7 +31,7 @@ const pageOnsite = ref(1)
 const pageSize = ref(10)
 const sortKey = ref('date')
 const sortDir = ref('desc')
-
+const role = ref([])
 // Consult Modal State
 const showConsultModal = ref(false)
 const showClaimModal = ref(false)
@@ -380,7 +380,11 @@ const submitConsult = async () => {
 
           inventoryPayload = {
             status: isSelectedOnsite.value || isClaimNow ? 'deployed' : 'returned',
-            repairStatus: isSelectedOnsite.value ? 'completed' : isClaimNow || isDeliverOffice ? 'completed' : 'ready_to_claim',
+            repairStatus: isSelectedOnsite.value
+              ? 'completed'
+              : isClaimNow || isDeliverOffice
+                ? 'completed'
+                : 'ready_to_claim',
             statusNotes: isSelectedOnsite.value
               ? 'Repair completed - On-site'
               : isClaimNow
@@ -468,7 +472,7 @@ const submitDispatch = async () => {
   try {
     const isOnSite = selectedLog.value?.repairType === 'on-site'
     const nextStatus = isOnSite ? 'on_the_way' : 'under_repair'
-    
+
     await fetch(`${apiBase}/maintenance/logs/${selectedLog.value._id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
@@ -531,6 +535,7 @@ const goToDisposalForLog = async (log) => {
 }
 
 const fetchLogs = async () => {
+  role.value = auth.getUserRole() || []
   loading.value = true
   error.value = ''
   try {
@@ -968,72 +973,79 @@ const remarksInput = ref(null)
 const handleBarcodeScan = async () => {
   const scannedCode = barcodeScan.value?.trim()
   if (!scannedCode) return
-  
+
   try {
     const { data } = await axios.get('/inventory-records', {
       params: { limit: 500, status: 'deployed' }
     })
-    
+
     const records = Array.isArray(data?.records) ? data.records : []
     const codeUpper = scannedCode.toUpperCase()
-    
+
     let foundRecord = null
     let foundItem = null
-    
+
     for (const rec of records) {
       for (const item of rec.items || []) {
-        if (String(item.acn || '').toUpperCase() === codeUpper ||
-            String(item.propertyNumber || '').toUpperCase() === codeUpper ||
-            String(item.serialNumber || '').toUpperCase() === codeUpper) {
+        if (
+          String(item.acn || '').toUpperCase() === codeUpper ||
+          String(item.propertyNumber || '').toUpperCase() === codeUpper ||
+          String(item.serialNumber || '').toUpperCase() === codeUpper
+        ) {
           foundRecord = rec
           foundItem = item
           break
         }
-        
+
         for (const secondary of item.secondaryItems || []) {
-          if (String(secondary.acn || '').toUpperCase() === codeUpper ||
-              String(secondary.propertyNumber || '').toUpperCase() === codeUpper ||
-              String(secondary.serialNumber || '').toUpperCase() === codeUpper) {
+          if (
+            String(secondary.acn || '').toUpperCase() === codeUpper ||
+            String(secondary.propertyNumber || '').toUpperCase() === codeUpper ||
+            String(secondary.serialNumber || '').toUpperCase() === codeUpper
+          ) {
             foundRecord = rec
             foundItem = { ...item, _selectedSecondary: secondary }
             selectedIsSecondary.value = true
             break
           }
         }
-        
+
         if (foundRecord) break
       }
       if (foundRecord) break
     }
-    
+
     if (foundRecord && foundItem) {
-      const acn = foundItem._selectedSecondary?.acn || 
-                  foundItem._selectedSecondary?.propertyNumber ||
-                  foundItem.acn || 
-                  foundItem.propertyNumber || 
-                  scannedCode
-      
+      const acn =
+        foundItem._selectedSecondary?.acn ||
+        foundItem._selectedSecondary?.propertyNumber ||
+        foundItem.acn ||
+        foundItem.propertyNumber ||
+        scannedCode
+
       createForm.value.acn = acn
       selectedItem.value = foundItem
       selectedRecord.value = foundRecord
-      
+
       const defaultRequester = foundItem?.endUserOrMR || ''
       if (defaultRequester && !createForm.value.broughtByName) {
         createForm.value.broughtByName = defaultRequester
       }
-      
+
       try {
         const { data: drData } = await axios.get('/delivery-receipts', {
           params: { limit: 500 }
         })
-        
+
         const receipts = Array.isArray(drData?.deliveryReceipts) ? drData.deliveryReceipts : []
-        
+
         for (const receipt of receipts) {
           for (const item of receipt.items || []) {
             const generatedACNs = Array.isArray(item.generatedACNs) ? item.generatedACNs : []
-            const acnMatch = generatedACNs.some(acn => String(acn || '').toUpperCase() === codeUpper)
-            
+            const acnMatch = generatedACNs.some(
+              (acn) => String(acn || '').toUpperCase() === codeUpper
+            )
+
             if (acnMatch) {
               if (selectedItem.value) {
                 selectedItem.value.warranty = item.warranty
@@ -1045,9 +1057,9 @@ const handleBarcodeScan = async () => {
       } catch (warrantyErr) {
         console.warn('Could not fetch warranty data:', warrantyErr)
       }
-      
+
       barcodeScan.value = ''
-      
+
       setTimeout(() => {
         if (remarksInput.value && typeof remarksInput.value.focus === 'function') {
           remarksInput.value.focus()
@@ -1102,20 +1114,20 @@ const onAcnSelect = async (payload) => {
   if (defaultRequester && !createForm.value.broughtByName) {
     createForm.value.broughtByName = defaultRequester
   }
-  
+
   try {
     const { data } = await axios.get('/delivery-receipts', {
       params: { limit: 500 }
     })
-    
+
     const receipts = Array.isArray(data?.deliveryReceipts) ? data.deliveryReceipts : []
     const acnCode = String(payload?.acn || '').toUpperCase()
-    
+
     for (const receipt of receipts) {
       for (const item of receipt.items || []) {
         const generatedACNs = Array.isArray(item.generatedACNs) ? item.generatedACNs : []
-        const acnMatch = generatedACNs.some(acn => String(acn || '').toUpperCase() === acnCode)
-        
+        const acnMatch = generatedACNs.some((acn) => String(acn || '').toUpperCase() === acnCode)
+
         if (acnMatch) {
           if (selectedItem.value) {
             selectedItem.value.warranty = item.warranty
@@ -1170,17 +1182,17 @@ const hasAnySpecs = computed(() => {
 const warrantyInfo = computed(() => {
   const w = selectedItem.value?.warranty
   if (!w || !w.expiryDate) return null
-  
+
   try {
     const now = new Date()
     const expiry = new Date(w.expiryDate)
-    
+
     if (isNaN(expiry.getTime())) return null
-    
+
     const isActive = now < expiry
     const daysRemaining = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
     const monthsRemaining = Math.floor(daysRemaining / 30)
-    
+
     return {
       isActive,
       duration: w.duration || 0,
@@ -1253,8 +1265,6 @@ const submitCreateLog = async () => {
     payload.itemId = outsideRepair.value ? undefined : selectedItem.value?._id || undefined
     const { data } = await axios.post('/maintenance/logs', payload)
     if (!data?.success) throw new Error(data?.message || 'Failed to create repair log')
-
-
 
     // Update inventory item with proper status separation
     try {
@@ -1505,6 +1515,8 @@ const downloadLabelForLog = async (log) => {
     downloadingLabelId.value = ''
   }
 }
+
+console.log(role.value)
 </script>
 
 <template>
@@ -1601,7 +1613,10 @@ const downloadLabelForLog = async (log) => {
               Tip: click the search box and scan an ACN, serial number, or barcode to quickly filter
               repair logs.
             </p>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div
+              v-if="role.includes('superadmin') || role.includes('admin')"
+              class="grid grid-cols-2 md:grid-cols-4 gap-3"
+            >
               <div class="bg-gray-50 rounded p-3">
                 <div class="text-xs text-bodydark2">Total Repairs</div>
                 <div class="text-lg font-semibold">{{ stats.total }}</div>
@@ -1756,18 +1771,27 @@ const downloadLabelForLog = async (log) => {
                   <span
                     class="inline-block px-2 py-1 rounded text-xs font-medium"
                     :class="{
-                      'bg-yellow-100 text-yellow-800': effectiveStatus(l) === 'pending' && !isOnsiteRepair(l),
-                      'bg-blue-100 text-blue-800': effectiveStatus(l) === 'for_inspection' && !isOnsiteRepair(l),
-                      'bg-yellow-100 text-yellow-800': effectiveStatus(l) === 'under_repair' && !isOnsiteRepair(l),
-                      'bg-cyan-100 text-cyan-800': (effectiveStatus(l) === 'on_going' || isOnsiteRepair(l)) && effectiveStatus(l) !== 'repaired' && effectiveStatus(l) !== 'claimed',
-                      'bg-indigo-100 text-indigo-800': effectiveStatus(l) === 'on_the_way' && !isOnsiteRepair(l),
+                      'bg-yellow-100 text-yellow-800':
+                        effectiveStatus(l) === 'pending' && !isOnsiteRepair(l),
+                      'bg-blue-100 text-blue-800':
+                        effectiveStatus(l) === 'for_inspection' && !isOnsiteRepair(l),
+                      'bg-yellow-100 text-yellow-800':
+                        effectiveStatus(l) === 'under_repair' && !isOnsiteRepair(l),
+                      'bg-cyan-100 text-cyan-800':
+                        (effectiveStatus(l) === 'on_going' || isOnsiteRepair(l)) &&
+                        effectiveStatus(l) !== 'repaired' &&
+                        effectiveStatus(l) !== 'claimed',
+                      'bg-indigo-100 text-indigo-800':
+                        effectiveStatus(l) === 'on_the_way' && !isOnsiteRepair(l),
                       'bg-blue-200 text-blue-900': effectiveStatus(l) === 'on_site_repair',
                       'bg-orange-100 text-orange-800':
                         (effectiveStatus(l) === 'for_pull_out' ||
-                        effectiveStatus(l) === 'pending_replacement') && !isOnsiteRepair(l),
+                          effectiveStatus(l) === 'pending_replacement') &&
+                        !isOnsiteRepair(l),
                       'bg-green-100 text-green-800':
-                        (effectiveStatus(l) === 'repaired' || effectiveStatus(l) === 'claimed'),
-                      'bg-gray-100 text-gray-800': effectiveStatus(l) === 'for_disposal' && !isOnsiteRepair(l),
+                        effectiveStatus(l) === 'repaired' || effectiveStatus(l) === 'claimed',
+                      'bg-gray-100 text-gray-800':
+                        effectiveStatus(l) === 'for_disposal' && !isOnsiteRepair(l),
                       'bg-red-100 text-red-800': effectiveStatus(l) === 'disposed'
                     }"
                   >
@@ -1948,7 +1972,9 @@ const downloadLabelForLog = async (log) => {
             v-if="isSelectedOnsite"
             class="flex flex-wrap gap-2 p-3 bg-blue-50 rounded border border-blue-200"
           >
-            <p class="text-xs font-medium text-blue-700 w-full mb-2">On-site Repair - Quick Actions:</p>
+            <p class="text-xs font-medium text-blue-700 w-full mb-2">
+              On-site Repair - Quick Actions:
+            </p>
             <button
               type="button"
               @click="consultForm.result = 'repaired'"
@@ -2111,7 +2137,7 @@ const downloadLabelForLog = async (log) => {
             </div>
           </div>
 
-            <!-- For replacement specs combobox -->
+          <!-- For replacement specs combobox -->
           <div v-if="consultForm.result === 'for_replacement'" class="border rounded p-3">
             <div class="flex items-center justify-between mb-2">
               <label class="text-sm font-medium">Replacement Parts</label>
@@ -2279,7 +2305,9 @@ const downloadLabelForLog = async (log) => {
             <p class="font-medium mb-1">Workflow:</p>
             <ol class="space-y-1 ml-4 list-decimal text-bodydark2">
               <li>Dispatch → Status: <span class="font-mono text-blue-700">on_the_way</span></li>
-              <li>Arrive at site → Status: <span class="font-mono text-blue-700">on_site_repair</span></li>
+              <li>
+                Arrive at site → Status: <span class="font-mono text-blue-700">on_site_repair</span>
+              </li>
               <li>Complete → Action results update status</li>
             </ol>
           </div>
@@ -2499,7 +2527,9 @@ const downloadLabelForLog = async (log) => {
                       <option value="pending_replacement">Pending replacement</option>
                       <option value="repaired">Repaired</option>
                       <option value="for_disposal">For disposal</option>
-                      <option v-if="warrantyInfo?.isActive" value="for_warranty">For warranty</option>
+                      <option v-if="warrantyInfo?.isActive" value="for_warranty">
+                        For warranty
+                      </option>
                     </template>
                   </select>
                 </div>
@@ -2545,28 +2575,33 @@ const downloadLabelForLog = async (log) => {
                       'text-red-700': !warrantyInfo.isActive
                     }"
                   >
-                    {{
-                      warrantyInfo.isActive
-                        ? '✓ Under Warranty'
-                        : '✗ Out of Warranty'
-                    }}
+                    {{ warrantyInfo.isActive ? '✓ Under Warranty' : '✗ Out of Warranty' }}
                   </div>
-                  <div class="text-xs space-y-1" :class="{
-                    'text-green-600': warrantyInfo.isActive,
-                    'text-red-600': !warrantyInfo.isActive
-                  }">
+                  <div
+                    class="text-xs space-y-1"
+                    :class="{
+                      'text-green-600': warrantyInfo.isActive,
+                      'text-red-600': !warrantyInfo.isActive
+                    }"
+                  >
                     <div v-if="warrantyInfo.isActive">
                       <strong>{{ warrantyInfo.monthsRemaining }}</strong> months remaining
-                      <span v-if="warrantyInfo.daysRemaining <= 30" class="ml-1 font-semibold">({{ warrantyInfo.daysRemaining }} days)</span>
+                      <span v-if="warrantyInfo.daysRemaining <= 30" class="ml-1 font-semibold"
+                        >({{ warrantyInfo.daysRemaining }} days)</span
+                      >
                     </div>
                     <div v-else>
-                      Expired {{ warrantyInfo.daysRemaining === 0 ? 'today' : warrantyInfo.daysRemaining + ' days ago' }}
+                      Expired
+                      {{
+                        warrantyInfo.daysRemaining === 0
+                          ? 'today'
+                          : warrantyInfo.daysRemaining + ' days ago'
+                      }}
                     </div>
+                    <div class="mt-1 opacity-75">Expires: {{ warrantyInfo.expiryDate }}</div>
                     <div class="mt-1 opacity-75">
-                      Expires: {{ warrantyInfo.expiryDate }}
-                    </div>
-                    <div class="mt-1 opacity-75">
-                      Duration: {{ warrantyInfo.duration }} months | Provider: {{ warrantyInfo.provider }}
+                      Duration: {{ warrantyInfo.duration }} months | Provider:
+                      {{ warrantyInfo.provider }}
                     </div>
                   </div>
                 </div>

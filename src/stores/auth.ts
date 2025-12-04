@@ -81,25 +81,19 @@ export const useAuthStore = defineStore('auth', {
       if (this.permissions.includes('all')) return true
       return permissions.every((permission) => this.permissions.includes(permission))
     },
-
     hasRole(role: string | string[]): boolean {
       if (!this.user || !this.user.role) return false
-
       // Get the role name, handling both string and object formats
       const userRole = typeof this.user.role === 'string' ? this.user.role : this.user.role.name
-
       if (Array.isArray(role)) {
         return role.includes(userRole)
       }
-
       return userRole === role
     },
-
     // Check if user has any of the specified roles
     hasAnyRole(roles: string[]): boolean {
       return this.hasRole(roles)
     },
-
     // Check if user has all specified roles (useful for complex role requirements)
     hasAllRoles(roles: string[]): boolean {
       if (!this.user || !this.user.role) return false
@@ -107,7 +101,6 @@ export const useAuthStore = defineStore('auth', {
       const userRole = typeof this.user.role === 'string' ? this.user.role : this.user.role.name
       return roles.includes(userRole)
     },
-
     // Check if user is superadmin
     isSuperAdmin(): boolean {
       return this.hasRole('superadmin')

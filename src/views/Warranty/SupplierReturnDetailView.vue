@@ -9,28 +9,49 @@
     >
       <template #actions>
         <div class="flex space-x-2">
-          <button 
+          <button
+            v-if="canSchedulePickup"
+            @click="showPickupModal = true"
+            class="btn btn-primary"
+          >
+            Schedule Pickup
+          </button>
+          <button
+            v-if="canConfirmPickup"
+            @click="showConfirmPickupModal = true"
+            class="btn btn-success"
+          >
+            Confirm Pickup
+          </button>
+          <button
+            v-if="canProcessReplacement"
+            @click="showReplacementModal = true"
+            class="btn btn-primary"
+          >
+            Process Replacement
+          </button>
+          <button
             v-if="canUpdateStatus"
             @click="showStatusModal = true"
             class="btn btn-outline-primary"
           >
             Update Status
           </button>
-          <router-link 
+          <router-link
             v-if="canEdit"
             :to="`/warranty/supplier-returns/${returnId}/edit`"
             class="btn btn-outline-secondary"
           >
             Edit
           </router-link>
-          <button 
+          <button
             v-if="canCancel"
             @click="confirmCancel"
             class="btn btn-outline-danger"
           >
             Cancel Return
           </button>
-          <button 
+          <button
             v-if="canPrint"
             @click="printReturn"
             class="btn btn-outline-primary"
@@ -243,6 +264,35 @@
           </div>
         </Card>
 
+        <!-- Pickup Information -->
+        <Card v-if="returnData.scheduledPickupDate || returnData.actualPickupDate">
+          <div class="p-5">
+            <h3 class="text-md font-medium mb-3">Pickup Information</h3>
+            <div class="space-y-2">
+              <div v-if="returnData.scheduledPickupDate">
+                <div class="text-sm font-medium text-gray-500">Scheduled Pickup</div>
+                <div>{{ formatDateTime(returnData.scheduledPickupDate) }}</div>
+              </div>
+              <div v-if="returnData.actualPickupDate">
+                <div class="text-sm font-medium text-gray-500">Actual Pickup</div>
+                <div>{{ formatDateTime(returnData.actualPickupDate) }}</div>
+              </div>
+              <div v-if="returnData.pickupCourier">
+                <div class="text-sm font-medium text-gray-500">Courier</div>
+                <div>{{ returnData.pickupCourier }}</div>
+              </div>
+              <div v-if="returnData.pickupTrackingNumber">
+                <div class="text-sm font-medium text-gray-500">Tracking Number</div>
+                <div>{{ returnData.pickupTrackingNumber }}</div>
+              </div>
+              <div v-if="returnData.pickupNotes">
+                <div class="text-sm font-medium text-gray-500">Notes</div>
+                <div class="text-sm">{{ returnData.pickupNotes }}</div>
+              </div>
+            </div>
+          </div>
+        </Card>
+
         <!-- Shipping Information -->
         <Card>
           <div class="p-5">
@@ -252,10 +302,10 @@
                 <div class="text-sm font-medium text-gray-500">Tracking Number</div>
                 <div class="flex items-center">
                   <span>{{ returnData.trackingNumber }}</span>
-                  <a 
-                    v-if="returnData.trackingUrl" 
-                    :href="returnData.trackingUrl" 
-                    target="_blank" 
+                  <a
+                    v-if="returnData.trackingUrl"
+                    :href="returnData.trackingUrl"
+                    target="_blank"
                     class="ml-2 text-primary hover:underline flex items-center text-sm"
                   >
                     Track
@@ -298,6 +348,263 @@
             </div>
           </div>
         </Card>
+      </div>
+    </div>
+
+    <!-- Schedule Pickup Modal -->
+    <div v-if="showPickupModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div class="p-5">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium">Schedule Pickup</h3>
+            <button @click="showPickupModal = false" class="text-gray-500 hover:text-gray-700">
+              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <form @submit.prevent="handleSchedulePickup">
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  Pickup Date & Time <span class="text-red-500">*</span>
+                </label>
+                <input
+                  v-model="pickupForm.scheduledPickupDate"
+                  type="datetime-local"
+                  class="form-input w-full"
+                  required
+                />
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  Courier <span class="text-red-500">*</span>
+                </label>
+                <input
+                  v-model="pickupForm.pickupCourier"
+                  type="text"
+                  class="form-input w-full"
+                  placeholder="e.g., FedEx, UPS, DHL"
+                  required
+                />
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  Notes
+                </label>
+                <textarea
+                  v-model="pickupForm.pickupNotes"
+                  rows="3"
+                  class="form-textarea w-full"
+                  placeholder="Add any pickup instructions..."
+                ></textarea>
+              </div>
+            </div>
+
+            <div class="mt-6 flex justify-end space-x-3">
+              <button
+                type="button"
+                @click="showPickupModal = false"
+                class="btn btn-outline-secondary"
+                :disabled="processingAction"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="btn btn-primary"
+                :disabled="processingAction"
+              >
+                <span v-if="processingAction" class="inline-flex items-center">
+                  <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Scheduling...
+                </span>
+                <span v-else>Schedule Pickup</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirm Pickup Modal -->
+    <div v-if="showConfirmPickupModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div class="p-5">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium">Confirm Pickup</h3>
+            <button @click="showConfirmPickupModal = false" class="text-gray-500 hover:text-gray-700">
+              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <form @submit.prevent="handleConfirmPickup">
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  Actual Pickup Date & Time
+                </label>
+                <input
+                  v-model="confirmPickupForm.actualPickupDate"
+                  type="datetime-local"
+                  class="form-input w-full"
+                />
+                <p class="text-xs text-gray-500 mt-1">Leave empty to use current time</p>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  Tracking Number
+                </label>
+                <input
+                  v-model="confirmPickupForm.pickupTrackingNumber"
+                  type="text"
+                  class="form-input w-full"
+                  placeholder="Enter tracking number"
+                />
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  Notes
+                </label>
+                <textarea
+                  v-model="confirmPickupForm.pickupNotes"
+                  rows="3"
+                  class="form-textarea w-full"
+                  placeholder="Add any relevant notes..."
+                ></textarea>
+              </div>
+            </div>
+
+            <div class="mt-6 flex justify-end space-x-3">
+              <button
+                type="button"
+                @click="showConfirmPickupModal = false"
+                class="btn btn-outline-secondary"
+                :disabled="processingAction"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="btn btn-success"
+                :disabled="processingAction"
+              >
+                <span v-if="processingAction" class="inline-flex items-center">
+                  <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Confirming...
+                </span>
+                <span v-else>Confirm Pickup</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Process Replacement Modal -->
+    <div v-if="showReplacementModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div class="p-5">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium">Process Replacement</h3>
+            <button @click="showReplacementModal = false" class="text-gray-500 hover:text-gray-700">
+              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <form @submit.prevent="handleProcessReplacement">
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  Replacement ACN <span class="text-red-500">*</span>
+                </label>
+                <input
+                  v-model="replacementForm.replacementACN"
+                  type="text"
+                  class="form-input w-full"
+                  placeholder="Enter replacement item ACN"
+                  required
+                />
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  Replacement Serial Number
+                </label>
+                <input
+                  v-model="replacementForm.replacementSerialNumber"
+                  type="text"
+                  class="form-input w-full"
+                  placeholder="Enter serial number"
+                />
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  Replacement Property Number
+                </label>
+                <input
+                  v-model="replacementForm.replacementPropertyNumber"
+                  type="text"
+                  class="form-input w-full"
+                  placeholder="Enter property number"
+                />
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  Notes
+                </label>
+                <textarea
+                  v-model="replacementForm.resolutionNotes"
+                  rows="3"
+                  class="form-textarea w-full"
+                  placeholder="Add any notes about the replacement..."
+                ></textarea>
+              </div>
+            </div>
+
+            <div class="mt-6 flex justify-end space-x-3">
+              <button
+                type="button"
+                @click="showReplacementModal = false"
+                class="btn btn-outline-secondary"
+                :disabled="processingAction"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="btn btn-primary"
+                :disabled="processingAction"
+              >
+                <span v-if="processingAction" class="inline-flex items-center">
+                  <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Processing...
+                </span>
+                <span v-else>Process Replacement</span>
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
 
@@ -420,7 +727,11 @@ const returnData = ref({
 
 const activityLog = ref([]);
 const showStatusModal = ref(false);
+const showPickupModal = ref(false);
+const showConfirmPickupModal = ref(false);
+const showReplacementModal = ref(false);
 const updatingStatus = ref(false);
+const processingAction = ref(false);
 
 // Status update form
 const statusUpdate = ref({
@@ -429,38 +740,76 @@ const statusUpdate = ref({
   replacementACN: ''
 });
 
+// Pickup form
+const pickupForm = ref({
+  scheduledPickupDate: '',
+  pickupCourier: '',
+  pickupNotes: ''
+});
+
+// Confirm pickup form
+const confirmPickupForm = ref({
+  actualPickupDate: '',
+  pickupTrackingNumber: '',
+  pickupNotes: ''
+});
+
+// Replacement form
+const replacementForm = ref({
+  replacementACN: '',
+  replacementSerialNumber: '',
+  replacementPropertyNumber: '',
+  resolutionNotes: ''
+});
+
 // Status options based on current status
 const availableStatuses = computed(() => {
   const currentStatus = returnData.value.status;
+  // Must align with backend enum in models/supplierReturn.js
   const statusOptions = [
     { value: 'pending', label: 'Pending' },
+    { value: 'scheduled_for_pickup', label: 'Scheduled for Pickup' },
+    { value: 'picked_up', label: 'Picked Up' },
     { value: 'sent_to_supplier', label: 'Sent to Supplier' },
     { value: 'under_review', label: 'Under Review' },
     { value: 'approved', label: 'Approved' },
     { value: 'rejected', label: 'Rejected' },
+    { value: 'for_replacement', label: 'For Replacement' },
     { value: 'repaired', label: 'Repaired' },
     { value: 'replaced', label: 'Replaced' },
-    { value: 'refunded', label: 'Refunded' },
+    { value: 'ready_to_claim', label: 'Ready to Claim' },
     { value: 'completed', label: 'Completed' },
     { value: 'cancelled', label: 'Cancelled' }
   ];
 
-  // Filter out current status and implement workflow rules
+  // Filter out current status
   return statusOptions.filter(option => option.value !== currentStatus);
 });
 
 // Permission checks
+const canSchedulePickup = computed(() => {
+  return returnData.value.status === 'pending';
+});
+
+const canConfirmPickup = computed(() => {
+  return returnData.value.status === 'scheduled_for_pickup';
+});
+
+const canProcessReplacement = computed(() => {
+  return ['approved', 'picked_up', 'sent_to_supplier'].includes(returnData.value.status);
+});
+
 const canUpdateStatus = computed(() => {
-  const allowedStatuses = ['pending', 'sent_to_supplier', 'under_review', 'approved'];
+  const allowedStatuses = ['pending', 'scheduled_for_pickup', 'picked_up', 'sent_to_supplier', 'under_review', 'approved'];
   return allowedStatuses.includes(returnData.value.status);
 });
 
 const canEdit = computed(() => {
-  return ['pending', 'sent_to_supplier'].includes(returnData.value.status);
+  return ['pending', 'scheduled_for_pickup', 'sent_to_supplier'].includes(returnData.value.status);
 });
 
 const canCancel = computed(() => {
-  return ['pending', 'sent_to_supplier', 'under_review'].includes(returnData.value.status);
+  return ['pending', 'scheduled_for_pickup', 'picked_up', 'sent_to_supplier', 'under_review'].includes(returnData.value.status);
 });
 
 const canPrint = computed(() => {
@@ -535,6 +884,8 @@ const formatProvider = (provider) => {
 const getStatusBadgeClass = (status) => {
   const classes = {
     pending: 'bg-yellow-100 text-yellow-800',
+    scheduled_for_pickup: 'bg-blue-100 text-blue-800',
+    picked_up: 'bg-indigo-100 text-indigo-800',
     sent_to_supplier: 'bg-blue-100 text-blue-800',
     under_review: 'bg-purple-100 text-purple-800',
     approved: 'bg-green-100 text-green-800',
@@ -548,11 +899,82 @@ const getStatusBadgeClass = (status) => {
   return classes[status] || 'bg-gray-100 text-gray-800';
 };
 
+// Action handlers
+const handleSchedulePickup = async () => {
+  try {
+    processingAction.value = true;
+
+    await axios.post(`supplier-returns/${returnId}/schedule-pickup`, pickupForm.value);
+
+    await Swal.fire({ icon: 'success', title: 'Success', text: 'Pickup scheduled successfully' });
+    showPickupModal.value = false;
+    // Reset form
+    pickupForm.value = {
+      scheduledPickupDate: '',
+      pickupCourier: '',
+      pickupNotes: ''
+    };
+    await fetchReturnDetails(); // Refresh data
+  } catch (error) {
+    console.error('Error scheduling pickup:', error);
+    Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to schedule pickup' });
+  } finally {
+    processingAction.value = false;
+  }
+};
+
+const handleConfirmPickup = async () => {
+  try {
+    processingAction.value = true;
+
+    await axios.post(`supplier-returns/${returnId}/confirm-pickup`, confirmPickupForm.value);
+
+    await Swal.fire({ icon: 'success', title: 'Success', text: 'Pickup confirmed successfully' });
+    showConfirmPickupModal.value = false;
+    // Reset form
+    confirmPickupForm.value = {
+      actualPickupDate: '',
+      pickupTrackingNumber: '',
+      pickupNotes: ''
+    };
+    await fetchReturnDetails(); // Refresh data
+  } catch (error) {
+    console.error('Error confirming pickup:', error);
+    Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to confirm pickup' });
+  } finally {
+    processingAction.value = false;
+  }
+};
+
+const handleProcessReplacement = async () => {
+  try {
+    processingAction.value = true;
+
+    await axios.post(`supplier-returns/${returnId}/process-replacement`, replacementForm.value);
+
+    await Swal.fire({ icon: 'success', title: 'Success', text: 'Replacement processed successfully' });
+    showReplacementModal.value = false;
+    // Reset form
+    replacementForm.value = {
+      replacementACN: '',
+      replacementSerialNumber: '',
+      replacementPropertyNumber: '',
+      resolutionNotes: ''
+    };
+    await fetchReturnDetails(); // Refresh data
+  } catch (error) {
+    console.error('Error processing replacement:', error);
+    Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message || 'Failed to process replacement' });
+  } finally {
+    processingAction.value = false;
+  }
+};
+
 // API methods
 const fetchReturnDetails = async () => {
   try {
     loading.value = true;
-    const response = await axios.get(`/api/supplier-returns/${returnId}`);
+    const response = await axios.get(`supplier-returns/${returnId}`);
     const sr = response.data?.supplierReturn || response.data;
     returnData.value = sr;
     // Set initial status for the update form
@@ -586,7 +1008,7 @@ const updateStatus = async () => {
       payload.replacementACN = statusUpdate.value.replacementACN;
     }
     
-    await axios.patch(`/api/supplier-returns/${returnId}`, payload);
+    await axios.patch(`supplier-returns/${returnId}`, payload);
     
     await Swal.fire({ icon: 'success', title: 'Success', text: 'Status updated successfully' });
     showStatusModal.value = false;
@@ -607,7 +1029,7 @@ const confirmCancel = () => {
 
 const cancelReturn = async () => {
   try {
-    await axios.patch(`/api/supplier-returns/${returnId}`, {
+    await axios.patch(`supplier-returns/${returnId}`, {
       status: 'cancelled',
       internalNotes: 'Return was cancelled by user.'
     });
@@ -626,9 +1048,17 @@ const printReturn = () => {
 };
 
 // Lifecycle hooks
-onMounted(() => {
+onMounted(async () => {
   if (returnId) {
-    fetchReturnDetails();
+    await fetchReturnDetails();
+    // Auto-open modals based on query params
+    const qp = route?.query || {};
+    if (qp.pickup === '1' && canSchedulePickup.value) {
+      showPickupModal.value = true;
+    }
+    if (qp.replacement === '1' && canProcessReplacement.value) {
+      showReplacementModal.value = true;
+    }
   } else {
     Swal.fire({ icon: 'error', title: 'Error', text: 'No return ID provided' });
     router.push('/warranty/supplier-returns');

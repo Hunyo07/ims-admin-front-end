@@ -22,8 +22,8 @@ const linkedCategoryName = ref('')
 // Removed unused product search helpers
 
 const repairTypeOptions = {
-  'inside': 'Inside (Walk-in)',
-  'outside': 'Outside (Not in System)',
+  inside: 'Inside (Walk-in)',
+  outside: 'Outside (Not in System)',
   'on-site': 'On-site (On-call Service)'
 }
 
@@ -608,7 +608,9 @@ const fetchAcnHistory = async () => {
               </div>
               <div>
                 <span class="font-medium">Type:</span>
-                <span class="ml-1 px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                <span
+                  class="ml-1 px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-700"
+                >
                   {{ repairTypeOptions[log.repairType] || log.repairType || '—' }}
                 </span>
               </div>
@@ -674,6 +676,38 @@ const fetchAcnHistory = async () => {
               <div v-if="log.pullOut?.reason" class="col-span-2">
                 <span class="font-medium">Pull-out Reason:</span>
                 {{ log.pullOut.reason }}
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-if="log.warrantyPickup"
+            class="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark p-4"
+          >
+            <h3 class="font-semibold mb-2">Warranty Pick-up</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+              <div>
+                <span class="font-medium">Pickup Date:</span>
+                {{ formatDateTime(log.warrantyPickup?.pickupDate) || '—' }}
+              </div>
+              <div>
+                <span class="font-medium">Contact Person:</span>
+                {{ log.warrantyPickup?.contactPerson || '—' }}
+              </div>
+              <div class="md:col-span-2" v-if="log.warrantyPickup?.notes">
+                <span class="font-medium">Notes:</span>
+                <span class="block whitespace-pre-line">
+                  {{ log.warrantyPickup?.notes }}
+                </span>
+              </div>
+              <div v-if="log.warrantyPickup?.supplierReturnId">
+                <span class="font-medium">Supplier Return:</span>
+                <router-link
+                  class="text-primary hover:underline"
+                  :to="`/warranty/supplier-returns/${log.warrantyPickup.supplierReturnId}`"
+                >
+                  View Return
+                </router-link>
               </div>
             </div>
           </div>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import axios from '@/utils/axios'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
@@ -146,7 +146,6 @@ const submitCreate = async () => {
       title: newTitle.value,
       description: newDescription.value,
       eventDate: new Date(newEventDate.value).toISOString(),
-      // endDate removed
       reminderBefore: remindersArr.length ? remindersArr[0] : toMinutesCreate(),
       remindersBefore: remindersArr,
       type: newType.value,
@@ -154,7 +153,6 @@ const submitCreate = async () => {
       meetingLink: newType.value === 'zoom_meeting' ? newMeetingLink.value : undefined,
       department: newDepartmentId.value || undefined,
       repeat: newRepeat.value
-      // repeatUntil removed
     }
     await axios.post('/events', payload)
     createSuccess.value = 'Event created'
@@ -242,6 +240,142 @@ const performReschedule = async () => {
     rescheduling.value = false
   }
 }
+
+// Attachment modal state
+const showAttachmentModal = ref(false)
+const selectedEvent = ref(null)
+const attachmentImages = ref([])
+const attachmentRemarks = ref('')
+const attachmentStatus = ref('pending')
+const cameraActive = ref(false)
+const cameraStream = ref(null)
+const cameraError = ref('')
+const videoEl = ref(null)
+const submittingAttachment = ref(false)
+
+const openAttachmentModal = (ev) => {
+  selectedEvent.value = ev
+  attachmentImages.value = Array.isArray(ev.attachments) ? [...ev.attachments] : []
+  attachmentRemarks.value = ev.remarks || ''
+  attachmentStatus.value = ev.status || 'pending'
+  showAttachmentModal.value = true
+}
+
+const closeAttachmentModal = () => {
+  showAttachmentModal.value = false
+  selectedEvent.value = null
+  attachmentImages.value = []
+  attachmentRemarks.value = ''
+  attachmentStatus.value = 'pending'
+  stopCamera()
+}
+
+const removeAttachmentImage = (i) => {
+  if (typeof i === 'number' && i >= 0 && i < attachmentImages.value.length) {
+    attachmentImages.value.splice(i, 1)
+  }
+}
+
+async function startCamera() {
+  cameraError.value = ''
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }
+    })
+    cameraStream.value = stream
+    cameraActive.value = true
+    await nextTick()
+    if (videoEl.value) {
+      videoEl.value.srcObject = stream
+      videoEl.value.play?.()
+    }
+  } catch (e) {
+    cameraError.value = 'Camera permission denied or unavailable'
+    cameraActive.value = false
+  }
+}
+
+function stopCamera() {
+  const s = cameraStream.value
+  if (s) {
+    s.getTracks?.().forEach((t) => t.stop())
+    cameraStream.value = null
+  }
+  if (videoEl.value) videoEl.value.srcObject = null
+  cameraActive.value = false
+}
+
+function capturePhoto() {
+  const video = videoEl.value
+  if (!video) return
+  const w = video.videoWidth || 640
+  const h = video.videoHeight || 480
+  const s = Math.min(w, h)
+  const sx = Math.floor((w - s) / 2)
+  const sy = Math.floor((h - s) / 2)
+  const canvas = document.createElement('canvas')
+  canvas.width = 640
+  canvas.height = 640
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  ctx.drawImage(video, sx, sy, s, s, 0, 0, 640, 640)
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
+  attachmentImages.value.push({ src: dataUrl, type: 'photo', uploadedAt: new Date() })
+}
+
+const handleFileUpload = (e) => {
+  const files = e.target.files
+  if (!files || files.length === 0) return
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        attachmentImages.value.push({
+          src: event.target.result,
+          type: 'photo',
+          uploadedAt: new Date()
+        })
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+  e.target.value = ''
+}
+
+const submitAttachment = async () => {
+  if (!selectedEvent.value) return
+  submittingAttachment.value = true
+  error.value = ''
+  try {
+    const payload = {
+      attachments: attachmentImages.value,
+      remarks: attachmentRemarks.value,
+      status: attachmentStatus.value
+    }
+    await axios.patch(`/events/${selectedEvent.value._id}`, payload)
+    closeAttachmentModal()
+    await fetchEvents()
+  } catch (e) {
+    error.value = e?.response?.data?.message || e.message
+  } finally {
+    submittingAttachment.value = false
+  }
+}
+
+// Details modal state
+const showDetailsModal = ref(false)
+const detailEvent = ref(null)
+
+const openDetailsModal = (ev) => {
+  detailEvent.value = ev
+  showDetailsModal.value = true
+}
+
+const closeDetailsModal = () => {
+  showDetailsModal.value = false
+  detailEvent.value = null
+}
 </script>
 
 <template>
@@ -315,6 +449,20 @@ const performReschedule = async () => {
             <td class="px-3 py-2 text-right">
               <div class="inline-flex items-center gap-2">
                 <button
+                  @click="openDetailsModal(ev)"
+                  class="px-2 py-1 border border-stroke rounded hover:bg-gray-50"
+                  title="View Details"
+                >
+                  View
+                </button>
+                <button
+                  @click="openAttachmentModal(ev)"
+                  class="px-2 py-1 border border-primary bg-primary/10 text-primary rounded hover:bg-primary/20"
+                  title="Add Attachment"
+                >
+                  Attachment
+                </button>
+                <button
                   @click="openReschedule(ev)"
                   class="px-2 py-1 border border-stroke rounded hover:bg-gray-50"
                 >
@@ -365,6 +513,220 @@ const performReschedule = async () => {
         </tbody>
       </table>
     </div>
+
+    <!-- Attachment Modal -->
+    <div
+      v-if="showAttachmentModal"
+      class="fixed inset-0 bg-black/30 flex items-center justify-center z-50 overflow-y-auto p-4"
+    >
+      <div class="bg-white rounded shadow-lg w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold">Task Attachment - {{ selectedEvent?.title }}</h2>
+          <button @click="closeAttachmentModal" class="text-sm">✕</button>
+        </div>
+        <div v-if="error" class="mb-3 px-4 py-2 rounded bg-danger text-white">{{ error }}</div>
+
+        <div class="space-y-4">
+          <!-- Photo Capture/Upload Section -->
+          <div>
+            <label class="block mb-2 text-sm font-medium">Photos</label>
+            <div class="flex items-center gap-2 mb-2">
+              <button
+                v-if="!cameraActive"
+                type="button"
+                class="rounded border px-3 py-1 text-sm"
+                @click="startCamera"
+              >
+                Open Camera
+              </button>
+              <button
+                v-else
+                type="button"
+                class="rounded border px-3 py-1 text-sm"
+                @click="stopCamera"
+              >
+                Stop Camera
+              </button>
+              <label class="rounded border px-3 py-1 text-sm cursor-pointer hover:bg-gray-50">
+                Upload Photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  @change="handleFileUpload"
+                  class="hidden"
+                />
+              </label>
+              <span v-if="cameraError" class="text-danger text-xs">{{ cameraError }}</span>
+            </div>
+            <div v-if="cameraActive" class="space-y-2 mb-2">
+              <video
+                ref="videoEl"
+                playsinline
+                autoplay
+                class="w-48 object-cover rounded border"
+                style="aspect-ratio: 1/1"
+              />
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  class="rounded border px-3 py-1 text-sm"
+                  @click="capturePhoto"
+                >
+                  Capture Photo
+                </button>
+              </div>
+            </div>
+            <div v-if="attachmentImages.length" class="mt-2 grid grid-cols-3 gap-2">
+              <div v-for="(img, i) in attachmentImages" :key="i" class="relative">
+                <img
+                  :src="img.src || img.url"
+                  class="w-full object-cover rounded border"
+                  style="aspect-ratio: 1/1"
+                />
+                <button
+                  type="button"
+                  class="absolute top-1 right-1 bg-black/60 text-white text-xs rounded px-1"
+                  @click="removeAttachmentImage(i)"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Remarks Field -->
+          <div>
+            <label class="block mb-1 text-sm font-medium">Remarks</label>
+            <textarea
+              v-model="attachmentRemarks"
+              rows="3"
+              class="w-full border border-stroke rounded px-3 py-2"
+              placeholder="Enter remarks..."
+            ></textarea>
+          </div>
+
+          <!-- Status Selection -->
+          <div>
+            <label class="block mb-1 text-sm font-medium">Status</label>
+            <select
+              v-model="attachmentStatus"
+              class="w-full border border-stroke rounded px-3 py-2"
+            >
+              <option value="pending">Pending</option>
+              <option value="sent">Sent</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex items-center gap-2 pt-4 border-t">
+            <button
+              @click="submitAttachment"
+              :disabled="submittingAttachment"
+              class="px-4 py-2 bg-primary text-white rounded hover:opacity-90 disabled:opacity-60"
+            >
+              {{ submittingAttachment ? 'Saving...' : 'Save' }}
+            </button>
+            <button
+              @click="closeAttachmentModal"
+              class="px-4 py-2 border border-stroke rounded hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Details Modal -->
+    <div
+      v-if="showDetailsModal"
+      class="fixed inset-0 bg-black/30 flex items-center justify-center z-50 overflow-y-auto p-4"
+    >
+      <div class="bg-white rounded shadow-lg w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold">Task Details - {{ detailEvent?.title }}</h2>
+          <button @click="closeDetailsModal" class="text-sm">✕</button>
+        </div>
+
+        <div v-if="detailEvent" class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="text-sm font-medium text-gray-600">Title</label>
+              <p class="mt-1">{{ detailEvent.title }}</p>
+            </div>
+            <div>
+              <label class="text-sm font-medium text-gray-600">Type</label>
+              <p class="mt-1">{{ detailEvent.type || 'event' }}</p>
+            </div>
+            <div>
+              <label class="text-sm font-medium text-gray-600">Date/Time</label>
+              <p class="mt-1">{{ formatDateTime(detailEvent.eventDate) }}</p>
+            </div>
+            <div>
+              <label class="text-sm font-medium text-gray-600">Status</label>
+              <p class="mt-1">
+                <span
+                  class="inline-flex items-center px-2 py-0.5 rounded bg-gray-100 text-gray-700"
+                  >{{ detailEvent.status }}</span
+                >
+              </p>
+            </div>
+            <div v-if="detailEvent.description" class="col-span-2">
+              <label class="text-sm font-medium text-gray-600">Description</label>
+              <p class="mt-1">{{ detailEvent.description }}</p>
+            </div>
+            <div v-if="detailEvent.location" class="col-span-2">
+              <label class="text-sm font-medium text-gray-600">Location</label>
+              <p class="mt-1">{{ detailEvent.location }}</p>
+            </div>
+            <div v-if="detailEvent.meetingLink" class="col-span-2">
+              <label class="text-sm font-medium text-gray-600">Meeting Link</label>
+              <p class="mt-1">
+                <a
+                  :href="detailEvent.meetingLink"
+                  target="_blank"
+                  class="text-primary hover:underline"
+                >
+                  {{ detailEvent.meetingLink }}
+                </a>
+              </p>
+            </div>
+            <div v-if="detailEvent.remarks" class="col-span-2">
+              <label class="text-sm font-medium text-gray-600">Remarks</label>
+              <p class="mt-1 whitespace-pre-line">{{ detailEvent.remarks }}</p>
+            </div>
+          </div>
+
+          <!-- Attachments Display -->
+          <div v-if="detailEvent.attachments && detailEvent.attachments.length > 0">
+            <label class="text-sm font-medium text-gray-600 block mb-2">Attachments</label>
+            <div class="grid grid-cols-3 gap-2">
+              <div v-for="(img, i) in detailEvent.attachments" :key="i" class="relative">
+                <img
+                  :src="img.src || img.url"
+                  class="w-full object-cover rounded border cursor-pointer hover:opacity-80"
+                  style="aspect-ratio: 1/1"
+                  @click="() => window.open(img.src || img.url, '_blank')"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="flex justify-end pt-4 border-t">
+            <button
+              @click="closeDetailsModal"
+              class="px-4 py-2 border border-stroke rounded hover:bg-gray-50"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Create Modal Overlay -->
     <div
       v-if="showCreateModal"

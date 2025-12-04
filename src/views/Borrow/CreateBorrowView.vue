@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router'
 import axios from '@/utils/axios'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import BreadcrumbDefault from '@/components/Breadcrumbs/BreadcrumbDefault.vue'
-import BaseCombobox from '@/components/Forms/BaseCombobox.vue'
 import EmployeeCombobox from '@/components/EmployeeCombobox.vue'
 import AcnCombobox from '@/components/AcnCombobox.vue'
 
@@ -16,7 +15,6 @@ const purpose = ref('')
 const expectedReturnDate = ref('')
 const notes = ref('')
 const items = ref([])
-const products = ref([])
 const departments = ref([])
 const loading = ref(false)
 const error = ref(null)
@@ -28,15 +26,12 @@ const videoEl = ref(null)
 const today = new Date()
 today.setDate(today.getDate() + 1)
 const minDate = today.toISOString().split('T')[0]
+// Barcode scanner state
+const barcodeScan = ref('')
+const barcodeInputRef = ref(null)
+const scanningBarcode = ref(false)
 
-const fetchProducts = async () => {
-  try {
-    const { data } = await axios.get('/products')
-    products.value = data.products
-  } catch (err) {
-    console.error('Error fetching products:', err)
-  }
-}
+// Removed fetchProducts - no longer needed
 
 const fetchDepartments = async () => {
   try {
@@ -57,20 +52,21 @@ watch(
   }
 )
 
-const serialOptionsByProduct = ref({})
-
 const addItem = () => {
-  items.value.push({ product: '', name: '', serialNumber: '', acn: '', quantity: 1, multi: [] })
+  items.value.push({
+    name: '',
+    serialNumber: '',
+    acn: '',
+    quantity: 1,
+    multi: [],
+    inventoryRecordId: null,
+    itemId: null
+  })
 }
 
 const removeItem = (index) => items.value.splice(index, 1)
 
-const onProductSelect = (index) => {
-  const item = items.value[index]
-  const product = products.value.find((p) => p._id === item.product)
-  if (product) item.name = product.name
-  fetchSerialsForProduct(item.product)
-}
+// Removed onProductSelect - no longer needed
 
 const onAcnSelect = (index, payload) => {
   try {
@@ -90,14 +86,9 @@ const onAcnSelect = (index, payload) => {
       it.acn = payload?.acn || it.acn || ''
       it.serialNumber = serial || it.serialNumber || ''
     }
-    let pid = payload?.product || payload?.item?.product || sec?.productId || ''
-    if (pid && typeof pid === 'object') pid = pid._id || ''
-    if (pid) it.product = pid
     const pname = payload?.item?.productName || payload?.product?.name || ''
     const descr = payload?.item?.description || ''
     it.name = pname || descr || it.name || ''
-    const prod = products.value.find((p) => String(p._id) === String(it.product))
-    if (prod && prod.name) it.name = prod.name
     it.inventoryRecordId = payload?.record?._id || it.inventoryRecordId
     it.itemId = payload?.item?._id || it.itemId
   } catch (_) {
@@ -159,11 +150,9 @@ const onAcnMultiSelect = (index, k, payload) => {
     const sec = payload?.item?._selectedSecondary || null
     const serial = sec?.serialNumber || payload?.item?.serialNumber || payload?.serialNumber || ''
     row.serialNumber = serial || row.serialNumber || ''
-    let pid = payload?.product || payload?.item?.product || sec?.productId || ''
-    if (pid && typeof pid === 'object') pid = pid._id || ''
-    if (pid && !it.product) it.product = pid
-    const prod = products.value.find((p) => String(p._id) === String(it.product))
-    if (prod && prod.name && !it.name) it.name = prod.name
+    const pname = payload?.item?.productName || payload?.product?.name || ''
+    const descr = payload?.item?.description || ''
+    if (pname || descr) it.name = pname || descr || it.name || ''
     row.inventoryRecordId = payload?.record?._id || row.inventoryRecordId
     row.itemId = payload?.item?._id || row.itemId
   } catch (_) {
@@ -171,28 +160,7 @@ const onAcnMultiSelect = (index, k, payload) => {
   }
 }
 
-const fetchSerialsForProduct = async (pid) => {
-  try {
-    const id = String(pid || '')
-    if (!id) return
-    const { data } = await axios.get('/inventory-records', {
-      params: { limit: 100, page: 1 }
-    })
-    const records = Array.isArray(data?.records) ? data.records : []
-    const serials = []
-    for (const rec of records) {
-      for (const it of rec.items || []) {
-        const st = String(it?.status || '').toLowerCase()
-        if (st === 'deployed') continue
-        const match = String(it.product || '') === id
-        if (match && it.serialNumber) serials.push(String(it.serialNumber))
-      }
-    }
-    serialOptionsByProduct.value[id] = Array.from(new Set(serials))
-  } catch (_) {
-    serialOptionsByProduct.value[String(pid || '')] = []
-  }
-}
+// Removed fetchSerialsForProduct - no longer needed
 
 const norm = (s) =>
   String(s || '')
@@ -216,10 +184,7 @@ const duplicateAcnSet = computed(() => {
   }
   return dup
 })
-const getSerialOptionsForProduct = (pid) => {
-  const id = String(pid || '')
-  return serialOptionsByProduct.value[id] || []
-}
+// Removed getSerialOptionsForProduct - no longer needed
 
 const submitBorrow = async () => {
   if (
@@ -246,8 +211,7 @@ const submitBorrow = async () => {
       const qty = Number(it.quantity || 1)
       if (qty <= 1) {
         const hasAcn = !!norm(it.acn)
-        const hasProductSerial = !!String(it.product || '') && !!String(it.serialNumber || '')
-        if (!hasAcn && !hasProductSerial) {
+        if (!hasAcn) {
           invalid = true
           break
         }
@@ -261,7 +225,6 @@ const submitBorrow = async () => {
         }
         for (const m of it.multi) {
           expanded.push({
-            product: it.product,
             name: it.name,
             acn: m.acn,
             serialNumber: m.serialNumber,
@@ -301,10 +264,102 @@ const submitBorrow = async () => {
   }
 }
 
+// Handle barcode scan
+const handleBarcodeScan = async () => {
+  const scannedValue = barcodeScan.value.trim()
+  if (!scannedValue) return
+
+  scanningBarcode.value = true
+  try {
+    // Search for ACN by the scanned value (could be ACN, serial, or barcode)
+    const { data } = await axios.get('/inventory-records', {
+      params: { limit: 100, page: 1 }
+    })
+    const records = Array.isArray(data?.records) ? data.records : []
+
+    // Find matching item by ACN, serial, or property number
+    let foundItem = null
+    let foundRecord = null
+    const searchUpper = scannedValue.toUpperCase()
+
+    for (const rec of records) {
+      for (const it of rec.items || []) {
+        const acn = String(it.acn || '').toUpperCase()
+        const serial = String(it.serialNumber || '').toUpperCase()
+        const prop = String(it.propertyNumber || '').toUpperCase()
+
+        if (acn === searchUpper || serial === searchUpper || prop === searchUpper) {
+          foundItem = it
+          foundRecord = rec
+          break
+        }
+
+        // Check secondary items
+        if (it.secondaryItems && Array.isArray(it.secondaryItems)) {
+          for (const sec of it.secondaryItems) {
+            const secAcn = String(sec.acn || '').toUpperCase()
+            const secSerial = String(sec.serialNumber || '').toUpperCase()
+            if (secAcn === searchUpper || secSerial === searchUpper) {
+              foundItem = { ...it, _selectedSecondary: sec }
+              foundRecord = rec
+              break
+            }
+          }
+        }
+        if (foundItem) break
+      }
+      if (foundItem) break
+    }
+
+    if (foundItem && foundRecord) {
+      // Auto-populate the first empty item slot or create a new one
+      let targetIndex = items.value.findIndex((it) => !norm(it.acn))
+      if (targetIndex === -1) {
+        addItem()
+        targetIndex = items.value.length - 1
+      }
+
+      const payload = {
+        acn: foundItem._selectedSecondary?.acn || foundItem.acn,
+        serialNumber: foundItem._selectedSecondary?.serialNumber || foundItem.serialNumber,
+        item: foundItem,
+        record: foundRecord,
+        product: foundItem.productId || foundItem.product,
+        productName: foundItem.description || foundItem.productName
+      }
+
+      onAcnSelect(targetIndex, payload)
+
+      // Clear barcode input
+      barcodeScan.value = ''
+      if (barcodeInputRef.value) {
+        barcodeInputRef.value.focus()
+      }
+    } else {
+      error.value = `No item found with ACN/Serial: ${scannedValue}`
+      setTimeout(() => {
+        error.value = null
+      }, 3000)
+    }
+  } catch (err) {
+    error.value = err.response?.data?.message || 'Failed to search for item'
+    setTimeout(() => {
+      error.value = null
+    }, 3000)
+  } finally {
+    scanningBarcode.value = false
+  }
+}
+
 onMounted(() => {
-  fetchProducts()
   fetchDepartments()
   addItem()
+  // Focus barcode input on mount
+  nextTick(() => {
+    if (barcodeInputRef.value) {
+      barcodeInputRef.value.focus()
+    }
+  })
 })
 
 async function startCamera() {
@@ -434,6 +489,22 @@ function removeBorrowImage(i) {
           </div>
 
           <div class="mb-4">
+            <div class="mb-4 border-b border-stroke pb-4">
+              <label class="block text-sm font-medium mb-2">Barcode Scanner</label>
+              <input
+                ref="barcodeInputRef"
+                v-model="barcodeScan"
+                @keyup.enter="handleBarcodeScan"
+                placeholder="Scan ACN barcode here (or press Enter to search)"
+                class="w-full border border-stroke rounded px-3 py-2 bg-blue-50 focus:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 font-medium"
+                :disabled="scanningBarcode"
+              />
+              <p class="text-xs text-bodydark2 mt-1">
+                Use your barcode scanner or type ACN and press Enter to auto-populate item details
+              </p>
+              <p v-if="scanningBarcode" class="text-xs text-blue-600 mt-1">Searching...</p>
+            </div>
+
             <div class="flex justify-between items-center mb-2">
               <h3 class="font-semibold">Items</h3>
               <button
@@ -449,25 +520,12 @@ function removeBorrowImage(i) {
               :key="index"
               class="border border-stroke rounded p-3 mb-2"
             >
-              <div class="grid grid-cols-4 gap-3">
-                <div>
-                  <label class="block text-sm mb-1">Product</label>
-                  <BaseCombobox
-                    v-model="item.product"
-                    :options="products"
-                    labelKey="name"
-                    valueKey="_id"
-                    placeholder="Select product"
-                    @change="() => onProductSelect(index)"
-                    :disabled="!!item.acn"
-                  />
-                </div>
+              <div class="grid grid-cols-3 gap-3">
                 <div v-if="item.quantity === 1">
-                  <label class="block text-sm mb-1">ACN</label>
+                  <label class="block text-sm mb-1">ACN <span class="text-red-500">*</span></label>
                   <AcnCombobox
                     v-model="item.acn"
                     placeholder="Type or search ACN"
-                    :productId="item.product"
                     @select="(p) => onAcnSelect(index, p)"
                   />
                   <div
@@ -478,32 +536,32 @@ function removeBorrowImage(i) {
                   </div>
                 </div>
                 <div v-if="item.quantity === 1">
-                  <label class="block text-sm mb-1">Serial Number</label>
-                  <template v-if="item.acn">
-                    <input
-                      v-model="item.serialNumber"
-                      type="text"
-                      readonly
-                      class="w-full border border-stroke rounded px-3 py-2 bg-gray-50"
-                    />
-                  </template>
-                  <template v-else>
-                    <BaseCombobox
-                      v-model="item.serialNumber"
-                      :options="getSerialOptionsForProduct(item.product)"
-                      placeholder="Select serial"
-                      :disabled="!item.product"
-                    />
-                  </template>
+                  <label class="block text-sm mb-1">Item Name</label>
+                  <input
+                    v-model="item.name"
+                    type="text"
+                    readonly
+                    class="w-full border border-stroke rounded px-3 py-2 bg-gray-50"
+                    placeholder="Auto-filled from ACN"
+                  />
                 </div>
-                <div v-else class="col-span-2">
-                  <label class="block text-sm mb-1">ACNs</label>
+                <div v-if="item.quantity === 1">
+                  <label class="block text-sm mb-1">Serial Number</label>
+                  <input
+                    v-model="item.serialNumber"
+                    type="text"
+                    readonly
+                    class="w-full border border-stroke rounded px-3 py-2 bg-gray-50"
+                    placeholder="Auto-filled from ACN"
+                  />
+                </div>
+                <div v-else class="col-span-3">
+                  <label class="block text-sm mb-1">ACNs <span class="text-red-500">*</span></label>
                   <div class="flex flex-col gap-2">
                     <div v-for="k in item.quantity" :key="k" class="flex items-center gap-2">
                       <AcnCombobox
                         v-model="item.multi[k - 1].acn"
                         placeholder="Select ACN"
-                        :productId="item.product"
                         @select="(p) => onAcnMultiSelect(index, k - 1, p)"
                       />
                       <span class="text-xs text-bodydark2">{{
@@ -527,7 +585,6 @@ function removeBorrowImage(i) {
                     type="number"
                     min="1"
                     class="w-full border border-stroke rounded px-2 py-1 text-sm"
-                    :disabled="false"
                     @input="onQuantityChange(index)"
                   />
                 </div>

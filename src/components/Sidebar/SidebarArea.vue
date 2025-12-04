@@ -44,7 +44,7 @@ const allMenuGroups = ref([
                 </svg>`,
         label: 'Dashboard',
         route: '/eCommerce',
-        roles: ['superadmin', 'admin', 'staff']
+        roles: ['superadmin', 'admin']
       },
       // Sales removed
       {
@@ -57,24 +57,19 @@ const allMenuGroups = ref([
         permissions: ['view_sales', 'manage_sales']
       },
       {
-        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M16 4c0-1.11.89-2 2-2s2 .89 2 2-.89 2-2 2-2-.89-2-2zm4 18v-6h2.5l-2.54-7.63A1.5 1.5 0 0 0 18.54 8H17c-.8 0-1.54.37-2.01 1l-3.99 5.33V4c0-.55-.45-1-1-1s-1 .45-1 1v16h2v-7.5l3.5-4.67c.25-.33.62-.53 1.01-.53H19l1.5 4.5H20V22h2z"/>
-              </svg>`,
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 512 512"><path d="M96 0C60.7 0 32 28.7 32 64l0 384c0 35.3 28.7 64 64 64l288 0c35.3 0 64-28.7 64-64l0-384c0-35.3-28.7-64-64-64L96 0zM208 288l64 0c44.2 0 80 35.8 80 80 0 8.8-7.2 16-16 16l-192 0c-8.8 0-16-7.2-16-16 0-44.2 35.8-80 80-80zm-24-96a56 56 0 1 1 112 0 56 56 0 1 1 -112 0zM512 80c0-8.8-7.2-16-16-16s-16 7.2-16 16l0 64c0 8.8 7.2 16 16 16s16-7.2 16-16l0-64zm0 128c0-8.8-7.2-16-16-16s-16 7.2-16 16l0 64c0 8.8 7.2 16 16 16s16-7.2 16-16l0-64zM496 320c-8.8 0-16 7.2-16 16l0 64c0 8.8 7.2 16 16 16s16-7.2 16-16l0-64c0-8.8-7.2-16-16-16z"/></svg>`,
         label: 'Employee',
-        route: '/employee'
+        route: '/employee',
+        roles: ['superadmin', 'admin']
       },
       {
-        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M16 4c0-1.11.89-2 2-2s2 .89 2 2-.89 2-2 2-2-.89-2-2zm4 18v-6h2.5l-2.54-7.63A1.5 1.5 0 0 0 18.54 8H17c-.8 0-1.54.37-2.01 1l-3.99 5.33V4c0-.55-.45-1-1-1s-1 .45-1 1v16h2v-7.5l3.5-4.67c.25-.33.62-.53 1.01-.53H19l1.5 4.5H20V22h2z"/>
-              </svg>`,
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 512 512"><path d="M32.5 96l0 149.5c0 17 6.7 33.3 18.7 45.3l192 192c25 25 65.5 25 90.5 0L483.2 333.3c25-25 25-65.5 0-90.5l-192-192C279.2 38.7 263 32 246 32L96.5 32c-35.3 0-64 28.7-64 64zm112 16a32 32 0 1 1 0 64 32 32 0 1 1 0-64z"/></svg>`,
         label: 'Brand',
         route: '/brand',
         roles: ['superadmin', 'admin']
       },
       {
-        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8.009 8.009 0 0 1-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-              </svg>`,
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 512 512"><path d="M192 64c0-17.7 14.3-32 32-32l64 0c17.7 0 32 14.3 32 32l0 64c0 17.7-14.3 32-32 32l-8 0 0 64 120 0c39.8 0 72 32.2 72 72l0 56 8 0c17.7 0 32 14.3 32 32l0 64c0 17.7-14.3 32-32 32l-64 0c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l8 0 0-56c0-13.3-10.7-24-24-24l-120 0 0 80 8 0c17.7 0 32 14.3 32 32l0 64c0 17.7-14.3 32-32 32l-64 0c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l8 0 0-56c0-39.8 32.2-72 72-72l120 0 0-64-8 0c-17.7 0-32-14.3-32-32l0-64z"/></svg>`,
         label: 'Department',
         route: '/departments',
         roles: ['superadmin', 'admin']
@@ -88,25 +83,27 @@ const allMenuGroups = ref([
         roles: ['superadmin', 'admin']
       },
       {
-        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-              </svg>`,
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 448 512"><path d="M128 0C110.3 0 96 14.3 96 32l0 32-32 0C28.7 64 0 92.7 0 128l0 48 448 0 0-48c0-35.3-28.7-64-64-64l-32 0 0-32c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 32-128 0 0-32c0-17.7-14.3-32-32-32zM0 224L0 416c0 35.3 28.7 64 64 64l320 0c35.3 0 64-28.7 64-64l0-192-448 0z"/></svg>
+      `,
         label: 'Task Schedule',
         route: '/events',
         roles: ['superadmin', 'admin']
       },
       {
-        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/>
-              </svg>`,
-        label: 'Items ',
-        route: '/product',
-        permissions: ['view_suppliers', 'manage_suppliers']
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 576 512"><path d="M352.1 146.7l0-49.6c0-10.7 5.3-20.7 14.2-26.6L485.2-8.7c6.3-4.2 14.8-3.4 20.2 2l45.4 45.5c5.4 5.4 6.2 13.8 2 20.2L473.6 177.8c-5.9 8.9-15.9 14.2-26.6 14.2l-49.6 0-90.7 90.7c15 33.3 8.9 73.9-18.5 101.3L162.1 510.1c-18.7 18.7-49.1 18.7-67.9 0L34.1 449.9c-18.7-18.7-18.7-49.1 0-67.9L160.1 256c27.4-27.4 67.9-33.6 101.3-18.5l90.7-90.7z"/></svg>`,
+        label: 'Repair & Maintenance',
+        route: '/maintenance/logs',
+        roles: ['superadmin', 'admin', 'staff']
       },
       {
-        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
-                <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/>
-              </svg>`,
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 448 512"><path d="M369.4 128l-34.3-48-222.1 0-34.3 48 290.7 0zM0 148.5c0-13.3 4.2-26.3 11.9-37.2L60.9 42.8C72.9 26 92.3 16 112.9 16l222.1 0c20.7 0 40.1 10 52.1 26.8l48.9 68.5c7.8 10.9 11.9 23.9 11.9 37.2L448 416c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 148.5z"/></svg>`,
+        label: 'Items ',
+        route: '/product',
+        permissions: ['view_suppliers', 'manage_suppliers'],
+        roles: ['superadmin', 'admin']
+      },
+      {
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 512 512"><path d="M418.4 157.9c35.3-8.3 61.6-40 61.6-77.9 0-44.2-35.8-80-80-80-43.4 0-78.7 34.5-80 77.5L136.2 151.1C121.7 136.8 101.9 128 80 128 35.8 128 0 163.8 0 208s35.8 80 80 80c12.2 0 23.8-2.7 34.1-7.6L259.7 407.8c-2.4 7.6-3.7 15.8-3.7 24.2 0 44.2 35.8 80 80 80s80-35.8 80-80c0-27.7-14-52.1-35.4-66.4l37.8-207.7zM156.3 232.2c2.2-6.9 3.5-14.2 3.7-21.7l183.8-73.5c3.6 3.5 7.4 6.7 11.6 9.5L317.6 354.1c-5.5 1.3-10.8 3.1-15.8 5.5L156.3 232.2z"/></svg>`,
         label: 'Borrow Items',
         route: '/borrow',
         roles: ['superadmin', 'admin', 'staff']
@@ -122,12 +119,12 @@ const allMenuGroups = ref([
           {
             label: 'Inventory counts',
             route: '/inventory-counts',
-            roles: ['superadmin', 'admin', 'staff']
+            roles: ['superadmin', 'admin']
           },
           {
             label: 'Delivery Receipts',
             route: '/inventory/delivery-receipts',
-            roles: ['superadmin', 'admin', 'staff']
+            roles: ['superadmin', 'admin']
           },
           {
             label: 'Stock adjustments',
@@ -137,12 +134,12 @@ const allMenuGroups = ref([
           {
             label: 'Requisition Issue Slips',
             route: '/inventory/ris',
-            roles: ['superadmin', 'admin', 'staff']
+            roles: ['superadmin', 'admin']
           },
           {
             label: 'Inventory Records',
             route: '/inventory/record',
-            roles: ['superadmin', 'admin', 'staff']
+            roles: ['superadmin', 'admin']
           },
           {
             label: 'Supplier',
@@ -151,7 +148,7 @@ const allMenuGroups = ref([
             permissions: ['view_suppliers', 'manage_suppliers']
           }
         ],
-        roles: ['superadmin', 'admin', 'staff']
+        roles: ['superadmin', 'admin']
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
@@ -161,11 +158,7 @@ const allMenuGroups = ref([
         route: '',
         children: [
           { label: 'Memorandum Receipt', route: '/mr', roles: ['superadmin', 'admin', 'staff'] },
-          {
-            label: 'Repair & Maintenance',
-            route: '/maintenance/logs',
-            roles: ['superadmin', 'admin', 'staff']
-          },
+
           { label: 'Disposal', route: '/disposal', roles: ['superadmin', 'admin', 'staff'] },
           {
             label: 'Warranty & Returns',
@@ -174,7 +167,7 @@ const allMenuGroups = ref([
             permissions: ['view_supplier_returns']
           }
         ],
-        roles: ['superadmin', 'admin', 'staff']
+        roles: ['superadmin', 'admin']
       },
       {
         icon: `<svg xmlns="http://www.w3.org/2000/svg" class="fill-current" width="18" height="18" viewBox="0 0 24 24">
@@ -187,7 +180,7 @@ const allMenuGroups = ref([
           { label: 'Barcodes', route: '/barcodes', roles: ['superadmin', 'admin'] },
           { label: 'ACN Management', route: '/acn', roles: ['superadmin', 'admin'] }
         ],
-        roles: ['superadmin', 'admin', 'staff']
+        roles: ['superadmin', 'admin']
       }
       // POS removed
     ]
@@ -206,7 +199,7 @@ const allMenuGroups = ref([
           {
             label: 'Account Settings',
             route: '/settings/account',
-            roles: ['superadmin', 'admin', 'staff']
+            roles: ['superadmin', 'admin']
           },
           { label: 'Activity Logs', route: '/activity-logs', roles: ['superadmin'] }
         ],

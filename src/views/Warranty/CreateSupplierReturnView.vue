@@ -280,7 +280,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import Swal from 'sweetalert2'
 import DefaultLayout from '../../layouts/DefaultLayout.vue'
 import Breadcrumb from '@/components/Breadcrumbs/Breadcrumb.vue'
@@ -289,6 +289,7 @@ import axios from '../../utils/axios'
 import { format } from 'date-fns'
 
 const router = useRouter()
+const route = useRoute()
 
 // Form state
 const form = ref({
@@ -340,7 +341,7 @@ const fetchItemDetails = async () => {
   if (!query) return
 
   try {
-    const response = await axios.get('/api/warranty/check', {
+    const response = await axios.get('warranty/check', {
       params: { acn: query, serialNumber: query }
     })
 
@@ -374,7 +375,7 @@ const fetchItemDetails = async () => {
 
 const fetchItems = async () => {
   try {
-    const response = await axios.get('/api/warranty/items')
+    const response = await axios.get('warranty/items')
     const list = response.data?.items || []
     items.value = list.map((it) => ({
       _id: it.itemId,
@@ -423,12 +424,19 @@ const submitForm = async () => {
       notes: form.value.notes || undefined
     }
 
-    const response = await axios.post('/api/supplier-returns', payload)
+    // include repairLogId from route query when present
+    const repairLogId = route?.query?.repairLogId
+    if (repairLogId) {
+      payload.repairLogId = repairLogId
+    }
+
+    const response = await axios.post('supplier-returns', payload)
 
     await Swal.fire({ icon: 'success', title: 'Success', text: 'Return request submitted successfully' })
     const createdId = response.data?.supplierReturn?._id
     if (createdId) {
-      router.push(`/warranty/supplier-returns/${createdId}`)
+      const pickup = route?.query?.pickup === '1' ? '?pickup=1' : ''
+      router.push(`/warranty/supplier-returns/${createdId}${pickup}`)
     } else {
       router.push('/warranty/supplier-returns')
     }
@@ -465,6 +473,14 @@ const getStatusClass = (status) => {
 
 // Lifecycle
 onMounted(() => {
+  // Prefill from query params when coming from a Repair Log
+  const q = route?.query || {}
+  if (q.acn) form.value.acn = String(q.acn)
+  if (q.serialNumber) form.value.serialNumber = String(q.serialNumber)
+  // Try to fetch item details when ACN provided
+  if (form.value.acn) {
+    fetchItemDetails()
+  }
   fetchItems()
 })
 </script>
